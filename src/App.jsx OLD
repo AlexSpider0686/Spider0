@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import {
   Building2,
-  Layers,
+  Layers3,
   Wallet,
   Plus,
   Trash2,
@@ -335,7 +335,7 @@ export default function App() {
 
   const steps = [
     { key: "object", label: "Объект", icon: Building2 },
-    { key: "systems", label: "Системы", icon: Layers },
+    { key: "systems", label: "Системы", icon: Layers3 },
     { key: "budget", label: "Бюджет", icon: Wallet },
   ];
 
