@@ -1,223 +1,21 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { Building2, Layers, Wallet, Plus, Trash2, ChevronLeft, ChevronRight, Shield, Download, Info, Lock, Unlock } from "lucide-react";
 import {
-  Building2,
-  Layers,
-  Wallet,
-  Plus,
-  Trash2,
-  ChevronLeft,
-  ChevronRight,
-  Shield,
-  Camera,
-  Lock,
-  Bell,
-  Cpu,
-  Siren,
-  Download,
-} from "lucide-react";
-
-const SYSTEM_TYPES = [
-  { code: "sot", name: "СОТ", icon: Camera },
-  { code: "sots", name: "СОТС", icon: Shield },
-  { code: "skud", name: "СКУД", icon: Lock },
-  { code: "ssoi", name: "ССОИ", icon: Cpu },
-  { code: "aps", name: "АПС", icon: Bell },
-  { code: "soue", name: "СОУЭ", icon: Siren },
-];
-
-const VENDORS = {
-  sot: ["Hikvision", "Dahua", "TRASSIR", "Flow", "Базовый"],
-  sots: ["Бастион", "Рубеж", "Болид", "Базовый"],
-  skud: ["Бастион", "Sigur", "Parsec", "Базовый"],
-  ssoi: ["Huawei", "TRASSIR", "Интеграция", "Базовый"],
-  aps: ["Болид", "Рубеж", "Simplex", "Базовый"],
-  soue: ["Болид", "Рубеж", "Roxton", "Базовый"],
-};
-
-const OBJECT_TYPES = [
-  { value: "office", label: "Офисный" },
-  { value: "mixed", label: "Смешанный" },
-  { value: "tower", label: "Высотный / башня" },
-];
-
-const ZONE_TYPES = [
-  { value: "office", label: "Офис" },
-  { value: "parking", label: "Паркинг" },
-  { value: "public", label: "Общие зоны" },
-  { value: "technical", label: "Техпомещения" },
-];
-
-const DEFAULT_BUDGET = {
-  cableCoef: 1.0,
-  equipmentCoef: 1.0,
-  laborCoef: 1.0,
-  complexityCoef: 1.0,
-  overheadPercent: 16,
-  ppePercent: 3,
-  payrollTaxesPercent: 30,
-  profitabilityPercent: 18,
-  vatPercent: 20,
-  taxMode: "osno",
-};
-
-const DEFAULT_ZONE = (id, name, type = "office", area = 1000, floors = 1) => ({
-  id,
-  name,
-  type,
-  area,
-  floors,
-  ceilingHeight: 3,
-});
-
-const DEFAULT_SYSTEM = (id, type = "sot") => ({
-  id,
-  type,
-  vendor: VENDORS[type][0],
-  baseVendor: "Базовый",
-  customVendorIndex: 1,
-  note: "",
-});
-
-const BASE_RATES = {
-  sot: {
-    cablePerM2: { office: 0.95, parking: 0.62, public: 1.15, technical: 0.7 },
-    unitsPer1000: { office: 6.5, parking: 4.2, public: 10, technical: 5 },
-    equipUnit: 24000,
-    laborPerCableM: 210,
-    installPerUnit: 2200,
-  },
-  sots: {
-    cablePerM2: { office: 0.52, parking: 0.34, public: 0.74, technical: 0.48 },
-    unitsPer1000: { office: 8, parking: 5, public: 12, technical: 7 },
-    equipUnit: 6500,
-    laborPerCableM: 185,
-    installPerUnit: 950,
-  },
-  skud: {
-    cablePerM2: { office: 0.38, parking: 0.18, public: 0.58, technical: 0.22 },
-    unitsPer1000: { office: 1.6, parking: 0.6, public: 2.8, technical: 0.8 },
-    equipUnit: 28000,
-    laborPerCableM: 185,
-    installPerUnit: 4800,
-  },
-  ssoi: {
-    cablePerM2: { office: 0.16, parking: 0.1, public: 0.22, technical: 0.18 },
-    unitsPer1000: { office: 1.1, parking: 0.5, public: 1.7, technical: 1.0 },
-    equipUnit: 52000,
-    laborPerCableM: 155,
-    installPerUnit: 6500,
-  },
-  aps: {
-    cablePerM2: { office: 0.64, parking: 0.42, public: 0.86, technical: 0.58 },
-    unitsPer1000: { office: 26, parking: 14, public: 30, technical: 18 },
-    equipUnit: 4200,
-    laborPerCableM: 195,
-    installPerUnit: 850,
-  },
-  soue: {
-    cablePerM2: { office: 0.36, parking: 0.28, public: 0.48, technical: 0.24 },
-    unitsPer1000: { office: 7, parking: 5, public: 10, technical: 4 },
-    equipUnit: 7800,
-    laborPerCableM: 180,
-    installPerUnit: 740,
-  },
-};
-
-const VENDOR_INDEX = {
-  sot: { "Базовый": 1.0, Hikvision: 1.04, Dahua: 1.0, TRASSIR: 1.12, Flow: 1.08 },
-  sots: { "Базовый": 1.0, Бастион: 1.0, Рубеж: 1.03, Болид: 1.05 },
-  skud: { "Базовый": 1.0, Бастион: 1.0, Sigur: 1.08, Parsec: 1.1 },
-  ssoi: { "Базовый": 1.0, Huawei: 1.12, TRASSIR: 1.08, Интеграция: 1.15 },
-  aps: { "Базовый": 1.0, Болид: 1.0, Рубеж: 1.02, Simplex: 1.35 },
-  soue: { "Базовый": 1.0, Болид: 1.0, Рубеж: 1.03, Roxton: 1.14 },
-};
-
-function rub(value) {
-  return new Intl.NumberFormat("ru-RU", {
-    style: "currency",
-    currency: "RUB",
-    maximumFractionDigits: 0,
-  }).format(Number.isFinite(value) ? value : 0);
-}
-
-function num(value, digits = 0) {
-  return new Intl.NumberFormat("ru-RU", {
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  }).format(Number.isFinite(value) ? value : 0);
-}
-
-function downloadCsv(filename, rows) {
-  const csv = rows
-    .map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(";"))
-    .join("\n");
-  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.setAttribute("download", filename);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-}
-
-function calculateSystem(system, zones, budget) {
-  const rates = BASE_RATES[system.type];
-  const vendorFactor = (VENDOR_INDEX[system.type]?.[system.vendor] || 1) * Number(system.customVendorIndex || 1);
-
-  let cable = 0;
-  let units = 0;
-
-  zones.forEach((z) => {
-    const area = Number(z.area || 0);
-    const floors = Math.max(Number(z.floors || 1), 1);
-    const cableReserve = 1 + (floors - 1) * 0.012 + (Number(z.ceilingHeight || 3) > 3 ? 0.04 : 0);
-    cable += area * (rates.cablePerM2[z.type] || rates.cablePerM2.office) * cableReserve;
-    units += (area / 1000) * (rates.unitsPer1000[z.type] || rates.unitsPer1000.office);
-  });
-
-  cable *= Number(budget.cableCoef || 1) * Number(budget.complexityCoef || 1);
-  units *= Number(budget.equipmentCoef || 1);
-
-  const equipCost = units * rates.equipUnit * vendorFactor;
-  const cableMaterials = cable * 92;
-  const trayAndFasteners = cable * 51;
-  const materialsBase = equipCost + cableMaterials + trayAndFasteners;
-
-  const laborCable = cable * rates.laborPerCableM * Number(budget.laborCoef || 1) * Number(budget.complexityCoef || 1);
-  const laborInstall = units * rates.installPerUnit * Number(budget.laborCoef || 1) * Number(budget.complexityCoef || 1);
-  const laborBase = laborCable + laborInstall;
-
-  const overhead = laborBase * (Number(budget.overheadPercent || 0) / 100);
-  const ppe = laborBase * (Number(budget.ppePercent || 0) / 100);
-  const payrollTaxes = laborBase * (Number(budget.payrollTaxesPercent || 0) / 100);
-
-  const directCost = materialsBase + laborBase + overhead + ppe + payrollTaxes;
-  const profit = directCost * (Number(budget.profitabilityPercent || 0) / 100);
-  const subtotal = directCost + profit;
-  const vat = budget.taxMode === "osno" ? subtotal * (Number(budget.vatPercent || 0) / 100) : 0;
-  const total = subtotal + vat;
-
-  return {
-    systemType: system.type,
-    systemName: SYSTEM_TYPES.find((x) => x.code === system.type)?.name || system.type,
-    vendor: system.vendor,
-    cable,
-    units,
-    equipCost,
-    cableMaterials,
-    trayAndFasteners,
-    materialsBase,
-    laborBase,
-    overhead,
-    ppe,
-    payrollTaxes,
-    profit,
-    vat,
-    total,
-  };
-}
+  SYSTEM_TYPES,
+  VENDORS,
+  OBJECT_TYPES,
+  DEFAULT_BUDGET,
+  DEFAULT_ZONE,
+  DEFAULT_SYSTEM,
+  COEFFICIENT_GUIDE,
+} from "./config/estimateConfig";
+import { getVendorByName } from "./config/vendorsConfig";
+import { getCriticalEquipment, getDefaultEquipmentProfiles } from "./config/equipmentCatalog";
+import { ZONE_PRESETS, ZONE_TYPES } from "./config/zonesConfig";
+import { fetchVendorPrices } from "./lib/priceCollector";
+import { rub, num, buildEstimateRows, downloadCsv, toNumber } from "./lib/estimate";
+import { buildZonesFromPreset, getZonePercentSum, normalizeZoneAreas, rebalanceZoneAreasWithLocks, validateZoneDistribution } from "./lib/zoneEngine";
+import { buildHowCalculated, calculateEstimateEngine } from "./lib/estimateEngine";
 
 export default function App() {
   const [step, setStep] = useState(0);
@@ -247,26 +45,24 @@ export default function App() {
   ]);
 
   const [budget, setBudget] = useState(DEFAULT_BUDGET);
+  const [vendorPriceSnapshots, setVendorPriceSnapshots] = useState({});
+  const [zonePreset, setZonePreset] = useState("business_center");
+  const [lockedZoneIds, setLockedZoneIds] = useState([]);
 
-  const recalculatedArea = useMemo(
-    () => zones.reduce((sum, z) => sum + Number(z.area || 0), 0),
-    [zones]
-  );
+  const recalculatedArea = useMemo(() => zones.reduce((sum, z) => sum + toNumber(z.area), 0), [zones]);
 
-  const systemResults = useMemo(
-    () => systems.map((sys) => calculateSystem(sys, zones, budget)),
+  const { systemsDetailed: systemResults, totals } = useMemo(
+    () => calculateEstimateEngine(systems, zones, budget),
     [systems, zones, budget]
   );
+  const zoneDistribution = useMemo(
+    () => validateZoneDistribution(zones, objectData.totalArea),
+    [zones, objectData.totalArea]
+  );
 
-  const totals = useMemo(() => {
-    const totalMaterials = systemResults.reduce((s, x) => s + x.materialsBase, 0);
-    const totalLabor = systemResults.reduce((s, x) => s + x.laborBase, 0);
-    const totalOverhead = systemResults.reduce((s, x) => s + x.overhead + x.ppe + x.payrollTaxes, 0);
-    const totalProfit = systemResults.reduce((s, x) => s + x.profit, 0);
-    const totalVat = systemResults.reduce((s, x) => s + x.vat, 0);
-    const total = systemResults.reduce((s, x) => s + x.total, 0);
-    return { totalMaterials, totalLabor, totalOverhead, totalProfit, totalVat, total };
-  }, [systemResults]);
+  useEffect(() => {
+    setLockedZoneIds((prev) => prev.filter((id) => zones.some((zone) => zone.id === id)));
+  }, [zones]);
 
   function updateObject(key, value) {
     setObjectData((prev) => ({ ...prev, [key]: value }));
@@ -280,8 +76,26 @@ export default function App() {
     setZones((prev) => [...prev, DEFAULT_ZONE(Date.now(), `Зона ${prev.length + 1}`, "office", 1000, 1)]);
   }
 
+  function applyZonePreset(presetKey) {
+    const nextZones = buildZonesFromPreset(presetKey, objectData.totalArea);
+    if (nextZones.length) {
+      setZones(nextZones);
+      setLockedZoneIds([]);
+    }
+  }
+
   function removeZone(id) {
-    setZones((prev) => prev.filter((z) => z.id !== id));
+    setZones((prev) => (prev.length <= 1 ? prev : prev.filter((z) => z.id !== id)));
+  }
+
+  function updateZoneShare(zoneId, nextPercent) {
+    setZones((prev) =>
+      rebalanceZoneAreasWithLocks(prev, zoneId, nextPercent, objectData.totalArea, lockedZoneIds)
+    );
+  }
+
+  function toggleZoneLock(zoneId) {
+    setLockedZoneIds((prev) => (prev.includes(zoneId) ? prev.filter((id) => id !== zoneId) : [...prev, zoneId]));
   }
 
   function updateSystem(id, key, value) {
@@ -289,7 +103,15 @@ export default function App() {
       prev.map((s) => {
         if (s.id !== id) return s;
         if (key === "type") {
-          return { ...s, type: value, vendor: VENDORS[value][0] };
+          const vendorList = VENDORS[value] || ["Базовый"];
+          return {
+            ...s,
+            type: value,
+            vendor: vendorList[0],
+            baseVendor: "Базовый",
+            customVendorIndex: 1,
+            equipmentProfiles: getDefaultEquipmentProfiles(value),
+          };
         }
         return { ...s, [key]: value };
       })
@@ -301,35 +123,37 @@ export default function App() {
   }
 
   function removeSystem(id) {
-    setSystems((prev) => prev.filter((s) => s.id !== id));
+    setSystems((prev) => (prev.length <= 1 ? prev : prev.filter((s) => s.id !== id)));
   }
 
   function updateBudget(key, value) {
     setBudget((prev) => ({ ...prev, [key]: value }));
   }
 
+  function updateSystemEquipmentProfile(systemId, equipmentKey, profileKey) {
+    setSystems((prev) =>
+      prev.map((system) =>
+        system.id === systemId
+          ? {
+              ...system,
+              equipmentProfiles: {
+                ...(system.equipmentProfiles || {}),
+                [equipmentKey]: profileKey,
+              },
+            }
+          : system
+      )
+    );
+  }
+
+  async function refreshVendorPricing(system) {
+    const snapshot = await fetchVendorPrices(system.type, system.vendor);
+    setVendorPriceSnapshots((prev) => ({ ...prev, [system.id]: snapshot }));
+  }
+
   function exportEstimate() {
-    const rows = [
-      ["Проект", objectData.projectName],
-      ["Тип объекта", OBJECT_TYPES.find((x) => x.value === objectData.objectType)?.label || objectData.objectType],
-      ["Площадь, м²", recalculatedArea],
-      [],
-      ["Система", "Вендор", "Кабель, м", "Ед. оборудования", "Материалы, ₽", "Труд, ₽", "Накладные+СИЗ+отчисления, ₽", "Прибыль, ₽", "НДС, ₽", "Итого, ₽"],
-      ...systemResults.map((r) => [
-        r.systemName,
-        r.vendor,
-        num(r.cable, 0),
-        num(r.units, 0),
-        num(r.materialsBase, 0),
-        num(r.laborBase, 0),
-        num(r.overhead + r.ppe + r.payrollTaxes, 0),
-        num(r.profit, 0),
-        num(r.vat, 0),
-        num(r.total, 0),
-      ]),
-      [],
-      ["ИТОГО", "", "", "", num(totals.totalMaterials, 0), num(totals.totalLabor, 0), num(totals.totalOverhead, 0), num(totals.totalProfit, 0), num(totals.totalVat, 0), num(totals.total, 0)],
-    ];
+    const objectTypeLabel = OBJECT_TYPES.find((x) => x.value === objectData.objectType)?.label || objectData.objectType;
+    const rows = buildEstimateRows({ objectData: { ...objectData, objectTypeLabel }, recalculatedArea, systemResults, totals });
     downloadCsv(`${objectData.projectName || "estimate"}.csv`, rows);
   }
 
@@ -377,21 +201,11 @@ export default function App() {
             })}
           </div>
           <div className="step-actions">
-            <button
-              className="ghost-btn"
-              type="button"
-              onClick={() => setStep((s) => Math.max(0, s - 1))}
-              disabled={step === 0}
-            >
+            <button className="ghost-btn" type="button" onClick={() => setStep((s) => Math.max(0, s - 1))} disabled={step === 0}>
               <ChevronLeft size={16} />
               Назад
             </button>
-            <button
-              className="primary-btn"
-              type="button"
-              onClick={() => setStep((s) => Math.min(steps.length - 1, s + 1))}
-              disabled={step === steps.length - 1}
-            >
+            <button className="primary-btn" type="button" onClick={() => setStep((s) => Math.min(steps.length - 1, s + 1))} disabled={step === steps.length - 1}>
               Далее
               <ChevronRight size={16} />
             </button>
@@ -408,39 +222,43 @@ export default function App() {
             </div>
 
             <div className="grid-two">
-              <div className="input-card">
-                <label>Название проекта</label>
-                <input value={objectData.projectName} onChange={(e) => updateObject("projectName", e.target.value)} />
+              <div className="input-card"><label>Название проекта</label><input value={objectData.projectName} onChange={(e) => updateObject("projectName", e.target.value)} /></div>
+              <div className="input-card"><label>Тип объекта</label><select value={objectData.objectType} onChange={(e) => updateObject("objectType", e.target.value)}>{OBJECT_TYPES.map((x) => <option key={x.value} value={x.value}>{x.label}</option>)}</select></div>
+              <div className="input-card"><label>Площадь по объекту, м²</label><input type="number" value={objectData.totalArea} onChange={(e) => updateObject("totalArea", toNumber(e.target.value))} /></div>
+              <div className="input-card"><label>Площадь по зонам, м²</label><input type="number" value={recalculatedArea} readOnly /></div>
+              <div className="input-card"><label>Надземные этажи</label><input type="number" value={objectData.floors} onChange={(e) => updateObject("floors", toNumber(e.target.value))} /></div>
+              <div className="input-card"><label>Подземные этажи</label><input type="number" value={objectData.basementFloors} onChange={(e) => updateObject("basementFloors", toNumber(e.target.value))} /></div>
+              <div className="input-card"><label>Средняя высота, м</label><input type="number" step="0.1" value={objectData.ceilingHeight} onChange={(e) => updateObject("ceilingHeight", toNumber(e.target.value))} /></div>
+              <div className="input-card"><label>Примечание</label><input value={objectData.notes} onChange={(e) => updateObject("notes", e.target.value)} /></div>
+            </div>
+
+            <div className="slider-hero">
+              <div className="slider-hero-header">
+                <h3>🎚️ Ползунки распределения зон (быстрый доступ)</h3>
+                <p>Меняй доли сразу здесь — ниже останется расширенный блок с пресетами и фиксацией зон.</p>
               </div>
-              <div className="input-card">
-                <label>Тип объекта</label>
-                <select value={objectData.objectType} onChange={(e) => updateObject("objectType", e.target.value)}>
-                  {OBJECT_TYPES.map((x) => <option key={x.value} value={x.value}>{x.label}</option>)}
-                </select>
-              </div>
-              <div className="input-card">
-                <label>Площадь по объекту, м²</label>
-                <input type="number" value={objectData.totalArea} onChange={(e) => updateObject("totalArea", Number(e.target.value))} />
-              </div>
-              <div className="input-card">
-                <label>Площадь по зонам, м²</label>
-                <input type="number" value={recalculatedArea} readOnly />
-              </div>
-              <div className="input-card">
-                <label>Надземные этажи</label>
-                <input type="number" value={objectData.floors} onChange={(e) => updateObject("floors", Number(e.target.value))} />
-              </div>
-              <div className="input-card">
-                <label>Подземные этажи</label>
-                <input type="number" value={objectData.basementFloors} onChange={(e) => updateObject("basementFloors", Number(e.target.value))} />
-              </div>
-              <div className="input-card">
-                <label>Средняя высота, м</label>
-                <input type="number" step="0.1" value={objectData.ceilingHeight} onChange={(e) => updateObject("ceilingHeight", Number(e.target.value))} />
-              </div>
-              <div className="input-card">
-                <label>Примечание</label>
-                <input value={objectData.notes} onChange={(e) => updateObject("notes", e.target.value)} />
+              <div className="slider-stack">
+                {zones.map((zone) => {
+                  const zonePercent = objectData.totalArea > 0 ? (toNumber(zone.area) / toNumber(objectData.totalArea, 1)) * 100 : 0;
+                  return (
+                    <div className="slider-card" key={`quick-${zone.id}`}>
+                      <div className="slider-header">
+                        <strong>{zone.name}</strong>
+                        <span>{num(zonePercent, 1)}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        step={0.5}
+                        value={Math.max(0, Math.min(100, zonePercent))}
+                        onChange={(e) => updateZoneShare(zone.id, toNumber(e.target.value))}
+                        className="zone-slider"
+                        disabled={lockedZoneIds.includes(zone.id)}
+                      />
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -450,47 +268,98 @@ export default function App() {
                   <h3>Зоны объекта</h3>
                   <p>Раздели объект на функциональные зоны — это влияет на расчёт систем.</p>
                 </div>
-                <button className="primary-btn" onClick={addZone} type="button">
-                  <Plus size={16} />
-                  Добавить зону
-                </button>
+                <button className="primary-btn" onClick={addZone} type="button"><Plus size={16} />Добавить зону</button>
               </div>
 
               <div className="stack">
                 {zones.map((zone) => (
                   <div className="zone-card" key={zone.id}>
                     <div className="zone-grid">
-                      <div className="input-card">
-                        <label>Название зоны</label>
-                        <input value={zone.name} onChange={(e) => updateZone(zone.id, "name", e.target.value)} />
-                      </div>
-                      <div className="input-card">
-                        <label>Тип зоны</label>
-                        <select value={zone.type} onChange={(e) => updateZone(zone.id, "type", e.target.value)}>
-                          {ZONE_TYPES.map((x) => <option key={x.value} value={x.value}>{x.label}</option>)}
-                        </select>
-                      </div>
-                      <div className="input-card">
-                        <label>Площадь, м²</label>
-                        <input type="number" value={zone.area} onChange={(e) => updateZone(zone.id, "area", Number(e.target.value))} />
-                      </div>
-                      <div className="input-card">
-                        <label>Этажей</label>
-                        <input type="number" value={zone.floors} onChange={(e) => updateZone(zone.id, "floors", Number(e.target.value))} />
-                      </div>
-                      <div className="input-card">
-                        <label>Высота, м</label>
-                        <input type="number" step="0.1" value={zone.ceilingHeight} onChange={(e) => updateZone(zone.id, "ceilingHeight", Number(e.target.value))} />
-                      </div>
+                      <div className="input-card"><label>Название зоны</label><input value={zone.name} onChange={(e) => updateZone(zone.id, "name", e.target.value)} /></div>
+                      <div className="input-card"><label>Тип зоны</label><select value={zone.type} onChange={(e) => updateZone(zone.id, "type", e.target.value)}>{ZONE_TYPES.map((x) => <option key={x.value} value={x.value}>{x.label}</option>)}</select></div>
+                      <div className="input-card"><label>Площадь, м²</label><input type="number" value={zone.area} onChange={(e) => updateZone(zone.id, "area", toNumber(e.target.value))} /></div>
+                      <div className="input-card"><label>Этажей</label><input type="number" value={zone.floors} onChange={(e) => updateZone(zone.id, "floors", toNumber(e.target.value))} /></div>
+                      <div className="input-card"><label>Высота, м</label><input type="number" step="0.1" value={zone.ceilingHeight} onChange={(e) => updateZone(zone.id, "ceilingHeight", toNumber(e.target.value))} /></div>
                       <div className="action-cell">
-                        <button className="danger-btn" type="button" onClick={() => removeZone(zone.id)}>
-                          <Trash2 size={16} />
-                          Удалить
-                        </button>
+                        <button className="danger-btn" type="button" onClick={() => removeZone(zone.id)} disabled={zones.length <= 1}><Trash2 size={16} />Удалить</button>
                       </div>
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+
+            <div className="subpanel">
+              <div className="subpanel-header">
+                <div>
+                  <h3>Распределение зон по площади</h3>
+                  <p>
+                    Настрой примерное процентное соотношение ползунками — площади зон пересчитаются автоматически.
+                  </p>
+                </div>
+                <div className="preset-row">
+                  <select value={zonePreset} onChange={(e) => setZonePreset(e.target.value)}>
+                    {Object.entries(ZONE_PRESETS).map(([key, preset]) => (
+                      <option key={key} value={key}>
+                        {preset.label}
+                      </option>
+                    ))}
+                  </select>
+                  <button className="ghost-btn" type="button" onClick={() => applyZonePreset(zonePreset)}>
+                    Применить пресет
+                  </button>
+                  <button className="ghost-btn" type="button" onClick={() => setZones((prev) => normalizeZoneAreas(prev, objectData.totalArea))}>
+                    Нормализовать до 100%
+                  </button>
+                </div>
+              </div>
+
+              <div className="slider-stack">
+                {zones.map((zone) => {
+                  const zonePercent = objectData.totalArea > 0 ? (toNumber(zone.area) / toNumber(objectData.totalArea, 1)) * 100 : 0;
+                  const isLocked = lockedZoneIds.includes(zone.id);
+                  return (
+                    <div className="slider-card" key={`share-${zone.id}`}>
+                      <div className="slider-header">
+                        <div className="slider-title">
+                          <strong>{zone.name}</strong>
+                          <button className={`lock-btn ${isLocked ? "locked" : ""}`} type="button" onClick={() => toggleZoneLock(zone.id)}>
+                            {isLocked ? <Lock size={14} /> : <Unlock size={14} />}
+                            {isLocked ? "Зафиксирована" : "Свободна"}
+                          </button>
+                        </div>
+                        <span>{num(zonePercent, 1)}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        step={0.5}
+                        value={Math.max(0, Math.min(100, zonePercent))}
+                        onChange={(e) => updateZoneShare(zone.id, toNumber(e.target.value))}
+                        className="zone-slider"
+                        disabled={isLocked}
+                      />
+                    </div>
+                  );
+                })}
+                <div className="slider-total">
+                  Сумма процентов: <strong>{num(getZonePercentSum(zones, objectData.totalArea), 1)}%</strong>
+                  {!zoneDistribution.isValid && <span className="warn-inline"> Проверь распределение (должно быть 100%).</span>}
+                </div>
+                <div className="zone-share-bar">
+                  {zones.map((zone) => {
+                    const share = objectData.totalArea > 0 ? (toNumber(zone.area) / toNumber(objectData.totalArea, 1)) * 100 : 0;
+                    return (
+                      <div
+                        key={`bar-${zone.id}`}
+                        className="zone-share-segment"
+                        style={{ width: `${Math.max(share, 0)}%` }}
+                        title={`${zone.name}: ${num(share, 1)}%`}
+                      />
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </section>
@@ -503,16 +372,18 @@ export default function App() {
                 <h2>Системы</h2>
                 <p>Добавляй системы, выбирай тип, вендора и индивидуальные настройки.</p>
               </div>
-              <button className="primary-btn" onClick={addSystem} type="button">
-                <Plus size={16} />
-                + Система
-              </button>
+              <button className="primary-btn" onClick={addSystem} type="button"><Plus size={16} />+ Система</button>
             </div>
 
             <div className="stack">
               {systems.map((system, index) => {
                 const typeMeta = SYSTEM_TYPES.find((x) => x.code === system.type);
                 const Icon = typeMeta?.icon || Shield;
+                const vendorList = VENDORS[system.type] || ["Базовый"];
+                const selectedVendor = getVendorByName(system.type, system.vendor);
+                const equipmentList = getCriticalEquipment(system.type);
+                const pricingSnapshot = vendorPriceSnapshots[system.id];
+                const systemResult = systemResults[index];
                 return (
                   <div className="system-card" key={system.id}>
                     <div className="system-title">
@@ -524,40 +395,140 @@ export default function App() {
                     </div>
 
                     <div className="zone-grid">
-                      <div className="input-card">
-                        <label>Тип системы</label>
-                        <select value={system.type} onChange={(e) => updateSystem(system.id, "type", e.target.value)}>
-                          {SYSTEM_TYPES.map((x) => <option key={x.code} value={x.code}>{x.name}</option>)}
-                        </select>
+                      <div className="input-card"><label>Тип системы</label><select value={system.type} onChange={(e) => updateSystem(system.id, "type", e.target.value)}>{SYSTEM_TYPES.map((x) => <option key={x.code} value={x.code}>{x.name}</option>)}</select></div>
+                      <div className="input-card"><label>Вендор</label><select value={system.vendor} onChange={(e) => updateSystem(system.id, "vendor", e.target.value)}>{vendorList.map((vendor) => <option key={vendor} value={vendor}>{vendor}</option>)}</select></div>
+                      <div className="input-card"><label>Базовый вендор</label><select value={system.baseVendor} onChange={(e) => updateSystem(system.id, "baseVendor", e.target.value)}>{vendorList.map((vendor) => <option key={vendor} value={vendor}>{vendor}</option>)}</select></div>
+                      <div className="input-card"><label>Кастомный индекс</label><input type="number" step="0.01" value={system.customVendorIndex} onChange={(e) => updateSystem(system.id, "customVendorIndex", toNumber(e.target.value, 1))} /></div>
+                      <div className="input-card full"><label>Комментарий</label><input value={system.note} onChange={(e) => updateSystem(system.id, "note", e.target.value)} /></div>
+                      <div className="vendor-hint full">
+                        <p>{selectedVendor.description}</p>
+                        <div className="vendor-metrics">
+                          <span>Цена: x{num(selectedVendor.equipmentPriceIndex, 2)}</span>
+                          <span>Качество: x{num(selectedVendor.qualityCoefficient, 2)}</span>
+                          <span>Скорость монтажа: x{num(selectedVendor.installationSpeed, 2)}</span>
+                        </div>
                       </div>
+                      <div className="equipment-config full">
+                        <div className="equipment-header">
+                          <strong>Критичное оборудование</strong>
+                          <button className="ghost-btn" type="button" onClick={() => refreshVendorPricing(system)}>
+                            Обновить цены с сайтов производителей
+                          </button>
+                        </div>
+                        <div className="equipment-list">
+                          {equipmentList.map((equipment) => (
+                            <div className="equipment-item" key={`${system.id}-${equipment.key}`}>
+                              <div>
+                                <strong>{equipment.label}</strong>
+                                <p>Влияние на стоимость: {num(equipment.influenceWeight * 100, 0)}%</p>
+                              </div>
+                              <div className="equipment-controls">
+                                <select
+                                  value={system.equipmentProfiles?.[equipment.key] || "standard"}
+                                  onChange={(e) => updateSystemEquipmentProfile(system.id, equipment.key, e.target.value)}
+                                >
+                                  {Object.entries(equipment.profiles).map(([profileKey, profile]) => (
+                                    <option key={profileKey} value={profileKey}>
+                                      {profile.label} — x{num(profile.coef, 2)}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
 
-                      <div className="input-card">
-                        <label>Вендор</label>
-                        <select value={system.vendor} onChange={(e) => updateSystem(system.id, "vendor", e.target.value)}>
-                          {VENDORS[system.type].map((vendor) => <option key={vendor} value={vendor}>{vendor}</option>)}
-                        </select>
+                        {pricingSnapshot && (
+                          <div className="pricing-results">
+                            <div className="pricing-caption">Актуализация: {pricingSnapshot.fetchedAt ? new Date(pricingSnapshot.fetchedAt).toLocaleString("ru-RU") : "—"}</div>
+                            <div className="pricing-grid">
+                              {pricingSnapshot.entries.map((entry) => (
+                                <div className="pricing-card" key={entry.key}>
+                                  <strong>{entry.equipmentLabel}</strong>
+                                  <span>{rub(entry.price || 0)}</span>
+                                  <small>{entry.status === "fetched" ? "получено с сайта" : "fallback-цена"}</small>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
-
-                      <div className="input-card">
-                        <label>Базовый вендор</label>
-                        <input value={system.baseVendor} onChange={(e) => updateSystem(system.id, "baseVendor", e.target.value)} />
+                      <div className="calc-explain full">
+                        <h4>Как это рассчитано</h4>
+                        <ul>
+                          {buildHowCalculated(systemResult).map((line, idx) => (
+                            <li key={`${system.id}-calc-${idx}`}>{line}</li>
+                          ))}
+                        </ul>
+                        <div className="formula-table-wrap">
+                          <table className="formula-table">
+                            <thead>
+                              <tr>
+                                <th>Параметр</th>
+                                <th>Значение</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(systemResult?.formulaRows || []).map((row, idx) => (
+                                <tr key={`${system.id}-formula-${idx}`}>
+                                  <td>{row.label}</td>
+                                  <td>x{num(row.value, 2)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        <div className="formula-table-wrap">
+                          <table className="formula-table">
+                            <thead>
+                              <tr>
+                                <th>Код</th>
+                                <th>Позиция (BOM-lite)</th>
+                                <th>Кол-во</th>
+                                <th>Цена за ед.</th>
+                                <th>Сумма</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(systemResult?.bom || []).map((row) => (
+                                <tr key={`${system.id}-${row.code}`}>
+                                  <td>{row.code}</td>
+                                  <td>{row.name}</td>
+                                  <td>{num(row.qty, 0)}</td>
+                                  <td>{rub(row.unitPrice)}</td>
+                                  <td>{rub(row.total)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        <div className="formula-table-wrap">
+                          <table className="formula-table">
+                            <thead>
+                              <tr>
+                                <th>Ресурсный элемент</th>
+                                <th>Кол-во</th>
+                                <th>Кабель, м</th>
+                                <th>Часы (монтаж+подкл.+настр.)</th>
+                                <th>ПНР+проект.</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(systemResult?.breakdown?.resources || []).map((row) => (
+                                <tr key={`${system.id}-resource-${row.key}`}>
+                                  <td>{row.label}</td>
+                                  <td>{num(row.qty, 1)}</td>
+                                  <td>{num(row.cable, 0)}</td>
+                                  <td>{num(row.mountHours + row.connectHours + row.setupHours, 1)}</td>
+                                  <td>{num(row.pnrHours + row.designHours, 1)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
-
-                      <div className="input-card">
-                        <label>Кастомный индекс</label>
-                        <input type="number" step="0.01" value={system.customVendorIndex} onChange={(e) => updateSystem(system.id, "customVendorIndex", Number(e.target.value))} />
-                      </div>
-
-                      <div className="input-card full">
-                        <label>Комментарий</label>
-                        <input value={system.note} onChange={(e) => updateSystem(system.id, "note", e.target.value)} />
-                      </div>
-
                       <div className="action-cell full">
-                        <button className="danger-btn" type="button" onClick={() => removeSystem(system.id)}>
-                          <Trash2 size={16} />
-                          Удалить систему
-                        </button>
+                        <button className="danger-btn" type="button" onClick={() => removeSystem(system.id)} disabled={systems.length <= 1}><Trash2 size={16} />Удалить систему</button>
                       </div>
                     </div>
                   </div>
@@ -577,21 +548,40 @@ export default function App() {
             </div>
 
             <div className="grid-three">
-              <div className="input-card"><label>Коэффициент кабеля</label><input type="number" step="0.01" value={budget.cableCoef} onChange={(e) => updateBudget("cableCoef", Number(e.target.value))} /></div>
-              <div className="input-card"><label>Коэффициент оборудования</label><input type="number" step="0.01" value={budget.equipmentCoef} onChange={(e) => updateBudget("equipmentCoef", Number(e.target.value))} /></div>
-              <div className="input-card"><label>Коэффициент труда</label><input type="number" step="0.01" value={budget.laborCoef} onChange={(e) => updateBudget("laborCoef", Number(e.target.value))} /></div>
-              <div className="input-card"><label>Коэффициент сложности</label><input type="number" step="0.01" value={budget.complexityCoef} onChange={(e) => updateBudget("complexityCoef", Number(e.target.value))} /></div>
-              <div className="input-card"><label>Накладные, %</label><input type="number" step="0.1" value={budget.overheadPercent} onChange={(e) => updateBudget("overheadPercent", Number(e.target.value))} /></div>
-              <div className="input-card"><label>Расходка / СИЗ, %</label><input type="number" step="0.1" value={budget.ppePercent} onChange={(e) => updateBudget("ppePercent", Number(e.target.value))} /></div>
-              <div className="input-card"><label>Отчисления ФОТ, %</label><input type="number" step="0.1" value={budget.payrollTaxesPercent} onChange={(e) => updateBudget("payrollTaxesPercent", Number(e.target.value))} /></div>
-              <div className="input-card"><label>Рентабельность, %</label><input type="number" step="0.1" value={budget.profitabilityPercent} onChange={(e) => updateBudget("profitabilityPercent", Number(e.target.value))} /></div>
-              <div className="input-card"><label>НДС, %</label><input type="number" step="0.1" value={budget.vatPercent} onChange={(e) => updateBudget("vatPercent", Number(e.target.value))} /></div>
+              <div className="input-card"><label>Коэффициент кабеля</label><input type="number" step="0.01" value={budget.cableCoef} onChange={(e) => updateBudget("cableCoef", toNumber(e.target.value, 1))} /></div>
+              <div className="input-card"><label>Коэффициент оборудования</label><input type="number" step="0.01" value={budget.equipmentCoef} onChange={(e) => updateBudget("equipmentCoef", toNumber(e.target.value, 1))} /></div>
+              <div className="input-card"><label>Коэффициент труда</label><input type="number" step="0.01" value={budget.laborCoef} onChange={(e) => updateBudget("laborCoef", toNumber(e.target.value, 1))} /></div>
+              <div className="input-card"><label>Коэффициент сложности</label><input type="number" step="0.01" value={budget.complexityCoef} onChange={(e) => updateBudget("complexityCoef", toNumber(e.target.value, 1))} /></div>
+              <div className="input-card"><label>Высотность работ</label><input type="number" step="0.01" value={budget.heightCoef} onChange={(e) => updateBudget("heightCoef", toNumber(e.target.value, 1))} /></div>
+              <div className="input-card"><label>Стеснённость</label><input type="number" step="0.01" value={budget.constrainedCoef} onChange={(e) => updateBudget("constrainedCoef", toNumber(e.target.value, 1))} /></div>
+              <div className="input-card"><label>Действующий объект</label><input type="number" step="0.01" value={budget.operatingFacilityCoef} onChange={(e) => updateBudget("operatingFacilityCoef", toNumber(e.target.value, 1))} /></div>
+              <div className="input-card"><label>Ночные работы</label><input type="number" step="0.01" value={budget.nightWorkCoef} onChange={(e) => updateBudget("nightWorkCoef", toNumber(e.target.value, 1))} /></div>
+              <div className="input-card"><label>Сложность трасс</label><input type="number" step="0.01" value={budget.routingCoef} onChange={(e) => updateBudget("routingCoef", toNumber(e.target.value, 1))} /></div>
+              <div className="input-card"><label>Чистовая отделка</label><input type="number" step="0.01" value={budget.finishCoef} onChange={(e) => updateBudget("finishCoef", toNumber(e.target.value, 1))} /></div>
+              <div className="input-card"><label>Накладные, %</label><input type="number" step="0.1" value={budget.overheadPercent} onChange={(e) => updateBudget("overheadPercent", toNumber(e.target.value))} /></div>
+              <div className="input-card"><label>Расходка / СИЗ, %</label><input type="number" step="0.1" value={budget.ppePercent} onChange={(e) => updateBudget("ppePercent", toNumber(e.target.value))} /></div>
+              <div className="input-card"><label>Отчисления ФОТ, %</label><input type="number" step="0.1" value={budget.payrollTaxesPercent} onChange={(e) => updateBudget("payrollTaxesPercent", toNumber(e.target.value))} /></div>
+              <div className="input-card"><label>Рентабельность, %</label><input type="number" step="0.1" value={budget.profitabilityPercent} onChange={(e) => updateBudget("profitabilityPercent", toNumber(e.target.value))} /></div>
+              <div className="input-card"><label>НДС, %</label><input type="number" step="0.1" value={budget.vatPercent} onChange={(e) => updateBudget("vatPercent", toNumber(e.target.value))} /></div>
               <div className="input-card">
                 <label>Налоговый режим</label>
                 <select value={budget.taxMode} onChange={(e) => updateBudget("taxMode", e.target.value)}>
                   <option value="osno">ОСНО</option>
                   <option value="usn">УСН</option>
                 </select>
+              </div>
+            </div>
+
+            <div className="coef-guide">
+              <div className="coef-guide-title"><Info size={16} />Справка по коэффициентам</div>
+              <div className="coef-guide-grid">
+                {COEFFICIENT_GUIDE.map((item) => (
+                  <article key={item.key} className="coef-tip">
+                    <h4>{item.title}</h4>
+                    <p className="range">Рекомендуемый диапазон: {item.range}</p>
+                    <p>{item.tip}</p>
+                  </article>
+                ))}
               </div>
             </div>
           </section>
@@ -618,25 +608,13 @@ export default function App() {
             <table>
               <thead>
                 <tr>
-                  <th>Система</th>
-                  <th>Вендор</th>
-                  <th>Кабель, м</th>
-                  <th>Ед.</th>
-                  <th>Материалы</th>
-                  <th>Труд</th>
-                  <th>Итого</th>
+                  <th>Система</th><th>Вендор</th><th>Кабель, м</th><th>Ед.</th><th>Материалы</th><th>Труд</th><th>Итого</th>
                 </tr>
               </thead>
               <tbody>
                 {systemResults.map((r, idx) => (
                   <tr key={`${r.systemType}-${idx}`}>
-                    <td>{r.systemName}</td>
-                    <td>{r.vendor}</td>
-                    <td>{num(r.cable, 0)}</td>
-                    <td>{num(r.units, 0)}</td>
-                    <td>{rub(r.materialsBase)}</td>
-                    <td>{rub(r.laborBase)}</td>
-                    <td>{rub(r.total)}</td>
+                    <td>{r.systemName}</td><td>{r.vendor}</td><td>{num(r.cable, 0)}</td><td>{num(r.units, 0)}</td><td>{rub(r.materialsBase)}</td><td>{rub(r.laborBase)}</td><td>{rub(r.total)}</td>
                   </tr>
                 ))}
               </tbody>
