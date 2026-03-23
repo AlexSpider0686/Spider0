@@ -13,7 +13,13 @@ import {
   ShieldCheck
 } from "lucide-react";
 
-// --- ВСТРОЕННЫЕ КОМПОНЕНТЫ (Чтобы не зависеть от внешних файлов и не ломать билд) ---
+/**
+ * ВНИМАНИЕ: Все UI-компоненты (Card, Button, Tabs) определены прямо здесь.
+ * Это сделано специально, чтобы избежать ошибки "Rollup failed to resolve import",
+ * так как в проекте отсутствуют внешние папки компонентов.
+ */
+
+// --- ВСТРОЕННЫЕ КОМПОНЕНТЫ (Автономные стили) ---
 
 const Card = ({ children, className = "" }) => (
   <div className={`bg-white rounded-2xl shadow-sm border border-slate-100 ${className}`}>{children}</div>
@@ -32,7 +38,7 @@ const CardContent = ({ children, className = "" }) => (
 );
 
 const Button = ({ children, onClick, variant = "default", className = "" }) => {
-  const baseStyles = "inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl font-bold transition-all disabled:opacity-50";
+  const baseStyles = "inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl font-bold transition-all disabled:opacity-50 text-sm";
   const variants = {
     default: "bg-blue-600 text-white hover:bg-blue-700 shadow-sm",
     outline: "border border-slate-200 bg-white hover:bg-slate-50 text-slate-600",
@@ -48,7 +54,7 @@ const Button = ({ children, onClick, variant = "default", className = "" }) => {
 const Input = (props) => (
   <input 
     {...props} 
-    className={`w-full p-2 bg-slate-50 rounded-xl border border-transparent focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all font-mono ${props.className}`} 
+    className={`w-full p-2 bg-slate-50 rounded-xl border border-transparent focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all font-mono text-sm ${props.className}`} 
   />
 );
 
@@ -62,7 +68,7 @@ const Select = ({ value, onValueChange, children }) => (
   <select 
     value={value} 
     onChange={(e) => onValueChange(e.target.value)}
-    className="w-full p-2 bg-slate-50 rounded-xl border border-transparent focus:border-blue-500 outline-none cursor-pointer"
+    className="w-full p-2 bg-slate-50 rounded-xl border border-transparent focus:border-blue-500 outline-none cursor-pointer text-sm"
   >
     {children}
   </select>
@@ -74,7 +80,7 @@ const Tabs = ({ children, defaultValue }) => {
   return (
     <div className="w-full">
       {React.Children.map(children, child => 
-        React.cloneElement(child, { activeTab, setActiveTab })
+        child && React.isValidElement(child) ? React.cloneElement(child, { activeTab, setActiveTab }) : child
       )}
     </div>
   );
@@ -83,7 +89,7 @@ const Tabs = ({ children, defaultValue }) => {
 const TabsList = ({ children, activeTab, setActiveTab, className = "" }) => (
   <div className={`flex bg-slate-100 p-1 rounded-xl mb-4 ${className}`}>
     {React.Children.map(children, child => 
-      React.cloneElement(child, { activeTab, setActiveTab })
+      child && React.isValidElement(child) ? React.cloneElement(child, { activeTab, setActiveTab }) : child
     )}
   </div>
 );
@@ -207,12 +213,12 @@ export default function App() {
             <ShieldCheck className="text-white w-7 h-7" />
           </div>
           <div>
-            <h1 className="text-2xl font-black tracking-tight">SEC-CALC <span className="text-blue-600 text-sm">PRO</span></h1>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Система расчета безопасности</p>
+            <h1 className="text-2xl font-black tracking-tight uppercase">SEC-CALC <span className="text-blue-600 text-sm">PRO</span></h1>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Профессиональный расчет</p>
           </div>
         </div>
         <Button onClick={exportCSV} variant="outline" className="w-full sm:w-auto">
-          <Download className="w-4 h-4" /> Экспорт CSV
+          <Download className="w-4 h-4" /> Экспорт сметы
         </Button>
       </header>
 
@@ -221,42 +227,45 @@ export default function App() {
           <Card>
             <CardHeader>
               <CardTitle className="text-sm font-bold flex items-center gap-2">
-                <Settings2 className="w-4 h-4 text-slate-400" /> Параметры объекта
+                <Settings2 className="w-4 h-4 text-slate-400" /> Основные настройки
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <Label>Тип здания</Label>
+                <Label>Тип объекта</Label>
                 <Select value={form.objectType} onValueChange={(v) => setForm({...form, objectType: v})}>
-                  <option value="office">Административное здание</option>
-                  <option value="industrial">Склад / Промзона</option>
-                  <option value="highrise">Высотное здание</option>
+                  <option value="office">Офис / Административный</option>
+                  <option value="industrial">Склад / Промышленный</option>
+                  <option value="highrise">Высотный комплекс</option>
                 </Select>
               </div>
               <div>
-                <Label>Тип АПС</Label>
+                <Label>Система АПС</Label>
                 <Select value={form.fireAlarmType} onValueChange={(v) => setForm({...form, fireAlarmType: v})}>
-                  <option value="addressable">Адресная система</option>
-                  <option value="analog">Аналоговая система</option>
+                  <option value="addressable">Адресная (рекомендуется)</option>
+                  <option value="analog">Безадресная</option>
                 </Select>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="bg-slate-900 text-white shadow-xl shadow-blue-100 border-none">
-            <CardContent className="p-6">
-              <p className="text-blue-400 text-[10px] uppercase font-bold tracking-widest">Итоговый бюджет</p>
+          <Card className="bg-slate-900 text-white shadow-xl shadow-blue-100 border-none relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-4 opacity-10">
+              <Calculator size={80} />
+            </div>
+            <CardContent className="p-6 relative z-10">
+              <p className="text-blue-400 text-[10px] uppercase font-bold tracking-widest">Ориентировочный бюджет</p>
               <h2 className="text-3xl font-black mt-2">
                 {Math.round(results.summary.total).toLocaleString()} <span className="text-blue-400 text-xl">₽</span>
               </h2>
               <div className="mt-6 space-y-3 pt-6 border-t border-white/10">
                 <div className="flex justify-between text-xs">
-                  <span className="text-slate-400 font-bold uppercase">Оборудование</span>
-                  <span className="font-mono">{Math.round(results.summary.equip).toLocaleString()} ₽</span>
+                  <span className="text-slate-400 font-bold uppercase tracking-tighter">Оборудование</span>
+                  <span className="font-mono text-blue-200">{Math.round(results.summary.equip).toLocaleString()} ₽</span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-slate-400 font-bold uppercase">Монтаж и пусконаладка</span>
-                  <span className="font-mono">{Math.round(results.summary.labor).toLocaleString()} ₽</span>
+                  <span className="text-slate-400 font-bold uppercase tracking-tighter">Монтаж / ПНР</span>
+                  <span className="font-mono text-blue-200">{Math.round(results.summary.labor).toLocaleString()} ₽</span>
                 </div>
               </div>
             </CardContent>
@@ -266,23 +275,23 @@ export default function App() {
         <main className="lg:col-span-8">
           <Tabs defaultValue="zones">
             <TabsList>
-              <TabsTrigger value="zones">СПИСОК ПОМЕЩЕНИЙ</TabsTrigger>
-              <TabsTrigger value="details">ТЕХНИЧЕСКИЙ ОТЧЕТ</TabsTrigger>
+              <TabsTrigger value="zones">ПОМЕЩЕНИЯ ({form.zones.length})</TabsTrigger>
+              <TabsTrigger value="details">ТЕХ. ПАРАМЕТРЫ</TabsTrigger>
             </TabsList>
 
             <TabsContent value="zones" className="space-y-4">
               {form.zones.map((zone) => (
-                <div key={zone.id} className="flex flex-col md:flex-row gap-4 items-end bg-white p-5 rounded-2xl border border-slate-100 shadow-sm transition-all hover:border-blue-200">
+                <div key={zone.id} className="flex flex-col md:flex-row gap-4 items-end bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:border-blue-200 transition-colors">
                   <div className="w-full md:flex-1 space-y-1">
-                    <Label>Название зоны</Label>
+                    <Label>Название</Label>
                     <Input 
                       value={zone.name} 
                       onChange={(e) => updateZone(zone.id, 'name', e.target.value)}
-                      placeholder="Напр: 1 этаж"
+                      placeholder="Напр: Основной зал"
                     />
                   </div>
                   <div className="w-full md:w-48 space-y-1">
-                    <Label>Тип помещения</Label>
+                    <Label>Назначение</Label>
                     <Select value={zone.type} onValueChange={(v) => updateZone(zone.id, 'type', v)}>
                       {Object.keys(ZONE_PROFILES).map(k => (
                         <option key={k} value={k}>{ZONE_PROFILES[k].name}</option>
@@ -297,21 +306,26 @@ export default function App() {
                       onChange={(e) => updateZone(zone.id, 'area', e.target.value)}
                     />
                   </div>
-                  <Button variant="ghost" onClick={() => removeZone(zone.id)} className="w-full md:w-auto">
+                  <Button variant="ghost" onClick={() => removeZone(zone.id)} className="w-full md:w-auto h-10 px-3">
                     <Trash2 className="w-4 h-4" />
                   </Button>
                 </div>
               ))}
-              <Button onClick={addZone} variant="outline" className="w-full py-8 border-2 border-dashed text-slate-400 hover:border-blue-400 hover:text-blue-600">
-                <Plus className="w-5 h-5" /> Добавить помещение
+              <Button onClick={addZone} variant="outline" className="w-full py-8 border-2 border-dashed border-slate-200 text-slate-400 hover:border-blue-400 hover:text-blue-600 rounded-2xl">
+                <Plus className="w-5 h-5 mr-2" /> Добавить помещение
               </Button>
             </TabsContent>
 
             <TabsContent value="details">
-               <Card className="border-dashed bg-slate-50/50">
-                 <CardContent className="p-12 text-center space-y-4">
-                    <HardDrive className="w-12 h-12 text-slate-200 mx-auto" />
-                    <p className="text-slate-500 font-medium">Детальная спецификация по каждой из 6 систем будет сформирована после завершения ввода всех данных.</p>
+               <Card className="border-dashed bg-white/50 border-slate-200">
+                 <CardContent className="p-16 text-center space-y-4">
+                    <div className="bg-slate-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto text-slate-300">
+                      <HardDrive className="w-8 h-8" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-700">Спецификация формируется</h4>
+                      <p className="text-slate-400 text-xs mt-1 max-w-xs mx-auto italic">Подробный расчет датчиков, камер и кабельных трасс будет доступен после ввода всех площадей.</p>
+                    </div>
                  </CardContent>
                </Card>
             </TabsContent>
