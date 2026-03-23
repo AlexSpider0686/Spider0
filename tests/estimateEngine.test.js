@@ -11,34 +11,41 @@ function createFixture() {
   ];
   const baseBudget = { ...DEFAULT_BUDGET };
   const system = { ...DEFAULT_SYSTEM(1, "sot"), vendor: "Базовый", baseVendor: "Базовый" };
-  return { zones, baseBudget, system };
+  const objectData = { regionName: "Москва", regionCoef: 1.2, objectType: "public" };
+  return { zones, baseBudget, system, objectData };
 }
 
 test("calculateSystem responds to work-condition coefficients", () => {
-  const { zones, baseBudget, system } = createFixture();
+  const { zones, baseBudget, system, objectData } = createFixture();
 
-  const base = calculateSystem(system, zones, baseBudget);
-  const harder = calculateSystem(system, zones, {
-    ...baseBudget,
-    heightCoef: 1.1,
-    constrainedCoef: 1.15,
-    operatingFacilityCoef: 1.05,
-    nightWorkCoef: 1.2,
-    routingCoef: 1.08,
-    finishCoef: 1.04,
-  });
+  const base = calculateSystem(system, zones, baseBudget, objectData);
+  const harder = calculateSystem(
+    system,
+    zones,
+    {
+      ...baseBudget,
+      heightCoef: 1.1,
+      constrainedCoef: 1.15,
+      operatingFacilityCoef: 1.05,
+      nightWorkCoef: 1.2,
+      routingCoef: 1.08,
+      finishCoef: 1.04,
+    },
+    objectData
+  );
 
   assert.ok(harder.laborBase > base.laborBase);
   assert.ok((harder.trace?.conditionLaborFactor || 1) > 1);
 });
 
 test("calculateSystemWithBreakdown returns resource rows and positive totals", () => {
-  const { zones, baseBudget, system } = createFixture();
-  const detailed = calculateSystemWithBreakdown(system, zones, baseBudget);
+  const { zones, baseBudget, system, objectData } = createFixture();
+  const detailed = calculateSystemWithBreakdown(system, zones, baseBudget, objectData);
 
   assert.ok(Array.isArray(detailed.breakdown?.resources));
   assert.ok(detailed.breakdown.resources.length > 0);
   assert.ok(detailed.total > 0);
   assert.ok(detailed.materialsBase > 0);
-  assert.ok(detailed.formulaRows.some((row) => row.label === "Сводный коэф. условий"));
+  assert.ok(detailed.formulaRows.some((row) => row.key === "conditionLaborFactor"));
+  assert.ok(detailed.trace.regionCoef >= 1);
 });
