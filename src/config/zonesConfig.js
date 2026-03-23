@@ -46,7 +46,7 @@ export const ZONE_PRESETS = {
     distribution: { parking: 78, technical: 10, corridor: 6, perimeter: 6 },
   },
   mixed_use: {
-    label: "Mixed-use",
+    label: "Смешанный объект",
     distribution: { office: 30, retail: 20, lobby: 12, corridor: 12, parking: 12, food: 8, technical: 6 },
   },
 };

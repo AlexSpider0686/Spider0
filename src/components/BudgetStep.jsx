@@ -2,7 +2,7 @@ import React from "react";
 import SliderControl from "./SliderControl";
 import { COEFFICIENT_GUIDE } from "../config/estimateConfig";
 import { validateBudgetCoefficients } from "../lib/validation";
-import { toNumber } from "../lib/estimate";
+import { num, toNumber } from "../lib/estimate";
 
 const sliderFields = [
   { key: "cableCoef", min: 0.7, max: 1.5, step: 0.01 },
@@ -14,15 +14,20 @@ const sliderFields = [
   { key: "vatPercent", min: 0, max: 25, step: 0.5 },
 ];
 
-export default function BudgetStep({ budget, updateBudget }) {
+export default function BudgetStep({ budget, updateBudget, objectData }) {
   const validations = validateBudgetCoefficients(budget).reduce((acc, item) => ({ ...acc, [item.key]: item }), {});
 
   return (
     <section className="panel">
-      <div className="panel-header"><div><h2>Характеристики бюджета</h2><p>Коэффициенты только слайдерами + ручной ввод рядом.</p></div></div>
+      <div className="panel-header">
+        <div>
+          <h2>Характеристики бюджета</h2>
+          <p>Все коэффициенты и проценты задаются на русском языке и влияют на итоговую смету.</p>
+        </div>
+      </div>
       <div className="grid-three">
         {sliderFields.map((field) => {
-          const meta = COEFFICIENT_GUIDE.find((x) => x.key === field.key);
+          const meta = COEFFICIENT_GUIDE.find((item) => item.key === field.key);
           const validation = validations[field.key];
           return (
             <SliderControl
@@ -38,8 +43,28 @@ export default function BudgetStep({ budget, updateBudget }) {
             />
           );
         })}
-        <div className="input-card"><label>СИЗ, %</label><input type="number" step="0.1" value={budget.ppePercent} onChange={(e) => updateBudget("ppePercent", toNumber(e.target.value))} /></div>
-        <div className="input-card"><label>Отчисления ФОТ, %</label><input type="number" step="0.1" value={budget.payrollTaxesPercent} onChange={(e) => updateBudget("payrollTaxesPercent", toNumber(e.target.value))} /></div>
+        <div className="input-card">
+          <label>СИЗ, %</label>
+          <input type="number" step="0.1" value={budget.ppePercent} onChange={(event) => updateBudget("ppePercent", toNumber(event.target.value))} />
+        </div>
+        <div className="input-card">
+          <label>Отчисления ФОТ, %</label>
+          <input
+            type="number"
+            step="0.1"
+            value={budget.payrollTaxesPercent}
+            onChange={(event) => updateBudget("payrollTaxesPercent", toNumber(event.target.value))}
+          />
+        </div>
+        <div className="input-card">
+          <label>Административно-хозяйственные расходы (АХР), %</label>
+          <input type="number" step="0.1" value={budget.adminPercent} onChange={(event) => updateBudget("adminPercent", toNumber(event.target.value))} />
+          <small className="hint-inline">Начисляются на стоимость работ после начисления отчислений ФОТ.</small>
+        </div>
+        <div className="input-card">
+          <label>Региональный коэффициент (из карточки объекта)</label>
+          <input value={`x${num(objectData?.regionCoef || 1, 2)}`} readOnly />
+        </div>
       </div>
     </section>
   );

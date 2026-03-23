@@ -2,8 +2,27 @@ import { getSystemResourceModel, getSystemRules } from "../../config/systemsConf
 import { getZoneCalcProfile, getZoneRateProfile } from "../../config/zonesConfig";
 import { calculateSystem, toNumber } from "../estimate";
 
-export function calculateSystemWithBreakdown(system, zones, budget) {
-  const base = calculateSystem(system, zones, budget);
+function pickOptimalCoefficient({ key, value, objectData, zones }) {
+  const maxFloors = Math.max(...zones.map((zone) => toNumber(zone.floors, 1)), 1);
+  const parkingShare = zones
+    .filter((zone) => zone.type === "parking")
+    .reduce((sum, zone) => sum + toNumber(zone.area), 0) /
+    Math.max(zones.reduce((sum, zone) => sum + toNumber(zone.area), 0), 1);
+
+  const recommendations = {
+    vendorFactor: value > 1.15 ? "Высокотехнологичный или премиальный вендор оправдан для сложной интеграции." : "Для базового пресейла чаще достаточно диапазона 0.95–1.10.",
+    regionCoef: value > 1.1 ? "Для удалённого/северного региона коэффициент >1.1 обычно оправдан." : "Для центральной части РФ обычно достаточно диапазона 0.98–1.08.",
+    cableCoef: parkingShare > 0.25 ? "При большой доле паркинга и сложной прокладке используйте 1.05–1.20." : "Для стандартного объекта обычно 0.95–1.05.",
+    laborCoef: maxFloors > 8 ? "На высотных объектах обычно 1.05–1.20 по трудозатратам." : "Для типовых объектов обычно 0.95–1.05.",
+    complexityCoef: objectData.objectType === "transport" || objectData.objectType === "energy" ? "Для транспортных/энергетических объектов чаще 1.10–1.30." : "Для стандартных объектов обычно 1.00–1.10.",
+    conditionLaborFactor: value > 1.2 ? "Сложные условия подтверждают повышенный совокупный коэффициент." : "Совокупный коэффициент условий в районе 1.00–1.15 обычно достаточен.",
+  };
+
+  return recommendations[key] || "Рекомендуемое значение зависит от сложности объекта и условий работ.";
+}
+
+export function calculateSystemWithBreakdown(system, zones, budget, objectData = {}) {
+  const base = calculateSystem(system, zones, budget, objectData);
   const rules = getSystemRules(system.type);
   const resourceModel = getSystemResourceModel(system.type);
   const budgetComplexity = toNumber(budget.complexityCoef, 1);
@@ -72,7 +91,8 @@ export function calculateSystemWithBreakdown(system, zones, budget) {
   const overhead = laborBaseRecalculated * (toNumber(budget.overheadPercent) / 100);
   const ppe = laborBaseRecalculated * (toNumber(budget.ppePercent) / 100);
   const payrollTaxes = laborBaseRecalculated * (toNumber(budget.payrollTaxesPercent) / 100);
-  const directCost = materialsBase + laborBaseRecalculated + overhead + ppe + payrollTaxes;
+  const admin = (laborBaseRecalculated + payrollTaxes) * (toNumber(budget.adminPercent) / 100);
+  const directCost = materialsBase + laborBaseRecalculated + overhead + ppe + payrollTaxes + admin;
   const profit = directCost * (toNumber(budget.profitabilityPercent) / 100);
   const subtotal = directCost + profit;
   const vat = budget.taxMode === "osno" ? subtotal * (toNumber(budget.vatPercent) / 100) : 0;
@@ -94,9 +114,24 @@ export function calculateSystemWithBreakdown(system, zones, budget) {
   };
 
   const explanation = [
-    `Состав системы сгенерирован по зонам и плотностям ресурсов: рассчитано ${Math.round(totalUnits)} устройств и ${Math.round(totalCable)} м кабеля.`,
+    `Система рассчитана по зонам и плотностям ресурсов: ${Math.round(totalUnits)} единиц и ${Math.round(totalCable)} м кабеля.`,
     `Труд рассчитан ресурсно по операциям (монтаж/подключение/настройка/ПНР/проектирование), затем свёрнут в СМР/ПНР/проектирование ${Math.round(rules.laborSplit.smr * 100)}%/${Math.round(rules.laborSplit.pnr * 100)}%/${Math.round(rules.laborSplit.design * 100)}%.`,
+    `Региональный коэффициент ${toNumber(base.trace?.regionCoef, 1).toFixed(2)} влияет на трудовые затраты и все производные начисления.`,
   ];
+
+  const formulaRows = [
+    { key: "vendorFactor", label: "Коэф. вендора", value: base.trace?.vendorFactor ?? 1, useCase: "Применяется для учёта ценового и технологического профиля выбранного вендора." },
+    { key: "regionCoef", label: "Региональный коэф.", value: base.trace?.regionCoef ?? 1, useCase: "Учитывает географию выполнения работ (логистика, климат, доступность ресурсов)." },
+    { key: "cableCoef", label: "Коэф. кабеля", value: base.trace?.cableCoef ?? 1, useCase: "Применяется при усложнённой трассировке и повышенном резерве линий." },
+    { key: "laborCoef", label: "Коэф. труда", value: base.trace?.laborCoef ?? 1, useCase: "Применяется для коррекции трудоёмкости монтажа и пусконаладки." },
+    { key: "complexityCoef", label: "Коэф. сложности", value: base.trace?.complexityCoef ?? 1, useCase: "Учитывает интеграционную сложность и специальные требования заказчика." },
+    { key: "conditionLaborFactor", label: "Сводный коэф. условий", value: base.trace?.conditionLaborFactor ?? 1, useCase: "Итоговый коэффициент условий (высота, стеснённость, ночные работы и т.д.)." },
+  ];
+
+  const coefficientInsights = formulaRows.map((row) => ({
+    ...row,
+    recommended: pickOptimalCoefficient({ key: row.key, value: toNumber(row.value, 1), objectData, zones }),
+  }));
 
   return {
     ...base,
@@ -110,6 +145,7 @@ export function calculateSystemWithBreakdown(system, zones, budget) {
     overhead,
     ppe,
     payrollTaxes,
+    admin,
     profit,
     vat,
     total,
@@ -120,22 +156,8 @@ export function calculateSystemWithBreakdown(system, zones, budget) {
       unitPrice: item.cost / Math.max(Math.round(totalUnits * (item.cost / (equipCost || 1))), 1),
       total: item.cost,
     })),
-    formulaRows: [
-      { label: "Коэф. вендора", value: base.trace?.vendorFactor ?? 1 },
-      { label: "Коэф. профиля оборудования", value: base.trace?.equipmentProfileFactor ?? 1 },
-      { label: "Коэф. скорости монтажа", value: base.trace?.speedFactor ?? 1 },
-      { label: "Коэф. кабеля", value: base.trace?.cableCoef ?? 1 },
-      { label: "Коэф. оборудования", value: base.trace?.equipmentCoef ?? 1 },
-      { label: "Коэф. труда", value: base.trace?.laborCoef ?? 1 },
-      { label: "Коэф. сложности", value: base.trace?.complexityCoef ?? 1 },
-      { label: "Коэф. высотности", value: base.trace?.heightCoef ?? 1 },
-      { label: "Коэф. стеснённости", value: base.trace?.constrainedCoef ?? 1 },
-      { label: "Коэф. действующего объекта", value: base.trace?.operatingFacilityCoef ?? 1 },
-      { label: "Коэф. ночных работ", value: base.trace?.nightWorkCoef ?? 1 },
-      { label: "Коэф. трассировки", value: base.trace?.routingCoef ?? 1 },
-      { label: "Коэф. чистовой отделки", value: base.trace?.finishCoef ?? 1 },
-      { label: "Сводный коэф. условий", value: base.trace?.conditionLaborFactor ?? 1 },
-    ],
+    formulaRows,
+    coefficientInsights,
     breakdown: {
       equipment,
       works,

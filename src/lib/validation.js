@@ -9,14 +9,14 @@ export const COEFFICIENT_LIMITS = {
 
 export function validateCoefficient(key, value) {
   const [min, max] = COEFFICIENT_LIMITS[key] || [-Infinity, Infinity];
-  const num = toNumber(value);
+  const numericValue = toNumber(value);
   return {
     key,
     min,
     max,
-    value: num,
-    isValid: num >= min && num <= max,
-    warning: num < min || num > max ? `Вне диапазона ${min}–${max}` : "",
+    value: numericValue,
+    isValid: numericValue >= min && numericValue <= max,
+    warning: numericValue < min || numericValue > max ? `Вне диапазона ${min}–${max}` : "",
   };
 }
 
