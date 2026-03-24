@@ -13,15 +13,18 @@ export default function SystemsStep({
   systemResults,
   refreshVendorPricing,
   vendorPriceSnapshots,
+  canAddMoreSystems,
 }) {
+  const usedTypeMap = new Map(systems.map((item) => [item.id, item.type]));
+
   return (
     <section className="panel">
       <div className="panel-header">
         <div>
           <h2>Системы</h2>
-          <p>Выберите тип системы, вендора и параметры ключевого оборудования.</p>
+          <p>На одном объекте может быть только одна система каждого вида.</p>
         </div>
-        <button className="primary-btn" onClick={addSystem} type="button">
+        <button className="primary-btn" onClick={addSystem} type="button" disabled={!canAddMoreSystems}>
           <Plus size={16} /> + Система
         </button>
       </div>
@@ -34,6 +37,17 @@ export default function SystemsStep({
           const selectedVendor = getVendorByName(system.type, system.vendor);
           const snapshot = vendorPriceSnapshots?.[system.id];
           const result = systemResults[index];
+          const keyEquipment = result?.equipmentData?.keyEquipment || [];
+
+          const pricedSourceCount =
+            snapshot?.entries
+              ?.filter((item) => item.status?.startsWith("fetched"))
+              .reduce((sum, item) => sum + (item.sourceCount || 0), 0) || 0;
+          const checkedSourceCount =
+            snapshot?.entries?.reduce((sum, item) => sum + (item.checkedSources || item.sourceUrls?.length || 0), 0) || 0;
+          const sourcePreview = (snapshot?.entries || [])
+            .flatMap((item) => item.usedSources || [])
+            .slice(0, 4);
 
           return (
             <div className="system-card" key={system.id}>
@@ -53,11 +67,14 @@ export default function SystemsStep({
                 <div className="input-card">
                   <label>Тип системы</label>
                   <select value={system.type} onChange={(event) => updateSystem(system.id, "type", event.target.value)}>
-                    {SYSTEM_TYPES.map((item) => (
-                      <option key={item.code} value={item.code}>
-                        {item.name}
-                      </option>
-                    ))}
+                    {SYSTEM_TYPES.map((item) => {
+                      const usedByOther = [...usedTypeMap.entries()].some(([id, code]) => id !== system.id && code === item.code);
+                      return (
+                        <option key={item.code} value={item.code} disabled={usedByOther}>
+                          {item.name}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
                 <div className="input-card">
@@ -83,6 +100,12 @@ export default function SystemsStep({
                   <p>
                     Ед. цена: <strong>{rub(result?.equipmentData?.unitPrice || 0)}</strong>
                   </p>
+                  <p>
+                    Маркер: <strong>{result?.unitWorkMarker?.label || "—"}</strong>
+                  </p>
+                  <p>
+                    За единицу: <strong>{rub(result?.unitWorkMarker?.costPerUnit || 0)}</strong>
+                  </p>
                   <p>Ключ выбора: {result?.equipmentData?.selectionKey || "fallback"}</p>
                   <button className="ghost-btn" type="button" onClick={() => refreshVendorPricing(system)}>
                     Обновить цены
@@ -92,7 +115,16 @@ export default function SystemsStep({
 
               {snapshot ? (
                 <div className="pricing-caption">
-                  Актуализация цен: {snapshot.fetchedAt ? new Date(snapshot.fetchedAt).toLocaleString("ru-RU") : "—"}
+                  Актуализация цен: {snapshot.fetchedAt ? new Date(snapshot.fetchedAt).toLocaleString("ru-RU") : "—"}. Источников с ценой:{" "}
+                  {pricedSourceCount} из {checkedSourceCount}.
+                  {snapshot.error ? <span className="warn-inline"> Ошибка API: {snapshot.error}</span> : null}
+                  {sourcePreview.length ? (
+                    <div className="pricing-source-list">
+                      {sourcePreview.map((url) => (
+                        <span key={`${system.id}-${url}`}>{url}</span>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -124,7 +156,7 @@ export default function SystemsStep({
                 </div>
 
                 <div className="calc-explain">
-                  <h4>Оборудование в расчёте</h4>
+                  <h4>Ключевое оборудование, определяющее цену</h4>
                   <div className="table-wrap compact">
                     <table>
                       <thead>
@@ -136,8 +168,8 @@ export default function SystemsStep({
                         </tr>
                       </thead>
                       <tbody>
-                        {(result?.equipmentData?.details || []).map((item) => (
-                          <tr key={`${system.id}-${item.code}`}>
+                        {keyEquipment.map((item) => (
+                          <tr key={`${system.id}-key-${item.code}`}>
                             <td>{item.name}</td>
                             <td>{num(item.qty, 0)}</td>
                             <td>{rub(item.unitPrice)}</td>
@@ -148,7 +180,7 @@ export default function SystemsStep({
                     </table>
                   </div>
                   <div className="equipment-principles">
-                    {(result?.equipmentData?.details || []).map((item) => (
+                    {keyEquipment.map((item) => (
                       <p key={`${system.id}-${item.code}-basis`}>
                         <strong>{item.name}:</strong> {item.basis}
                       </p>

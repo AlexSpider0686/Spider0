@@ -25,7 +25,30 @@ export function num(value, digits = 0) {
   }).format(Number.isFinite(value) ? value : 0);
 }
 
-export function calculateSystem(system, zones, budget, objectData = {}) {
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function getMarketSnapshotFactor(snapshot) {
+  const entries = snapshot?.entries || [];
+  let weightedRatio = 0;
+  let weightSum = 0;
+
+  for (const entry of entries) {
+    const fallback = toNumber(entry.fallbackPrice, 0);
+    const price = toNumber(entry.price, 0);
+    const weight = Math.max(toNumber(entry.influenceWeight, 0), 0.001);
+    if (fallback > 0 && price > 0) {
+      weightedRatio += (price / fallback) * weight;
+      weightSum += weight;
+    }
+  }
+
+  if (weightSum <= 0) return 1;
+  return clamp(weightedRatio / weightSum, 0.7, 1.8);
+}
+
+export function calculateSystem(system, zones, budget, objectData = {}, marketSnapshot = null) {
   const rates = BASE_RATES[system.type];
   if (!rates) {
     return {
@@ -35,13 +58,17 @@ export function calculateSystem(system, zones, budget, objectData = {}) {
       cable: 0,
       units: 0,
       equipCost: 0,
-      cableMaterials: 0,
-      trayAndFasteners: 0,
+      equipmentCost: 0,
+      materialCost: 0,
       materialsBase: 0,
       laborBase: 0,
+      workBase: 0,
+      workCharges: 0,
+      workTotal: 0,
       overhead: 0,
       ppe: 0,
       payrollTaxes: 0,
+      utilization: 0,
       admin: 0,
       profit: 0,
       vat: 0,
@@ -59,6 +86,7 @@ export function calculateSystem(system, zones, budget, objectData = {}) {
     (vendorProfile.technicalParameters?.integrationComplexity || 1) /
     (baseVendorProfile.technicalParameters?.integrationComplexity || 1);
   const vendorFactor = vendorCostRatio * technicalComplexityFactor * toNumber(system.customVendorIndex, 1);
+  const marketSnapshotFactor = getMarketSnapshotFactor(marketSnapshot);
 
   let cable = 0;
   let units = 0;
@@ -85,11 +113,12 @@ export function calculateSystem(system, zones, budget, objectData = {}) {
   units *= toNumber(budget.equipmentCoef, 1) * (vendorProfile.qualityCoefficient || 1);
 
   const fallbackUnitPrice = rates.equipUnit * vendorFactor * equipmentProfileFactor;
-  const equipmentData = calculateEquipment(system, zones, system.selectedEquipmentParams, fallbackUnitPrice);
-  const equipCost = equipmentData.totalEquipmentCost;
+  const equipmentData = calculateEquipment(system, zones, system.selectedEquipmentParams, fallbackUnitPrice, marketSnapshot?.entries || []);
+  const equipmentCost = equipmentData.totalEquipmentCost;
   const cableMaterials = cable * 92;
   const trayAndFasteners = cable * 51;
-  const materialsBase = equipCost + cableMaterials + trayAndFasteners;
+  const materialCost = cableMaterials + trayAndFasteners;
+  const materialsBase = equipmentCost + materialCost;
 
   const speedFactor = 1 / (vendorProfile.installationSpeed || 1);
   const laborCable =
@@ -106,14 +135,24 @@ export function calculateSystem(system, zones, budget, objectData = {}) {
     toNumber(budget.complexityCoef, 1) *
     conditionLaborFactor *
     speedFactor;
-  const laborBase = (laborCable + laborInstall) * regionCoef;
+  const workBaseRaw = laborCable + laborInstall;
 
-  const overhead = laborBase * (toNumber(budget.overheadPercent) / 100);
-  const ppe = laborBase * (toNumber(budget.ppePercent) / 100);
-  const payrollTaxes = laborBase * (toNumber(budget.payrollTaxesPercent) / 100);
-  const admin = (laborBase + payrollTaxes) * (toNumber(budget.adminPercent) / 100);
+  const overheadRaw = workBaseRaw * (toNumber(budget.overheadPercent) / 100);
+  const payrollTaxesRaw = workBaseRaw * (toNumber(budget.payrollTaxesPercent) / 100);
+  const utilizationRaw = workBaseRaw * (toNumber(budget.utilizationPercent) / 100);
+  const ppeRaw = workBaseRaw * (toNumber(budget.ppePercent) / 100);
+  const adminRaw = (workBaseRaw + overheadRaw + payrollTaxesRaw + utilizationRaw + ppeRaw) * (toNumber(budget.adminPercent) / 100);
 
-  const directCost = materialsBase + laborBase + overhead + ppe + payrollTaxes + admin;
+  const laborBase = workBaseRaw * regionCoef;
+  const overhead = overheadRaw * regionCoef;
+  const payrollTaxes = payrollTaxesRaw * regionCoef;
+  const utilization = utilizationRaw * regionCoef;
+  const ppe = ppeRaw * regionCoef;
+  const admin = adminRaw * regionCoef;
+  const workCharges = overhead + payrollTaxes + utilization + ppe + admin;
+  const workTotal = laborBase + workCharges;
+
+  const directCost = materialsBase + workTotal;
   const profit = directCost * (toNumber(budget.profitabilityPercent) / 100);
   const subtotal = directCost + profit;
   const vat = budget.taxMode === "osno" ? subtotal * (toNumber(budget.vatPercent) / 100) : 0;
@@ -128,21 +167,32 @@ export function calculateSystem(system, zones, budget, objectData = {}) {
     vendorPriceIndex: vendorProfile.equipmentPriceIndex || 1,
     cable,
     units,
-    equipCost,
+    equipCost: equipmentCost,
+    equipmentCost,
     cableMaterials,
     trayAndFasteners,
+    materialCost,
     materialsBase,
     laborBase,
+    workBase: workBaseRaw,
+    workCharges,
+    workTotal,
     overhead,
     ppe,
     payrollTaxes,
+    utilization,
     admin,
     profit,
     vat,
     total,
-    equipmentData,
+    equipmentData: {
+      ...equipmentData,
+      marketSnapshotFactor,
+      marketEntries: marketSnapshot?.entries || [],
+    },
     trace: {
       vendorFactor,
+      marketSnapshotFactor,
       equipmentProfileFactor,
       speedFactor,
       cableCoef: toNumber(budget.cableCoef, 1),
@@ -160,6 +210,7 @@ export function calculateSystem(system, zones, budget, objectData = {}) {
       overheadPercent: toNumber(budget.overheadPercent),
       ppePercent: toNumber(budget.ppePercent),
       payrollTaxesPercent: toNumber(budget.payrollTaxesPercent),
+      utilizationPercent: toNumber(budget.utilizationPercent),
       adminPercent: toNumber(budget.adminPercent),
       profitabilityPercent: toNumber(budget.profitabilityPercent),
       vatPercent: toNumber(budget.vatPercent),
@@ -179,10 +230,29 @@ export function calculateEquipmentProfileFactor(systemType, equipmentProfiles = 
 
 export function calculateTotals(systemResults) {
   return {
-    totalMaterials: systemResults.reduce((sum, item) => sum + item.materialsBase, 0),
+    totalEquipment: systemResults.reduce((sum, item) => sum + item.equipmentCost, 0),
+    totalMaterials: systemResults.reduce((sum, item) => sum + item.materialCost, 0),
+    totalMaterialsWithEquipment: systemResults.reduce((sum, item) => sum + item.materialsBase, 0),
     totalLabor: systemResults.reduce((sum, item) => sum + item.laborBase, 0),
-    totalOverhead: systemResults.reduce((sum, item) => sum + item.overhead + item.ppe + item.payrollTaxes + item.admin, 0),
-    totalAdmin: systemResults.reduce((sum, item) => sum + item.admin, 0),
+    totalWorkCharges: systemResults.reduce((sum, item) => sum + item.workCharges + (item.designCharges || 0), 0),
+    totalWork: systemResults.reduce((sum, item) => sum + item.workTotal, 0),
+    totalDesign: systemResults.reduce((sum, item) => sum + (item.designTotal || 0), 0),
+    totalOverhead: systemResults.reduce(
+      (sum, item) =>
+        sum +
+        item.overhead +
+        item.ppe +
+        item.payrollTaxes +
+        item.utilization +
+        item.admin +
+        (item.designOverhead || 0) +
+        (item.designPpe || 0) +
+        (item.designPayrollTaxes || 0) +
+        (item.designUtilization || 0) +
+        (item.designAdmin || 0),
+      0
+    ),
+    totalAdmin: systemResults.reduce((sum, item) => sum + item.admin + (item.designAdmin || 0), 0),
     totalProfit: systemResults.reduce((sum, item) => sum + item.profit, 0),
     totalVat: systemResults.reduce((sum, item) => sum + item.vat, 0),
     total: systemResults.reduce((sum, item) => sum + item.total, 0),
@@ -198,23 +268,30 @@ export function buildEstimateRows({ objectData, recalculatedArea, systemResults,
     ["Региональный коэффициент", num(objectData.regionCoef || 1, 2)],
     ["Площадь по зонам, м²", recalculatedArea],
     [],
-    ["Система", "Вендор", "Параметры оборудования", "Цена за ед., ₽", "Кабель, м", "Ед. оборудования", "Материалы, ₽", "Труд, ₽", "Накладные+СИЗ+ФОТ+АХР, ₽", "Прибыль, ₽", "НДС, ₽", "Итого, ₽"],
+    ["Система", "Вендор", "Ключевое оборудование", "Оборудование, ₽", "Материалы, ₽", "Работы, ₽", "Прибыль, ₽", "НДС, ₽", "Итого, ₽"],
     ...systemResults.map((row) => [
       row.systemName,
       row.vendor,
-      row.equipmentData?.selectionKey || "fallback",
-      num(row.equipmentData?.unitPrice || 0, 0),
-      num(row.cable, 0),
-      num(row.units, 0),
-      num(row.materialsBase, 0),
-      num(row.laborBase, 0),
-      num(row.overhead + row.ppe + row.payrollTaxes + row.admin, 0),
+      (row.equipmentData?.keyEquipment || []).map((item) => item.name).join("; "),
+      num(row.equipmentCost, 0),
+      num(row.materialCost, 0),
+      num(row.workTotal, 0),
       num(row.profit, 0),
       num(row.vat, 0),
       num(row.total, 0),
     ]),
     [],
-    ["ИТОГО", "", "", "", "", "", num(totals.totalMaterials, 0), num(totals.totalLabor, 0), num(totals.totalOverhead, 0), num(totals.totalProfit, 0), num(totals.totalVat, 0), num(totals.total, 0)],
+    [
+      "ИТОГО",
+      "",
+      "",
+      num(totals.totalEquipment, 0),
+      num(totals.totalMaterials, 0),
+      num(totals.totalWork, 0),
+      num(totals.totalProfit, 0),
+      num(totals.totalVat, 0),
+      num(totals.total, 0),
+    ],
   ];
 }
 

@@ -6,6 +6,15 @@ import { ZONE_PRESETS, ZONE_TYPES } from "../config/zonesConfig";
 import { getZonePercentSum, normalizeZoneAreas } from "../lib/zoneEngine";
 import { num, toNumber } from "../lib/estimate";
 
+const OBJECT_TYPE_IMAGES = {
+  production: "https://images.unsplash.com/photo-1581094794329-c8112a89af12?auto=format&fit=crop&w=1600&q=80",
+  warehouse: "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=1600&q=80",
+  public: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1600&q=80",
+  residential: "https://images.unsplash.com/photo-1460317442991-0ec209397118?auto=format&fit=crop&w=1600&q=80",
+  transport: "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=1600&q=80",
+  energy: "https://images.unsplash.com/photo-1466611653911-95081537e5b7?auto=format&fit=crop&w=1600&q=80",
+};
+
 export default function ObjectStep({
   objectData,
   zones,
@@ -43,14 +52,46 @@ export default function ObjectStep({
         </div>
         <div className="input-card">
           <label>Тип объекта</label>
-          <select value={objectData.objectType} onChange={(event) => updateObject("objectType", event.target.value)}>
-            {OBJECT_TYPES.map((item) => (
-              <option key={item.value} value={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </select>
+          <div className="object-type-wrap">
+            <select value={objectData.objectType} onChange={(event) => updateObject("objectType", event.target.value)}>
+              {OBJECT_TYPES.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+            <div className="object-type-help" aria-hidden>
+              ?
+            </div>
+            <div className="object-type-tooltip">
+              {OBJECT_TYPES.map((item) => (
+                <p key={item.value}>
+                  <strong>{item.label}:</strong> {item.description}
+                </p>
+              ))}
+            </div>
+          </div>
           {selectedObjectType ? <small className="hint-inline">{selectedObjectType.description}</small> : null}
+        </div>
+        <div className="object-photo-gallery">
+          {OBJECT_TYPES.map((item) => {
+            const isActive = objectData.objectType === item.value;
+            return (
+              <button
+                key={item.value}
+                type="button"
+                className={`object-photo-card ${isActive ? "active" : ""}`}
+                onClick={() => updateObject("objectType", item.value)}
+                title={item.description}
+              >
+                <img src={OBJECT_TYPE_IMAGES[item.value]} alt={item.label} loading="lazy" />
+                <div className="object-photo-overlay">
+                  <strong>{item.label}</strong>
+                  <span>{item.description}</span>
+                </div>
+              </button>
+            );
+          })}
         </div>
         <div className="input-card">
           <label>Площадь по объекту, м²</label>

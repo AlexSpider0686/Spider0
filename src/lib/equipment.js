@@ -1,6 +1,23 @@
 import { toNumber } from "./estimate";
 import { getVendorEquipment } from "../config/vendorConfig";
 
+const MARKET_KEY_ALIASES = {
+  camera: ["cameras", "camera"],
+  recorder: ["nvr", "recorder", "integrationServer"],
+  hdd: ["storage", "hdd"],
+  switch: ["switch", "switches", "network-core"],
+  controller: ["controllers", "controller"],
+  sensor: ["sensors", "sensor"],
+  detector: ["detectors", "detector"],
+  panel: ["panel", "panels", "fire-panels"],
+  speaker: ["speakers", "speaker", "notification"],
+  amplifier: ["amplifiers", "amplifier"],
+};
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
 function getAreaUnits(zones) {
   const safeArea = zones.reduce((sum, zone) => sum + Math.max(toNumber(zone.area), 0), 0);
   return Math.max(safeArea / 1000, 1);
@@ -10,9 +27,60 @@ function getValue(input, fallback) {
   return input === undefined || input === null || input === "" ? fallback : input;
 }
 
-export function calculateEquipment(system, zones, selectedParams = {}, fallbackUnitPrice = 0) {
+function pushItem(details, item) {
+  details.push({
+    ...item,
+    qty: Math.max(toNumber(item.qty), 1),
+    unitPrice: Math.max(toNumber(item.unitPrice), 0),
+  });
+}
+
+function minHddTbPerCamera(resolutionMp) {
+  const perCameraPerDayTb = resolutionMp >= 8 ? 0.08 : resolutionMp >= 4 ? 0.045 : 0.025;
+  return perCameraPerDayTb * 30;
+}
+
+function buildMarketRatioMap(marketEntries = []) {
+  const grouped = new Map();
+
+  for (const entry of marketEntries || []) {
+    const equipmentKey = entry?.equipmentKey;
+    const fallback = toNumber(entry?.fallbackPrice, 0);
+    const price = toNumber(entry?.price, 0);
+    if (!equipmentKey || fallback <= 0 || price <= 0) continue;
+
+    const ratio = clamp(price / fallback, 0.65, 1.8);
+    if (!grouped.has(equipmentKey)) grouped.set(equipmentKey, []);
+    grouped.get(equipmentKey).push(ratio);
+  }
+
+  const map = new Map();
+  grouped.forEach((values, key) => {
+    if (!values.length) return;
+    const avg = values.reduce((sum, value) => sum + value, 0) / values.length;
+    map.set(key, clamp(avg, 0.65, 1.8));
+  });
+
+  return map;
+}
+
+function pickMarketRatio(marketRatios, aliasKeys) {
+  for (const key of aliasKeys || []) {
+    if (marketRatios.has(key)) return marketRatios.get(key);
+  }
+  return 1;
+}
+
+function resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, aliasKeys) {
+  const ratio = pickMarketRatio(marketRatios, aliasKeys);
+  const reference = toNumber(basePrice, 0) || toNumber(fallbackUnitPrice, 0);
+  return Math.max(reference * ratio, 0);
+}
+
+export function calculateEquipment(system, zones, selectedParams = {}, fallbackUnitPrice = 0, marketEntries = []) {
   const areaUnits = getAreaUnits(zones);
   const vendorMeta = getVendorEquipment(system.type, system.vendor);
+  const marketRatios = buildMarketRatioMap(marketEntries);
 
   if (!vendorMeta) {
     return {
@@ -22,126 +90,182 @@ export function calculateEquipment(system, zones, selectedParams = {}, fallbackU
       selectionKey: "fallback",
       mode: "fallback",
       details: [],
+      keyEquipment: [],
     };
   }
 
   const details = [];
-  let totalEquipmentCost = 0;
-  let normalizedUnits = areaUnits;
 
   if (vendorMeta.camera) {
     const placement = getValue(selectedParams.cameraPlacement, vendorMeta.camera.placement[0]);
     const resolution = Number(getValue(selectedParams.cameraResolution, vendorMeta.camera.resolution[1] || vendorMeta.camera.resolution[0]));
-    const cameraKey = `${placement}_${resolution}`;
-    const cameraUnitPrice = vendorMeta.camera.basePrices[cameraKey] || fallbackUnitPrice;
-    const cameraQty = Math.max(Math.round(areaUnits * 6.5), 1);
-    totalEquipmentCost += cameraQty * cameraUnitPrice;
-    normalizedUnits = cameraQty;
-    details.push({
+    const key = `${placement}_${resolution}`;
+    const basePrice = vendorMeta.camera.basePrices[key] || 0;
+    const unitPrice = resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, MARKET_KEY_ALIASES.camera);
+    const qty = Math.max(Math.round(areaUnits * 6.5), 1);
+    pushItem(details, {
       code: "CAM",
       name: `Камеры (${placement}, ${resolution} Мп)`,
-      qty: cameraQty,
-      unitPrice: cameraUnitPrice,
-      total: cameraQty * cameraUnitPrice,
-      basis: "Количество камер рассчитывается по плотности на 1000 м² с учётом типа системы.",
+      qty,
+      unitPrice,
+      total: qty * unitPrice,
+      isKey: true,
+      basis: "Количество камер рассчитывается по нормативной плотности на 1000 м².",
     });
   }
 
   if (vendorMeta.recorder) {
-    const recorderChannels = Number(getValue(selectedParams.recorderChannels, vendorMeta.recorder.channels[2] || vendorMeta.recorder.channels[0]));
-    const recorderUnitPrice = vendorMeta.recorder.basePrices[recorderChannels] || fallbackUnitPrice;
+    const channels = Number(getValue(selectedParams.recorderChannels, vendorMeta.recorder.channels[2] || vendorMeta.recorder.channels[0]));
+    const basePrice = vendorMeta.recorder.basePrices[channels] || 0;
+    const unitPrice = resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, MARKET_KEY_ALIASES.recorder);
     const cameraQty = details.find((item) => item.code === "CAM")?.qty || Math.max(Math.round(areaUnits * 6), 1);
-    const recorderQty = Math.max(Math.ceil(cameraQty / Math.max(recorderChannels, 1)), 1);
-    totalEquipmentCost += recorderQty * recorderUnitPrice;
-    details.push({
+    const qty = Math.max(Math.ceil(cameraQty / Math.max(channels, 1)), 1);
+    pushItem(details, {
       code: "NVR",
-      name: `Регистратор (${recorderChannels} каналов)`,
-      qty: recorderQty,
-      unitPrice: recorderUnitPrice,
-      total: recorderQty * recorderUnitPrice,
-      basis: "Количество регистраторов = число камер / ёмкость регистратора с округлением вверх.",
+      name: `Регистратор (${channels} каналов)`,
+      qty,
+      unitPrice,
+      total: qty * unitPrice,
+      isKey: true,
+      basis: "Количество регистраторов = количество камер / канальность регистратора, с округлением вверх.",
     });
   }
 
   if (vendorMeta.hdd) {
     const hddTb = Number(getValue(selectedParams.hddTb, vendorMeta.hdd.tb[1] || vendorMeta.hdd.tb[0]));
-    const hddUnitPrice = vendorMeta.hdd.basePrices[hddTb] || fallbackUnitPrice;
+    const basePrice = vendorMeta.hdd.basePrices[hddTb] || 0;
+    const unitPrice = resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, MARKET_KEY_ALIASES.hdd);
     const recorderQty = details.find((item) => item.code === "NVR")?.qty || 1;
-    const hddQty = recorderQty * 2;
-    totalEquipmentCost += hddQty * hddUnitPrice;
-    details.push({
+    const cameraResolution = Number(getValue(selectedParams.cameraResolution, 4));
+    const cameraQty = details.find((item) => item.code === "CAM")?.qty || Math.max(Math.round(areaUnits * 6), 1);
+    const minTb = Math.max(cameraQty * minHddTbPerCamera(cameraResolution), 8);
+    const qty = Math.max(Math.ceil(minTb / Math.max(hddTb, 1)), recorderQty * 2);
+    pushItem(details, {
       code: "HDD",
       name: `HDD ${hddTb} ТБ (архив 30 дней)`,
-      qty: hddQty,
-      unitPrice: hddUnitPrice,
-      total: hddQty * hddUnitPrice,
-      basis: "Для архива 30 дней закладывается минимум 2 диска на каждый регистратор.",
+      qty,
+      unitPrice,
+      total: qty * unitPrice,
+      isKey: true,
+      basis: `Минимальная емкость архива 30 дней: ${Math.ceil(minTb)} ТБ. Количество HDD подбирается автоматически.`,
     });
   }
 
   if (vendorMeta.switch) {
-    const switchPorts = Number(getValue(selectedParams.switchPorts, vendorMeta.switch.ports[2] || vendorMeta.switch.ports[0]));
-    const switchPoe = Boolean(getValue(selectedParams.switchPoe, true));
-    const switchKey = `${switchPorts}_${switchPoe}`;
-    const switchUnitPrice = vendorMeta.switch.basePrices[switchKey] || fallbackUnitPrice;
+    const ports = Number(getValue(selectedParams.switchPorts, vendorMeta.switch.ports[2] || vendorMeta.switch.ports[0]));
+    const poe = Boolean(getValue(selectedParams.switchPoe, true));
+    const key = `${ports}_${poe}`;
+    const basePrice = vendorMeta.switch.basePrices[key] || 0;
+    const unitPrice = resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, MARKET_KEY_ALIASES.switch);
     const cameraQty = details.find((item) => item.code === "CAM")?.qty || Math.max(Math.round(areaUnits * 6), 1);
-    const switchQty = Math.max(Math.ceil(cameraQty / Math.max(switchPorts, 1)), 1);
-    totalEquipmentCost += switchQty * switchUnitPrice;
-    details.push({
+    const qty = Math.max(Math.ceil(cameraQty / Math.max(ports, 1)), 1);
+    pushItem(details, {
       code: "SW",
-      name: `Коммутатор ${switchPorts} портов (${switchPoe ? "PoE" : "без PoE"})`,
-      qty: switchQty,
-      unitPrice: switchUnitPrice,
-      total: switchQty * switchUnitPrice,
-      basis: "Количество коммутаторов зависит от числа камер и выбранной портовой ёмкости.",
+      name: `Коммутатор ${ports} портов (${poe ? "PoE" : "без PoE"})`,
+      qty,
+      unitPrice,
+      total: qty * unitPrice,
+      isKey: true,
+      basis: "Количество коммутаторов зависит от числа подключаемых устройств и выбранной емкости.",
     });
   }
 
   if (vendorMeta.controller) {
     const channels = Number(getValue(selectedParams.controllerChannels, vendorMeta.controller.channels[1] || vendorMeta.controller.channels[0]));
-    const unitPrice = vendorMeta.controller.basePrices[channels] || fallbackUnitPrice;
+    const basePrice = vendorMeta.controller.basePrices[channels] || 0;
+    const unitPrice = resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, MARKET_KEY_ALIASES.controller);
     const qty = Math.max(Math.round(areaUnits), 1);
-    totalEquipmentCost += qty * unitPrice;
-    normalizedUnits = qty;
-    details.push({
+    pushItem(details, {
       code: "CTRL",
       name: `Контроллер доступа (${channels} точки)`,
       qty,
       unitPrice,
       total: qty * unitPrice,
-      basis: "Количество контроллеров рассчитывается от укрупнённого числа точек доступа по площади.",
+      isKey: true,
+      basis: "Количество контроллеров рассчитывается укрупненно по плотности точек доступа.",
+    });
+  }
+
+  if (vendorMeta.sensor) {
+    const kind = getValue(selectedParams.sensorKind, vendorMeta.sensor.kind[0]);
+    const basePrice = vendorMeta.sensor.basePrices[kind] || 0;
+    const unitPrice = resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, MARKET_KEY_ALIASES.sensor);
+    const qty = Math.max(Math.round(areaUnits * 9), 1);
+    pushItem(details, {
+      code: "SEN",
+      name: `Охранный датчик (${kind})`,
+      qty,
+      unitPrice,
+      total: qty * unitPrice,
+      isKey: true,
+      basis: "Количество датчиков считается по нормативной плотности для системы.",
     });
   }
 
   if (vendorMeta.detector) {
     const kind = getValue(selectedParams.detectorKind, vendorMeta.detector.kind[0]);
-    const unitPrice = vendorMeta.detector.basePrices[kind] || fallbackUnitPrice;
+    const basePrice = vendorMeta.detector.basePrices[kind] || 0;
+    const unitPrice = resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, MARKET_KEY_ALIASES.detector);
     const qty = Math.max(Math.round(areaUnits * 24), 1);
-    totalEquipmentCost += qty * unitPrice;
-    normalizedUnits = qty;
-    details.push({
+    pushItem(details, {
       code: "DET",
       name: `Извещатель (${kind})`,
       qty,
       unitPrice,
       total: qty * unitPrice,
-      basis: "Количество извещателей берётся по нормативной плотности на 1000 м².",
+      isKey: true,
+      basis: "Количество извещателей берется по нормативной плотности для АПС.",
     });
   }
 
   if (vendorMeta.panel) {
     const loops = Number(getValue(selectedParams.panelLoops, vendorMeta.panel.loops[1] || vendorMeta.panel.loops[0]));
-    const unitPrice = vendorMeta.panel.basePrices[loops] || fallbackUnitPrice;
-    const detectorQty = details.find((item) => item.code === "DET")?.qty || Math.max(Math.round(areaUnits * 20), 1);
-    const panelQty = Math.max(Math.ceil(detectorQty / (loops * 127)), 1);
-    totalEquipmentCost += panelQty * unitPrice;
-    details.push({
+    const basePrice = vendorMeta.panel.basePrices[loops] || 0;
+    const unitPrice = resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, MARKET_KEY_ALIASES.panel);
+    const detectorsQty =
+      details.find((item) => item.code === "DET")?.qty || details.find((item) => item.code === "SEN")?.qty || Math.max(Math.round(areaUnits * 20), 1);
+    const qty = Math.max(Math.ceil(detectorsQty / Math.max(loops * 64, 1)), 1);
+    pushItem(details, {
       code: "PANEL",
-      name: `Приёмно-контрольный прибор (${loops} шлейфа)`,
-      qty: panelQty,
+      name: `Панель / ППКП (${loops} шлейфа)`,
+      qty,
       unitPrice,
-      total: panelQty * unitPrice,
-      basis: "Число приборов зависит от числа извещателей и ёмкости шлейфов.",
+      total: qty * unitPrice,
+      isKey: true,
+      basis: "Количество панелей зависит от емкости шлейфов и суммарного числа датчиков.",
+    });
+  }
+
+  if (vendorMeta.speaker) {
+    const kind = getValue(selectedParams.speakerKind, vendorMeta.speaker.kind[0]);
+    const basePrice = vendorMeta.speaker.basePrices[kind] || 0;
+    const unitPrice = resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, MARKET_KEY_ALIASES.speaker);
+    const qty = Math.max(Math.round(areaUnits * 7), 1);
+    pushItem(details, {
+      code: "SPK",
+      name: `Оповещатель СОУЭ (${kind})`,
+      qty,
+      unitPrice,
+      total: qty * unitPrice,
+      isKey: true,
+      basis: "Количество оповещателей считается по акустической плотности на 1000 м².",
+    });
+  }
+
+  if (vendorMeta.amplifier) {
+    const channels = Number(getValue(selectedParams.amplifierChannels, vendorMeta.amplifier.channels[1] || vendorMeta.amplifier.channels[0]));
+    const basePrice = vendorMeta.amplifier.basePrices[channels] || 0;
+    const unitPrice = resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, MARKET_KEY_ALIASES.amplifier);
+    const speakerQty = details.find((item) => item.code === "SPK")?.qty || Math.max(Math.round(areaUnits * 6), 1);
+    const qty = Math.max(Math.ceil(speakerQty / Math.max(channels * 8, 1)), 1);
+    pushItem(details, {
+      code: "AMP",
+      name: `Усилитель СОУЭ (${channels} канала)`,
+      qty,
+      unitPrice,
+      total: qty * unitPrice,
+      isKey: true,
+      basis: "Количество усилителей определяется по числу линий оповещения и требуемому резерву.",
     });
   }
 
@@ -153,15 +277,22 @@ export function calculateEquipment(system, zones, selectedParams = {}, fallbackU
       selectionKey: "fallback",
       mode: "fallback",
       details: [],
+      keyEquipment: [],
     };
   }
 
+  const totalEquipmentCost = details.reduce((sum, item) => sum + item.total, 0);
+  const keyEquipment = details.filter((item) => item.isKey);
+  const normalizedUnits = Math.max(keyEquipment[0]?.qty || areaUnits, 1);
+
   return {
     units: normalizedUnits,
-    unitPrice: totalEquipmentCost / Math.max(normalizedUnits, 1),
+    unitPrice: totalEquipmentCost / normalizedUnits,
     totalEquipmentCost,
-    selectionKey: details.map((item) => item.code).join("+"),
-    mode: "vendor-parametric",
+    selectionKey: keyEquipment.map((item) => item.code).join("+"),
+    mode: marketEntries?.length ? "vendor-market-parametric" : "vendor-parametric",
     details,
+    keyEquipment,
   };
 }
+

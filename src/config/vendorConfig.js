@@ -13,21 +13,11 @@ const CCTV_PROFILE = {
   },
   recorder: {
     channels: [8, 16, 32, 64],
-    basePrices: {
-      8: 32000,
-      16: 47000,
-      32: 86000,
-      64: 168000,
-    },
+    basePrices: { 8: 32000, 16: 47000, 32: 86000, 64: 168000 },
   },
   hdd: {
     tb: [4, 8, 12, 16],
-    basePrices: {
-      4: 11500,
-      8: 19800,
-      12: 28400,
-      16: 35800,
-    },
+    basePrices: { 4: 11500, 8: 19800, 12: 28400, 16: 35800 },
   },
   switch: {
     ports: [8, 16, 24, 48],
@@ -42,6 +32,21 @@ const CCTV_PROFILE = {
       "24_false": 22800,
       "48_false": 48200,
     },
+  },
+};
+
+const SOUE_PROFILE = {
+  speaker: {
+    kind: ["настенный", "потолочный", "рупорный"],
+    basePrices: {
+      настенный: 2100,
+      потолочный: 2450,
+      рупорный: 3200,
+    },
+  },
+  amplifier: {
+    channels: [2, 4, 8],
+    basePrices: { 2: 68000, 4: 99000, 8: 158000 },
   },
 };
 
@@ -66,31 +71,47 @@ export const VENDOR_EQUIPMENT = {
       },
     },
   },
+  sots: {
+    Базовый: {
+      sensor: {
+        kind: ["ИК", "ИК+СВЧ", "вибрационный"],
+        basePrices: { ИК: 1800, "ИК+СВЧ": 3100, вибрационный: 4200 },
+      },
+      panel: {
+        loops: [2, 4, 8],
+        basePrices: { 2: 98000, 4: 136000, 8: 198000 },
+      },
+      note: "Ключевое оборудование СОТС: датчики и контрольные панели.",
+    },
+    Болид: {
+      sensor: { kind: ["ИК", "ИК+СВЧ", "вибрационный"], basePrices: { ИК: 1950, "ИК+СВЧ": 3250, вибрационный: 4520 } },
+      panel: { loops: [2, 4, 8], basePrices: { 2: 112000, 4: 152000, 8: 214000 } },
+    },
+    Рубеж: {
+      sensor: { kind: ["ИК", "ИК+СВЧ", "вибрационный"], basePrices: { ИК: 1880, "ИК+СВЧ": 3160, вибрационный: 4440 } },
+      panel: { loops: [2, 4, 8], basePrices: { 2: 108000, 4: 149000, 8: 208000 } },
+    },
+    "Аргус-Спектр": {
+      sensor: { kind: ["ИК", "ИК+СВЧ", "вибрационный"], basePrices: { ИК: 2360, "ИК+СВЧ": 3890, вибрационный: 5100 } },
+      panel: { loops: [2, 4, 8], basePrices: { 2: 139000, 4: 188000, 8: 262000 } },
+    },
+  },
   ssoi: {
     Базовый: {
       recorder: CCTV_PROFILE.recorder,
       switch: CCTV_PROFILE.switch,
-      note: "Для ССОИ используются серверные узлы, регистраторы и сетевой контур.",
+      note: "Ключевое оборудование ССОИ: сервер/регистратор и сетевые коммутаторы.",
     },
-    "TRASSIR": {
-      recorder: {
-        ...CCTV_PROFILE.recorder,
-        basePrices: { 8: 38000, 16: 56000, 32: 98000, 64: 182000 },
-      },
+    TRASSIR: {
+      recorder: { ...CCTV_PROFILE.recorder, basePrices: { 8: 38000, 16: 56000, 32: 98000, 64: 182000 } },
       switch: CCTV_PROFILE.switch,
     },
     "ISS (Интеллект)": {
-      recorder: {
-        ...CCTV_PROFILE.recorder,
-        basePrices: { 8: 42000, 16: 59000, 32: 108000, 64: 198000 },
-      },
+      recorder: { ...CCTV_PROFILE.recorder, basePrices: { 8: 42000, 16: 59000, 32: 108000, 64: 198000 } },
       switch: CCTV_PROFILE.switch,
     },
     Macroscop: {
-      recorder: {
-        ...CCTV_PROFILE.recorder,
-        basePrices: { 8: 40000, 16: 58000, 32: 102000, 64: 190000 },
-      },
+      recorder: { ...CCTV_PROFILE.recorder, basePrices: { 8: 40000, 16: 58000, 32: 102000, 64: 190000 } },
       switch: CCTV_PROFILE.switch,
     },
   },
@@ -100,7 +121,7 @@ export const VENDOR_EQUIPMENT = {
         channels: [1, 2, 4],
         basePrices: { 1: 14800, 2: 23600, 4: 39200 },
       },
-      note: "Для СКУД можно уточнить ёмкость контроллера по числу точек доступа.",
+      note: "Ключевое оборудование СКУД: контроллеры доступа.",
     },
     Sigur: { controller: { channels: [1, 2, 4], basePrices: { 1: 16200, 2: 25400, 4: 42400 } } },
     Parsec: { controller: { channels: [1, 2, 4], basePrices: { 1: 17400, 2: 26800, 4: 44800 } } },
@@ -117,6 +138,7 @@ export const VENDOR_EQUIPMENT = {
         loops: [2, 4, 8],
         basePrices: { 2: 98000, 4: 136000, 8: 198000 },
       },
+      note: "Ключевое оборудование АПС: извещатели и приёмно-контрольные приборы.",
     },
     Болид: {
       detector: { kind: ["дымовой", "тепловой", "комбинированный"], basePrices: { дымовой: 1850, тепловой: 1650, комбинированный: 2480 } },
@@ -137,12 +159,21 @@ export const VENDOR_EQUIPMENT = {
   },
   soue: {
     Базовый: {
-      controller: { channels: [2, 4, 8], basePrices: { 2: 52000, 4: 84000, 8: 142000 } },
-      note: "Для СОУЭ можно уточнить ёмкость контроллера/усилительного сегмента.",
+      ...SOUE_PROFILE,
+      note: "Ключевое оборудование СОУЭ: оповещатели и усилители. Контроллер не используется как ключевая позиция.",
     },
-    Болид: { controller: { channels: [2, 4, 8], basePrices: { 2: 56000, 4: 91000, 8: 151000 } } },
-    Рубеж: { controller: { channels: [2, 4, 8], basePrices: { 2: 57000, 4: 94000, 8: 156000 } } },
-    Roxton: { controller: { channels: [2, 4, 8], basePrices: { 2: 65000, 4: 108000, 8: 178000 } } },
+    Болид: {
+      speaker: { ...SOUE_PROFILE.speaker, basePrices: { настенный: 2250, потолочный: 2590, рупорный: 3380 } },
+      amplifier: { channels: [2, 4, 8], basePrices: { 2: 71000, 4: 103000, 8: 166000 } },
+    },
+    Рубеж: {
+      speaker: { ...SOUE_PROFILE.speaker, basePrices: { настенный: 2320, потолочный: 2680, рупорный: 3450 } },
+      amplifier: { channels: [2, 4, 8], basePrices: { 2: 73500, 4: 108000, 8: 171000 } },
+    },
+    Roxton: {
+      speaker: { ...SOUE_PROFILE.speaker, basePrices: { настенный: 2780, потолочный: 3190, рупорный: 3880 } },
+      amplifier: { channels: [2, 4, 8], basePrices: { 2: 86000, 4: 122000, 8: 189000 } },
+    },
   },
 };
 

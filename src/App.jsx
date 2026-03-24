@@ -1,33 +1,75 @@
-import React from "react";
-import { Building2, Layers, Wallet, ChevronLeft, ChevronRight, Download } from "lucide-react";
+import React, { useMemo, useState } from "react";
+import { Building2, Layers, Wallet, Download, PieChart, FileText, Ruler } from "lucide-react";
 import useEstimate from "./hooks/useEstimate";
 import ObjectStep from "./components/ObjectStep";
 import SystemsStep from "./components/SystemsStep";
+import ProjectDesignStep from "./components/ProjectDesignStep";
 import BudgetStep from "./components/BudgetStep";
+import CostBreakdownStep from "./components/CostBreakdownStep";
+import CalculationLogicStep from "./components/CalculationLogicStep";
 import Summary from "./components/Summary";
 import { BUILD_NUMBER } from "./config/estimateConfig";
 
+const BACKGROUND_VIDEO_URLS = [
+  "https://storage.coverr.co/videos/O3x8lq1w7f2wV6xTt1lPmIfQ00j00iW4w5?download=1",
+  "https://videos.pexels.com/video-files/3129957/3129957-hd_1920_1080_25fps.mp4",
+  "https://cdn.pixabay.com/video/2020/03/24/34349-400574759_large.mp4",
+];
+
 export default function App() {
   const vm = useEstimate();
+  const [videoIndex, setVideoIndex] = useState(0);
+  const [videoUnavailable, setVideoUnavailable] = useState(false);
 
   const steps = [
     { key: "object", label: "Объект", icon: Building2 },
     { key: "systems", label: "Системы", icon: Layers },
+    { key: "design", label: "Проектирование", icon: Ruler },
     { key: "budget", label: "Бюджет", icon: Wallet },
+    { key: "breakdown", label: "Декомпозиция", icon: PieChart },
+    { key: "logic", label: "Логика расчета", icon: FileText },
   ];
+
+  const currentVideoUrl = useMemo(() => BACKGROUND_VIDEO_URLS[Math.min(videoIndex, BACKGROUND_VIDEO_URLS.length - 1)], [videoIndex]);
+  const hideSummary = vm.step === 5;
 
   return (
     <div className="page-shell">
+      <div className="bg-video-layer" aria-hidden>
+        {!videoUnavailable ? (
+          <video
+            key={currentVideoUrl}
+            autoPlay
+            loop
+            muted
+            playsInline
+            preload="auto"
+            onError={() => {
+              if (videoIndex < BACKGROUND_VIDEO_URLS.length - 1) {
+                setVideoIndex((prev) => prev + 1);
+              } else {
+                setVideoUnavailable(true);
+              }
+            }}
+          >
+            <source src={currentVideoUrl} type="video/mp4" />
+          </video>
+        ) : (
+          <div className="bg-video-fallback" />
+        )}
+      </div>
+
       <div className="build-badge">Сборка: {BUILD_NUMBER}</div>
+
       <div className="app-wrap">
         <header className="hero-card">
           <div>
-            <div className="hero-kicker">Security Estimation Suite · Release 2</div>
-            <h1>Калькулятор сметы систем безопасности</h1>
-            <p>Модульная архитектура: шаги интерфейса, hook состояния и расчётное ядро в lib/config.</p>
+            <div className="hero-kicker">SmetaCore</div>
+            <h1>SmetaCore — предварительный расчет бюджета систем безопасности</h1>
+            <p>С автоматическим формированием сметы и коммерческого предложения</p>
           </div>
           <button className="primary-btn" onClick={vm.exportEstimate} type="button">
-            <Download size={16} /> Экспорт сметы
+            <Download size={16} /> Экспорт ТКП
           </button>
         </header>
 
@@ -52,26 +94,16 @@ export default function App() {
               );
             })}
           </div>
-          <div className="step-actions">
-            <button className="ghost-btn" type="button" onClick={() => vm.setStep((step) => Math.max(0, step - 1))} disabled={vm.step === 0}>
-              <ChevronLeft size={14} /> Назад
-            </button>
-            <button
-              className="primary-btn"
-              type="button"
-              onClick={() => vm.setStep((step) => Math.min(steps.length - 1, step + 1))}
-              disabled={vm.step === steps.length - 1}
-            >
-              Далее <ChevronRight size={14} />
-            </button>
-          </div>
         </section>
 
         {vm.step === 0 ? <ObjectStep {...vm} /> : null}
         {vm.step === 1 ? <SystemsStep {...vm} /> : null}
-        {vm.step === 2 ? <BudgetStep {...vm} /> : null}
+        {vm.step === 2 ? <ProjectDesignStep {...vm} /> : null}
+        {vm.step === 3 ? <BudgetStep {...vm} /> : null}
+        {vm.step === 4 ? <CostBreakdownStep systemResults={vm.systemResults} totals={vm.totals} /> : null}
+        {vm.step === 5 ? <CalculationLogicStep {...vm} /> : null}
 
-        <Summary totals={vm.totals} systemResults={vm.systemResults} objectData={vm.objectData} />
+        {!hideSummary ? <Summary totals={vm.totals} systemResults={vm.systemResults} objectData={vm.objectData} /> : null}
       </div>
     </div>
   );

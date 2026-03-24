@@ -46,7 +46,7 @@ export default function VendorConfigurator({ system, onChange }) {
 
         {equipment.recorder ? (
           <div className="input-card">
-            <label>Регистратор (каналы)</label>
+            <label>Регистратор (на сколько каналов)</label>
             <select
               value={system.selectedEquipmentParams?.recorderChannels ?? equipment.recorder.channels[2] ?? equipment.recorder.channels[0]}
               onChange={(event) => onChange("recorderChannels", Number(event.target.value))}
@@ -58,7 +58,7 @@ export default function VendorConfigurator({ system, onChange }) {
 
         {equipment.hdd ? (
           <div className="input-card">
-            <label>Объём HDD (архив 30 дней), ТБ</label>
+            <label>Объём HDD (минимум для архива 30 дней), ТБ</label>
             <select
               value={system.selectedEquipmentParams?.hddTb ?? equipment.hdd.tb[1] ?? equipment.hdd.tb[0]}
               onChange={(event) => onChange("hddTb", Number(event.target.value))}
@@ -80,7 +80,7 @@ export default function VendorConfigurator({ system, onChange }) {
               </select>
             </div>
             <div className="input-card">
-              <label>Коммутаторы (PoE)</label>
+              <label>Коммутаторы (с PoE или без)</label>
               <select
                 value={String(system.selectedEquipmentParams?.switchPoe ?? true)}
                 onChange={(event) => onChange("switchPoe", event.target.value === "true")}
@@ -104,9 +104,21 @@ export default function VendorConfigurator({ system, onChange }) {
           </div>
         ) : null}
 
+        {equipment.sensor ? (
+          <div className="input-card">
+            <label>Тип охранного датчика</label>
+            <select
+              value={system.selectedEquipmentParams?.sensorKind ?? equipment.sensor.kind[0]}
+              onChange={(event) => onChange("sensorKind", event.target.value)}
+            >
+              {renderOptions(equipment.sensor.kind)}
+            </select>
+          </div>
+        ) : null}
+
         {equipment.detector ? (
           <div className="input-card">
-            <label>Тип извещателя</label>
+            <label>Тип пожарного извещателя</label>
             <select
               value={system.selectedEquipmentParams?.detectorKind ?? equipment.detector.kind[0]}
               onChange={(event) => onChange("detectorKind", event.target.value)}
@@ -118,12 +130,36 @@ export default function VendorConfigurator({ system, onChange }) {
 
         {equipment.panel ? (
           <div className="input-card">
-            <label>ППКП (шлейфы)</label>
+            <label>Панель / ППКП (шлейфы)</label>
             <select
               value={system.selectedEquipmentParams?.panelLoops ?? equipment.panel.loops[1] ?? equipment.panel.loops[0]}
               onChange={(event) => onChange("panelLoops", Number(event.target.value))}
             >
               {renderOptions(equipment.panel.loops)}
+            </select>
+          </div>
+        ) : null}
+
+        {equipment.speaker ? (
+          <div className="input-card">
+            <label>Оповещатели СОУЭ (тип)</label>
+            <select
+              value={system.selectedEquipmentParams?.speakerKind ?? equipment.speaker.kind[0]}
+              onChange={(event) => onChange("speakerKind", event.target.value)}
+            >
+              {renderOptions(equipment.speaker.kind)}
+            </select>
+          </div>
+        ) : null}
+
+        {equipment.amplifier ? (
+          <div className="input-card">
+            <label>Усилитель СОУЭ (каналы)</label>
+            <select
+              value={system.selectedEquipmentParams?.amplifierChannels ?? equipment.amplifier.channels[1] ?? equipment.amplifier.channels[0]}
+              onChange={(event) => onChange("amplifierChannels", Number(event.target.value))}
+            >
+              {renderOptions(equipment.amplifier.channels)}
             </select>
           </div>
         ) : null}

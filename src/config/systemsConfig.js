@@ -97,7 +97,7 @@ export const SYSTEM_RESOURCE_MODEL = {
   soue: {
     elements: [
       { key: "speaker", label: "Оповещатели", densityPer1000: { office: 6.6, parking: 4.8, public: 8.5, technical: 3.8 }, cablePerUnit: 11, materialPerUnit: 220, mountHours: 0.4, connectHours: 0.2, setupHours: 0.22, pnrHours: 0.12, designHours: 0.07, priceShare: 0.43 },
-      { key: "amp", label: "Усилители/контроллеры", densityPer1000: { office: 0.64, parking: 0.42, public: 0.82, technical: 0.5 }, cablePerUnit: 14, materialPerUnit: 940, mountHours: 1.1, connectHours: 0.85, setupHours: 1.2, pnrHours: 0.78, designHours: 0.3, priceShare: 0.27 },
+      { key: "amp", label: "Усилители", densityPer1000: { office: 0.64, parking: 0.42, public: 0.82, technical: 0.5 }, cablePerUnit: 14, materialPerUnit: 940, mountHours: 1.1, connectHours: 0.85, setupHours: 1.2, pnrHours: 0.78, designHours: 0.3, priceShare: 0.27 },
       { key: "line", label: "Линейные модули", densityPer1000: { office: 1.2, parking: 0.8, public: 1.5, technical: 0.95 }, cablePerUnit: 10, materialPerUnit: 520, mountHours: 0.72, connectHours: 0.5, setupHours: 0.56, pnrHours: 0.3, designHours: 0.16, priceShare: 0.18 },
       { key: "cabinet", label: "Шкафы и БП", densityPer1000: { office: 0.38, parking: 0.25, public: 0.52, technical: 0.32 }, cablePerUnit: 8, materialPerUnit: 900, mountHours: 0.95, connectHours: 0.6, setupHours: 0.7, pnrHours: 0.4, designHours: 0.2, priceShare: 0.12 },
     ],

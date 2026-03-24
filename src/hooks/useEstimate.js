@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { DEFAULT_BUDGET, DEFAULT_SYSTEM, DEFAULT_ZONE, OBJECT_TYPES, VENDORS } from "../config/estimateConfig";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { DEFAULT_BUDGET, DEFAULT_SYSTEM, DEFAULT_ZONE, OBJECT_TYPES, SYSTEM_TYPES, VENDORS } from "../config/estimateConfig";
 import { buildEstimateRows, downloadCsv, toNumber } from "../lib/estimate";
 import { calculateEstimateEngine } from "../lib/estimateEngine";
 import { buildZonesFromPreset, rebalanceZoneAreasWithLocks, validateZoneDistribution } from "../lib/zoneEngine";
@@ -32,11 +32,12 @@ export default function useEstimate() {
   const [zonePreset, setZonePreset] = useState("business_center");
   const [lockedZoneIds, setLockedZoneIds] = useState([]);
   const [vendorPriceSnapshots, setVendorPriceSnapshots] = useState({});
+  const pricingSignaturesRef = useRef(new Map());
 
   const recalculatedArea = useMemo(() => zones.reduce((sum, zone) => sum + toNumber(zone.area), 0), [zones]);
   const { systemsDetailed: systemResults, totals } = useMemo(
-    () => calculateEstimateEngine(systems, zones, budget, objectData),
-    [systems, zones, budget, objectData]
+    () => calculateEstimateEngine(systems, zones, budget, objectData, vendorPriceSnapshots),
+    [systems, zones, budget, objectData, vendorPriceSnapshots]
   );
   const zoneDistribution = useMemo(() => validateZoneDistribution(zones, objectData.totalArea), [zones, objectData.totalArea]);
 
@@ -65,8 +66,12 @@ export default function useEstimate() {
   };
 
   const updateSystem = (id, key, value) =>
-    setSystems((prev) =>
-      prev.map((system) => {
+    setSystems((prev) => {
+      if (key === "type" && prev.some((system) => system.id !== id && system.type === value)) {
+        return prev;
+      }
+
+      return prev.map((system) => {
         if (system.id !== id) return system;
         if (key !== "type") return { ...system, [key]: value };
         const nextType = value;
@@ -79,10 +84,16 @@ export default function useEstimate() {
           customVendorIndex: 1,
           selectedEquipmentParams: {},
         };
-      })
-    );
+      });
+    });
 
-  const addSystem = () => setSystems((prev) => [...prev, DEFAULT_SYSTEM(Date.now(), "sot")]);
+  const addSystem = () =>
+    setSystems((prev) => {
+      const used = new Set(prev.map((item) => item.type));
+      const nextType = SYSTEM_TYPES.find((item) => !used.has(item.code))?.code;
+      if (!nextType) return prev;
+      return [...prev, DEFAULT_SYSTEM(Date.now(), nextType)];
+    });
   const removeSystem = (id) => setSystems((prev) => (prev.length <= 1 ? prev : prev.filter((system) => system.id !== id)));
 
   const updateSystemEquipmentProfile = (systemId, equipmentKey, profileKey) =>
@@ -97,14 +108,81 @@ export default function useEstimate() {
   const updateBudget = (key, value) => setBudget((prev) => ({ ...prev, [key]: value }));
 
   const refreshVendorPricing = async (system) => {
-    const snapshot = await fetchVendorPrices(system.type, system.vendor);
-    setVendorPriceSnapshots((prev) => ({ ...prev, [system.id]: snapshot }));
+    try {
+      const snapshot = await fetchVendorPrices(system.type, system.vendor);
+      setVendorPriceSnapshots((prev) => ({ ...prev, [system.id]: snapshot }));
+    } catch (error) {
+      setVendorPriceSnapshots((prev) => ({
+        ...prev,
+        [system.id]: {
+          fetchedAt: new Date().toISOString(),
+          entries: [],
+          error: error.message,
+        },
+      }));
+    }
   };
 
+  useEffect(() => {
+    let cancelled = false;
+    const systemIds = new Set(systems.map((item) => item.id));
+
+    for (const key of pricingSignaturesRef.current.keys()) {
+      if (!systemIds.has(key)) pricingSignaturesRef.current.delete(key);
+    }
+
+    const timeout = setTimeout(async () => {
+      const changed = systems.filter((system) => {
+        const signature = [
+          system.type,
+          system.vendor,
+          system.customVendorIndex,
+          JSON.stringify(system.selectedEquipmentParams || {}),
+          JSON.stringify(system.equipmentProfiles || {}),
+        ].join("|");
+        const isNew = pricingSignaturesRef.current.get(system.id) !== signature;
+        if (isNew) pricingSignaturesRef.current.set(system.id, signature);
+        return isNew;
+      });
+
+      if (!changed.length) return;
+
+      await Promise.all(
+        changed.map(async (system) => {
+          try {
+            const snapshot = await fetchVendorPrices(system.type, system.vendor);
+            if (cancelled) return;
+            setVendorPriceSnapshots((prev) => ({ ...prev, [system.id]: snapshot }));
+          } catch (error) {
+            if (cancelled) return;
+            setVendorPriceSnapshots((prev) => ({
+              ...prev,
+              [system.id]: {
+                fetchedAt: new Date().toISOString(),
+                entries: [],
+                error: error.message,
+              },
+            }));
+          }
+        })
+      );
+    }, 450);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
+  }, [systems]);
+
   const exportEstimate = async () => {
-    const objectTypeLabel = OBJECT_TYPES.find((item) => item.value === objectData.objectType)?.label || objectData.objectType;
-    const payload = { objectData: { ...objectData, objectTypeLabel }, recalculatedArea, systemResults, totals };
-    await exportEstimatePptx(payload);
+    try {
+      const objectTypeLabel = OBJECT_TYPES.find((item) => item.value === objectData.objectType)?.label || objectData.objectType;
+      const payload = { objectData: { ...objectData, objectTypeLabel }, budget, zones, recalculatedArea, systemResults, totals };
+      await exportEstimatePptx(payload);
+    } catch (error) {
+      window.alert(`Ошибка экспорта PPTX: ${error?.message || "неизвестная ошибка"}`);
+      throw error;
+    }
   };
 
   const exportEstimateCsv = () => {
@@ -145,5 +223,6 @@ export default function useEstimate() {
     exportEstimate,
     exportEstimateCsv,
     setZones,
+    canAddMoreSystems: systems.length < SYSTEM_TYPES.length,
   };
 }

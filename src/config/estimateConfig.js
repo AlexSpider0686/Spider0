@@ -2,15 +2,16 @@ import { Camera, Shield, Lock, Cpu, Bell, Siren } from "lucide-react";
 import vendors, { getVendorNames } from "./vendorsConfig";
 import { getDefaultEquipmentProfiles } from "./equipmentCatalog";
 
-export const BUILD_NUMBER = "2026.03.23.02";
+export const BUILD_NUMBER =
+  typeof __APP_BUILD_NUMBER__ !== "undefined" ? __APP_BUILD_NUMBER__ : `local.${new Date().toISOString().slice(0, 19)}`;
 
 export const SYSTEM_TYPES = [
-  { code: "sot", name: "СОТ", icon: Camera },
-  { code: "sots", name: "СОТС", icon: Shield },
-  { code: "skud", name: "СКУД", icon: Lock },
-  { code: "ssoi", name: "ССОИ", icon: Cpu },
-  { code: "aps", name: "АПС", icon: Bell },
-  { code: "soue", name: "СОУЭ", icon: Siren },
+  { code: "sot", shortName: "СОТ", name: "Система охранного телевидения (СОТ)", icon: Camera },
+  { code: "sots", shortName: "СОТС", name: "Система охранно-тревожной сигнализации (СОТС)", icon: Shield },
+  { code: "skud", shortName: "СКУД", name: "Система контроля и управления доступом (СКУД)", icon: Lock },
+  { code: "ssoi", shortName: "ССОИ", name: "Система сбора и обработки информации (ССОИ)", icon: Cpu },
+  { code: "aps", shortName: "АПС", name: "Автоматическая пожарная сигнализация (АПС)", icon: Bell },
+  { code: "soue", shortName: "СОУЭ", name: "Система оповещения и управления эвакуацией (СОУЭ)", icon: Siren },
 ];
 
 export const VENDORS = {
@@ -69,6 +70,7 @@ export const DEFAULT_BUDGET = {
   overheadPercent: 16,
   ppePercent: 3,
   payrollTaxesPercent: 30,
+  utilizationPercent: 8,
   adminPercent: 12,
   profitabilityPercent: 18,
   vatPercent: 20,
@@ -137,13 +139,13 @@ export const COEFFICIENT_GUIDE = [
     key: "laborCoef",
     title: "Коэффициент трудозатрат",
     range: "0.90–1.40",
-    tip: "Увеличивается при ограничениях по времени/доступу и при работе на действующем объекте.",
+    tip: "Увеличивается при ограничениях по времени и доступу, а также при работе на действующем объекте.",
   },
   {
     key: "complexityCoef",
     title: "Коэффициент технологической сложности",
     range: "1.00–1.35",
-    tip: "Применяется для интеграционных сценариев и нестандартных проектных решений.",
+    tip: "Применяется для интеграционных сценариев, нестандартных решений и усиленных требований заказчика.",
   },
   {
     key: "heightCoef",
@@ -167,7 +169,7 @@ export const COEFFICIENT_GUIDE = [
     key: "nightWorkCoef",
     title: "Ночные работы",
     range: "1.00–1.35",
-    tip: "Применяется при ночных сменах и работах в технологических окнах.",
+    tip: "Применяется при ночных сменах и технологических окнах.",
   },
   {
     key: "routingCoef",

@@ -30,11 +30,11 @@ export const ZONE_PRESETS = {
     distribution: { office: 55, corridor: 15, lobby: 10, technical: 8, parking: 12 },
   },
   office_building: {
-    label: "Офисное здание",
+    label: "Офисная зона",
     distribution: { office: 62, corridor: 14, lobby: 8, technical: 6, parking: 10 },
   },
   residential_complex: {
-    label: "Жилой комплекс",
+    label: "Жилая зона",
     distribution: { lobby: 18, corridor: 20, parking: 22, perimeter: 12, technical: 10, retail: 18 },
   },
   warehouse: {
@@ -46,7 +46,7 @@ export const ZONE_PRESETS = {
     distribution: { parking: 78, technical: 10, corridor: 6, perimeter: 6 },
   },
   mixed_use: {
-    label: "Смешанный объект",
+    label: "Смешанная зона",
     distribution: { office: 30, retail: 20, lobby: 12, corridor: 12, parking: 12, food: 8, technical: 6 },
   },
 };

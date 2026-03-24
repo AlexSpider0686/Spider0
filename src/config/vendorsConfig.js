@@ -45,6 +45,15 @@ const vendors = {
       installationSpeed: 0.95,
       technicalParameters: { maxDistance: 460, efficiency: 0.92, integrationComplexity: 1.15 },
     },
+    {
+      name: "Uniview",
+      description: "Стабильный средний сегмент видеонаблюдения с фокусом на цену/качество.",
+      qualityCoefficient: 1.06,
+      equipmentPriceIndex: 1.09,
+      cableCoefficient: 1.01,
+      installationSpeed: 1.01,
+      technicalParameters: { maxDistance: 415, efficiency: 0.87, integrationComplexity: 1.04 },
+    },
   ],
   sots: [
     {
@@ -130,6 +139,15 @@ const vendors = {
       installationSpeed: 0.93,
       technicalParameters: { maxDistance: 230, efficiency: 0.9, integrationComplexity: 1.16 },
     },
+    {
+      name: "RusGuard",
+      description: "Интеграционный профиль для распределённых объектов и территориального доступа.",
+      qualityCoefficient: 1.11,
+      equipmentPriceIndex: 1.17,
+      cableCoefficient: 1.02,
+      installationSpeed: 0.95,
+      technicalParameters: { maxDistance: 225, efficiency: 0.88, integrationComplexity: 1.13 },
+    },
   ],
   ssoi: [
     {
@@ -167,6 +185,15 @@ const vendors = {
       cableCoefficient: 1.03,
       installationSpeed: 0.97,
       technicalParameters: { maxDistance: 620, efficiency: 0.9, integrationComplexity: 1.14 },
+    },
+    {
+      name: "AxxonSoft",
+      description: "Развитая платформа интеграции и видеоаналитики для крупных площадок.",
+      qualityCoefficient: 1.13,
+      equipmentPriceIndex: 1.22,
+      cableCoefficient: 1.03,
+      installationSpeed: 0.95,
+      technicalParameters: { maxDistance: 640, efficiency: 0.91, integrationComplexity: 1.17 },
     },
   ],
   aps: [
@@ -214,6 +241,15 @@ const vendors = {
       cableCoefficient: 1.06,
       installationSpeed: 0.9,
       technicalParameters: { maxDistance: 320, efficiency: 0.92, integrationComplexity: 1.2 },
+    },
+    {
+      name: "Siemens",
+      description: "Высоконадежные решения пожарной сигнализации для сложных объектов.",
+      qualityCoefficient: 1.16,
+      equipmentPriceIndex: 1.28,
+      cableCoefficient: 1.04,
+      installationSpeed: 0.93,
+      technicalParameters: { maxDistance: 315, efficiency: 0.91, integrationComplexity: 1.18 },
     },
   ],
   soue: [
@@ -275,6 +311,7 @@ export const MANUFACTURER_SOURCES = {
     Dahua: { website: "https://www.dahuasecurity.com" },
     TRASSIR: { website: "https://trassir.com" },
     Axis: { website: "https://www.axis.com" },
+    Uniview: { website: "https://global.uniview.com" },
   },
   sots: {
     Базовый: { website: "https://bolid.ru" },
@@ -288,12 +325,14 @@ export const MANUFACTURER_SOURCES = {
     Parsec: { website: "https://parsec.ru" },
     PERCo: { website: "https://perco.ru" },
     Biosmart: { website: "https://biosmart.ru" },
+    RusGuard: { website: "https://www.rusguard.ru" },
   },
   ssoi: {
     Базовый: { website: "https://trassir.com" },
     TRASSIR: { website: "https://trassir.com" },
     "ISS (Интеллект)": { website: "https://iss.ru" },
     Macroscop: { website: "https://macroscop.com" },
+    AxxonSoft: { website: "https://www.axxonsoft.com" },
   },
   aps: {
     Базовый: { website: "https://bolid.ru" },
@@ -301,6 +340,7 @@ export const MANUFACTURER_SOURCES = {
     Рубеж: { website: "https://rubezh.ru" },
     "Аргус-Спектр": { website: "https://argus-spectr.ru" },
     Simplex: { website: "https://www.johnsoncontrols.com/fire-detection/simplex" },
+    Siemens: { website: "https://www.siemens.com/global/en/products/buildings/fire-safety.html" },
   },
   soue: {
     Базовый: { website: "https://roxton-audio.com" },

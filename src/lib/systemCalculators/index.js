@@ -2,27 +2,125 @@ import { getSystemResourceModel, getSystemRules } from "../../config/systemsConf
 import { getZoneCalcProfile, getZoneRateProfile } from "../../config/zonesConfig";
 import { calculateSystem, toNumber } from "../estimate";
 
+const DESIGN_RATE_PER_HOUR = 2100;
+const SYSTEM_MARKERS = {
+  sots: { resourceKey: "sensor", label: "Монтаж+ПНР 1 охранного датчика" },
+  sot: { resourceKey: "camera", label: "Монтаж+ПНР 1 камеры" },
+  skud: { resourceKey: "reader", label: "Монтаж+ПНР 1 точки прохода" },
+  ssoi: { resourceKey: "gateway", label: "Интеграция 1 элемента" },
+  aps: { resourceKey: "detector", label: "Монтаж+ПНР 1 извещателя" },
+  soue: { resourceKey: "speaker", label: "Монтаж+ПНР 1 оповещателя" },
+};
+
 function pickOptimalCoefficient({ key, value, objectData, zones }) {
   const maxFloors = Math.max(...zones.map((zone) => toNumber(zone.floors, 1)), 1);
-  const parkingShare = zones
-    .filter((zone) => zone.type === "parking")
-    .reduce((sum, zone) => sum + toNumber(zone.area), 0) /
+  const parkingShare =
+    zones.filter((zone) => zone.type === "parking").reduce((sum, zone) => sum + toNumber(zone.area), 0) /
     Math.max(zones.reduce((sum, zone) => sum + toNumber(zone.area), 0), 1);
 
   const recommendations = {
-    vendorFactor: value > 1.15 ? "Высокотехнологичный или премиальный вендор оправдан для сложной интеграции." : "Для базового пресейла чаще достаточно диапазона 0.95–1.10.",
-    regionCoef: value > 1.1 ? "Для удалённого/северного региона коэффициент >1.1 обычно оправдан." : "Для центральной части РФ обычно достаточно диапазона 0.98–1.08.",
-    cableCoef: parkingShare > 0.25 ? "При большой доле паркинга и сложной прокладке используйте 1.05–1.20." : "Для стандартного объекта обычно 0.95–1.05.",
-    laborCoef: maxFloors > 8 ? "На высотных объектах обычно 1.05–1.20 по трудозатратам." : "Для типовых объектов обычно 0.95–1.05.",
-    complexityCoef: objectData.objectType === "transport" || objectData.objectType === "energy" ? "Для транспортных/энергетических объектов чаще 1.10–1.30." : "Для стандартных объектов обычно 1.00–1.10.",
-    conditionLaborFactor: value > 1.2 ? "Сложные условия подтверждают повышенный совокупный коэффициент." : "Совокупный коэффициент условий в районе 1.00–1.15 обычно достаточен.",
+    vendorFactor:
+      value > 1.15
+        ? "Премиальный вендор оправдан для сложной интеграции и повышенных требований к надежности."
+        : "Для типового объекта обычно достаточно диапазона 0.95–1.10.",
+    marketSnapshotFactor:
+      value > 1.08
+        ? "Рынок выше базового уровня; для закупки лучше закладывать запас."
+        : "Рыночный индекс близок к базе; можно работать в стандартном ценовом коридоре.",
+    regionCoef:
+      value > 1.1
+        ? "Для удаленных и северных регионов коэффициент >1.1 обычно обоснован."
+        : "Для центральной части РФ обычно достаточно диапазона 0.98–1.08.",
+    cableCoef:
+      parkingShare > 0.25
+        ? "При большой доле парковки и сложной трассировке рекомендуется 1.05–1.20."
+        : "Для стандартного объекта обычно достаточно 0.95–1.05.",
+    laborCoef:
+      maxFloors > 8
+        ? "На высотных объектах обычно применяют 1.05–1.20 по трудозатратам."
+        : "Для типовых объектов обычно достаточно 0.95–1.05.",
+    complexityCoef:
+      objectData.objectType === "transport" || objectData.objectType === "energy"
+        ? "Для транспортных и энергетических объектов чаще применяют 1.10–1.30."
+        : "Для стандартных объектов обычно 1.00–1.10.",
+    conditionLaborFactor:
+      value > 1.2
+        ? "Сложные условия подтверждают повышенный совокупный коэффициент."
+        : "Совокупный коэффициент условий в районе 1.00–1.15 обычно достаточен.",
+    designComplexityFactor:
+      value > 1.2
+        ? "Проектирование сильно усложнено (интеграция, этажность, тип объекта)."
+        : "Уровень сложности проектирования близок к базовому.",
   };
 
-  return recommendations[key] || "Рекомендуемое значение зависит от сложности объекта и условий работ.";
+  return recommendations[key] || "Рекомендуемое значение зависит от сложности объекта и условий выполнения работ.";
 }
 
-export function calculateSystemWithBreakdown(system, zones, budget, objectData = {}) {
-  const base = calculateSystem(system, zones, budget, objectData);
+function calcDesignComplexityFactor(system, objectData, zones) {
+  const maxFloors = Math.max(...zones.map((zone) => toNumber(zone.floors, 1)), 1);
+  const objectTypeBoost =
+    objectData.objectType === "transport" || objectData.objectType === "energy"
+      ? 0.16
+      : objectData.objectType === "production"
+        ? 0.1
+        : 0.05;
+
+  const systemBoost = system.type === "ssoi" ? 0.14 : system.type === "aps" || system.type === "soue" ? 0.1 : 0.07;
+  const floorsBoost = Math.max(0, maxFloors - 3) * 0.018;
+
+  return 1 + objectTypeBoost + systemBoost + floorsBoost;
+}
+
+function calcDesignDurationMonths(designHours, totalUnits) {
+  const teamSize = Math.max(1, Math.min(5, Math.ceil(totalUnits / 120)));
+  const monthlyCapacity = teamSize * 150;
+  const months = Math.max(1, Math.ceil(designHours / Math.max(monthlyCapacity, 1)));
+  return { months, teamSize };
+}
+
+function calcCharges(baseRaw, budget, regionCoef) {
+  const overheadRaw = baseRaw * (toNumber(budget.overheadPercent) / 100);
+  const ppeRaw = baseRaw * (toNumber(budget.ppePercent) / 100);
+  const payrollTaxesRaw = baseRaw * (toNumber(budget.payrollTaxesPercent) / 100);
+  const utilizationRaw = baseRaw * (toNumber(budget.utilizationPercent) / 100);
+  const adminRaw = (baseRaw + overheadRaw + ppeRaw + payrollTaxesRaw + utilizationRaw) * (toNumber(budget.adminPercent) / 100);
+
+  const base = baseRaw * regionCoef;
+  const overhead = overheadRaw * regionCoef;
+  const ppe = ppeRaw * regionCoef;
+  const payrollTaxes = payrollTaxesRaw * regionCoef;
+  const utilization = utilizationRaw * regionCoef;
+  const admin = adminRaw * regionCoef;
+  const charges = overhead + ppe + payrollTaxes + utilization + admin;
+
+  return {
+    base,
+    overhead,
+    ppe,
+    payrollTaxes,
+    utilization,
+    admin,
+    charges,
+    total: base + charges,
+  };
+}
+
+function buildSystemMarker(systemType, resourceRows, workTotal, totalUnits) {
+  const markerMeta = SYSTEM_MARKERS[systemType] || { resourceKey: "", label: "Стоимость 1 единицы" };
+  const markerRow = resourceRows.find((row) => row.key === markerMeta.resourceKey);
+  const markerQty = Math.max(toNumber(markerRow?.qty, 0) || toNumber(totalUnits, 0) || 1, 1);
+  const costPerUnit = toNumber(workTotal, 0) / markerQty;
+
+  return {
+    key: markerMeta.resourceKey || "generic",
+    label: markerMeta.label,
+    qty: markerQty,
+    costPerUnit,
+  };
+}
+
+export function calculateSystemWithBreakdown(system, zones, budget, objectData = {}, marketSnapshot = null) {
+  const base = calculateSystem(system, zones, budget, objectData, marketSnapshot);
   const rules = getSystemRules(system.type);
   const resourceModel = getSystemResourceModel(system.type);
   const budgetComplexity = toNumber(budget.complexityCoef, 1);
@@ -76,23 +174,28 @@ export function calculateSystemWithBreakdown(system, zones, budget, objectData =
   const totalUnits = resourceRows.reduce((sum, row) => sum + row.qty, 0);
   const totalCable = resourceRows.reduce((sum, row) => sum + row.cable, 0);
   const totalMaterialsByRows = resourceRows.reduce((sum, row) => sum + row.materials, 0);
-  const totalLaborHours = resourceRows.reduce(
-    (sum, row) => sum + row.mountHours + row.connectHours + row.setupHours + row.pnrHours + row.designHours,
-    0
-  );
+  const totalExecutionHours = resourceRows.reduce((sum, row) => sum + row.mountHours + row.connectHours + row.setupHours + row.pnrHours, 0);
+  const totalDesignHours = resourceRows.reduce((sum, row) => sum + row.designHours, 0);
 
-  const blendedLaborCostPerHour = totalLaborHours > 0 ? base.laborBase / totalLaborHours : 0;
-  const laborBaseRecalculated = totalLaborHours * blendedLaborCostPerHour * budgetLabor * budgetComplexity;
+  const executionRate = totalExecutionHours > 0 ? base.workBase / totalExecutionHours : DESIGN_RATE_PER_HOUR;
+  const executionBaseRaw = totalExecutionHours * executionRate * budgetLabor * budgetComplexity;
+  const designComplexityFactor = calcDesignComplexityFactor(system, objectData, zones);
+  const designBaseRaw = totalDesignHours * DESIGN_RATE_PER_HOUR * budgetComplexity * designComplexityFactor;
+
   const cableMaterials = totalCable * 92;
   const trayAndFasteners = totalCable * 51;
-  const equipmentFromRows = resourceRows.reduce((sum, row) => sum + base.equipCost * row.priceShare, 0);
-  const equipCost = equipmentFromRows > 0 ? equipmentFromRows : base.equipCost;
-  const materialsBase = equipCost + cableMaterials + trayAndFasteners + totalMaterialsByRows;
-  const overhead = laborBaseRecalculated * (toNumber(budget.overheadPercent) / 100);
-  const ppe = laborBaseRecalculated * (toNumber(budget.ppePercent) / 100);
-  const payrollTaxes = laborBaseRecalculated * (toNumber(budget.payrollTaxesPercent) / 100);
-  const admin = (laborBaseRecalculated + payrollTaxes) * (toNumber(budget.adminPercent) / 100);
-  const directCost = materialsBase + laborBaseRecalculated + overhead + ppe + payrollTaxes + admin;
+  const equipmentFromRows = resourceRows.reduce((sum, row) => sum + base.equipmentCost * row.priceShare, 0);
+  const equipmentCost = equipmentFromRows > 0 ? equipmentFromRows : base.equipmentCost;
+  const materialCost = cableMaterials + trayAndFasteners + totalMaterialsByRows;
+  const materialsBase = equipmentCost + materialCost;
+
+  const regionCoef = toNumber(base.trace?.regionCoef, 1);
+  const execution = calcCharges(executionBaseRaw, budget, regionCoef);
+  const design = calcCharges(designBaseRaw, budget, regionCoef);
+
+  const workTotal = execution.total;
+  const designTotal = design.total;
+  const directCost = materialsBase + workTotal + designTotal;
   const profit = directCost * (toNumber(budget.profitabilityPercent) / 100);
   const subtotal = directCost + profit;
   const vat = budget.taxMode === "osno" ? subtotal * (toNumber(budget.vatPercent) / 100) : 0;
@@ -103,29 +206,78 @@ export function calculateSystemWithBreakdown(system, zones, budget, objectData =
     return {
       key: item.key,
       label: item.label,
-      cost: matchingRow ? (matchingRow.priceShare || item.share) * equipCost : equipCost * item.share,
+      cost: matchingRow ? (matchingRow.priceShare || item.share) * equipmentCost : equipmentCost * item.share,
     };
   });
 
+  const smrWeight = toNumber(rules.laborSplit.smr, 0.6);
+  const pnrWeight = toNumber(rules.laborSplit.pnr, 0.25);
+  const splitSum = Math.max(smrWeight + pnrWeight, 0.001);
   const works = {
-    smr: laborBaseRecalculated * rules.laborSplit.smr,
-    pnr: laborBaseRecalculated * rules.laborSplit.pnr,
-    design: laborBaseRecalculated * rules.laborSplit.design,
+    smr: execution.base * (smrWeight / splitSum),
+    pnr: execution.base * (pnrWeight / splitSum),
+    design: design.base,
   };
+  const unitWorkMarker = buildSystemMarker(system.type, resourceRows, workTotal, totalUnits);
+
+  const timeline = calcDesignDurationMonths(totalDesignHours, totalUnits);
 
   const explanation = [
     `Система рассчитана по зонам и плотностям ресурсов: ${Math.round(totalUnits)} единиц и ${Math.round(totalCable)} м кабеля.`,
-    `Труд рассчитан ресурсно по операциям (монтаж/подключение/настройка/ПНР/проектирование), затем свёрнут в СМР/ПНР/проектирование ${Math.round(rules.laborSplit.smr * 100)}%/${Math.round(rules.laborSplit.pnr * 100)}%/${Math.round(rules.laborSplit.design * 100)}%.`,
-    `Региональный коэффициент ${toNumber(base.trace?.regionCoef, 1).toFixed(2)} влияет на трудовые затраты и все производные начисления.`,
+    `Проектирование выделено в отдельный контур: ${totalDesignHours.toFixed(1)} ч, команда ~${timeline.teamSize} чел., срок ${timeline.months} мес.`,
+    `${unitWorkMarker.label}: ${unitWorkMarker.costPerUnit.toFixed(0)} ₽/ед.`,
+    `Блок работ считается по формуле: база × коэффициенты условий + ФОТ + утилизация + СИЗ + АХР; далее применяется региональный коэффициент.`,
   ];
 
   const formulaRows = [
-    { key: "vendorFactor", label: "Коэф. вендора", value: base.trace?.vendorFactor ?? 1, useCase: "Применяется для учёта ценового и технологического профиля выбранного вендора." },
-    { key: "regionCoef", label: "Региональный коэф.", value: base.trace?.regionCoef ?? 1, useCase: "Учитывает географию выполнения работ (логистика, климат, доступность ресурсов)." },
-    { key: "cableCoef", label: "Коэф. кабеля", value: base.trace?.cableCoef ?? 1, useCase: "Применяется при усложнённой трассировке и повышенном резерве линий." },
-    { key: "laborCoef", label: "Коэф. труда", value: base.trace?.laborCoef ?? 1, useCase: "Применяется для коррекции трудоёмкости монтажа и пусконаладки." },
-    { key: "complexityCoef", label: "Коэф. сложности", value: base.trace?.complexityCoef ?? 1, useCase: "Учитывает интеграционную сложность и специальные требования заказчика." },
-    { key: "conditionLaborFactor", label: "Сводный коэф. условий", value: base.trace?.conditionLaborFactor ?? 1, useCase: "Итоговый коэффициент условий (высота, стеснённость, ночные работы и т.д.)." },
+    {
+      key: "vendorFactor",
+      label: "Коэфф. вендора",
+      value: base.trace?.vendorFactor ?? 1,
+      useCase: "Учитывает ценовой и технологический профиль выбранного производителя.",
+    },
+    {
+      key: "marketSnapshotFactor",
+      label: "Коэфф. рынка (производитель + Tinko)",
+      value: base.trace?.marketSnapshotFactor ?? 1,
+      useCase: "Показывает влияние средней рыночной цены по результатам опроса источников.",
+    },
+    {
+      key: "regionCoef",
+      label: "Региональный коэфф.",
+      value: base.trace?.regionCoef ?? 1,
+      useCase: "Учитывает географию выполнения работ: логистику, климат и доступность ресурсов.",
+    },
+    {
+      key: "cableCoef",
+      label: "Коэфф. кабельных работ",
+      value: base.trace?.cableCoef ?? 1,
+      useCase: "Применяется при усложненной трассировке и повышенном резерве линий.",
+    },
+    {
+      key: "laborCoef",
+      label: "Коэфф. трудозатрат",
+      value: base.trace?.laborCoef ?? 1,
+      useCase: "Корректирует трудоемкость монтажа, пусконаладки и интеграции.",
+    },
+    {
+      key: "complexityCoef",
+      label: "Коэфф. сложности",
+      value: base.trace?.complexityCoef ?? 1,
+      useCase: "Учитывает интеграционную сложность и специальные требования проекта.",
+    },
+    {
+      key: "conditionLaborFactor",
+      label: "Сводный коэфф. условий",
+      value: base.trace?.conditionLaborFactor ?? 1,
+      useCase: "Высота, стесненность, ночные смены и работы на действующем объекте.",
+    },
+    {
+      key: "designComplexityFactor",
+      label: "Коэфф. сложности проектирования",
+      value: designComplexityFactor,
+      useCase: "Учитывает этажность, тип объекта и сложность конкретной системы.",
+    },
   ];
 
   const coefficientInsights = formulaRows.map((row) => ({
@@ -137,23 +289,41 @@ export function calculateSystemWithBreakdown(system, zones, budget, objectData =
     ...base,
     cable: totalCable,
     units: totalUnits,
-    equipCost,
+    equipmentCost,
+    equipCost: equipmentCost,
     cableMaterials,
     trayAndFasteners,
+    materialCost,
     materialsBase,
-    laborBase: laborBaseRecalculated,
-    overhead,
-    ppe,
-    payrollTaxes,
-    admin,
+    laborBase: execution.base,
+    workBase: executionBaseRaw,
+    workCharges: execution.charges,
+    workTotal,
+    designHours: totalDesignHours,
+    designBase: design.base,
+    designCharges: design.charges,
+    designTotal,
+    designDurationMonths: timeline.months,
+    designTeamSize: timeline.teamSize,
+    unitWorkMarker,
+    overhead: execution.overhead,
+    ppe: execution.ppe,
+    payrollTaxes: execution.payrollTaxes,
+    utilization: execution.utilization,
+    admin: execution.admin,
+    designOverhead: design.overhead,
+    designPpe: design.ppe,
+    designPayrollTaxes: design.payrollTaxes,
+    designUtilization: design.utilization,
+    designAdmin: design.admin,
     profit,
     vat,
     total,
     bom: equipment.map((item) => ({
       code: `${system.type.toUpperCase()}-${item.key}`,
       name: item.label,
-      qty: Math.max(Math.round(totalUnits * (item.cost / (equipCost || 1))), 1),
-      unitPrice: item.cost / Math.max(Math.round(totalUnits * (item.cost / (equipCost || 1))), 1),
+      qty: Math.max(Math.round(totalUnits * (item.cost / (equipmentCost || 1))), 1),
+      unitPrice: item.cost / Math.max(Math.round(totalUnits * (item.cost / (equipmentCost || 1))), 1),
       total: item.cost,
     })),
     formulaRows,
