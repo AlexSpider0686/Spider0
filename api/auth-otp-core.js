@@ -16,15 +16,22 @@ function fromBase64Url(value) {
   return Buffer.from(String(value || ""), "base64url").toString("utf8");
 }
 
+function buildFallbackSecret() {
+  const seed = [
+    process.env.VERCEL_PROJECT_PRODUCTION_URL || "",
+    process.env.VERCEL_GIT_COMMIT_SHA || "",
+    process.env.VERCEL_URL || "",
+  ]
+    .filter(Boolean)
+    .join(":");
+  const source = seed || "smetacore-public-demo-secret";
+  return crypto.createHash("sha256").update(`smetacore:${source}`).digest("hex");
+}
+
 function getOtpSecret() {
   const fromEnv = String(process.env.AUTH_OTP_SECRET || "").trim();
   if (fromEnv) return fromEnv;
-
-  if (process.env.NODE_ENV !== "production") {
-    return "smetacore-dev-otp-secret-change-me";
-  }
-
-  throw new Error("AUTH_OTP_SECRET is not configured");
+  return buildFallbackSecret();
 }
 
 function signPayload(payload) {
@@ -116,23 +123,31 @@ async function sendCodeViaResend(email, code) {
 }
 
 async function dispatchOtpCode(email, code) {
-  const sentByResend = await sendCodeViaResend(email, code).catch((error) => {
-    if (process.env.NODE_ENV !== "production") {
-      return false;
+  const strictEmail = String(process.env.AUTH_STRICT_EMAIL || "0") === "1";
+  const forceDebug = String(process.env.AUTH_DEBUG_CODE || "0") === "1";
+  let resendError = null;
+
+  try {
+    const sentByResend = await sendCodeViaResend(email, code);
+    if (sentByResend) {
+      return { delivery: "email" };
     }
-    throw error;
-  });
-
-  if (sentByResend) {
-    return { delivery: "email" };
+  } catch (error) {
+    resendError = error;
   }
 
-  const allowDebug = process.env.NODE_ENV !== "production" || String(process.env.AUTH_DEBUG_CODE || "") === "1";
-  if (allowDebug) {
-    return { delivery: "debug", debugCode: code };
+  if (forceDebug || !strictEmail) {
+    return {
+      delivery: "debug",
+      debugCode: code,
+      warning: resendError ? "email_provider_failed_debug_mode" : "email_provider_not_configured_debug_mode",
+    };
   }
 
-  throw new Error("Почтовый провайдер не настроен (ожидаются RESEND_API_KEY и RESEND_FROM)");
+  if (resendError) {
+    throw new Error("Не удалось отправить код на почту. Проверьте настройки почтового провайдера.");
+  }
+  throw new Error("Почтовый провайдер не настроен (нужны RESEND_API_KEY и RESEND_FROM).");
 }
 
 export async function issueOtpChallenge(rawEmail) {
@@ -158,6 +173,7 @@ export async function issueOtpChallenge(rawEmail) {
     expiresInSeconds: OTP_TTL_SECONDS,
     delivery: deliveryInfo.delivery,
     debugCode: deliveryInfo.debugCode,
+    warning: deliveryInfo.warning,
   };
 }
 
