@@ -19,6 +19,7 @@ export default function AuthGate({ onAuthorized }) {
   const [hint, setHint] = useState("");
   const [timerTick, setTimerTick] = useState(0);
   const inputRefs = useRef([]);
+  const verifyingRef = useRef(false);
 
   const codeValue = useMemo(() => code.join(""), [code]);
 
@@ -31,34 +32,37 @@ export default function AuthGate({ onAuthorized }) {
   useEffect(() => {
     if (stage !== "code") return;
     if (codeValue.length !== CODE_LENGTH) return;
-    if (busy) return;
+    if (verifyingRef.current) return;
 
-    let active = true;
+    let cancelled = false;
+    verifyingRef.current = true;
+    setBusy(true);
+    setError("");
+
     (async () => {
-      setBusy(true);
-      setError("");
       try {
         const result = await verifyAuthCode({
           email,
           code: codeValue,
           challengeToken,
         });
-        if (!active) return;
+        if (cancelled) return;
         onAuthorized?.(result.accessToken);
       } catch (verifyError) {
-        if (!active) return;
+        if (cancelled) return;
         setError(verifyError?.message || "Код не подтвержден");
         setCode(Array(CODE_LENGTH).fill(""));
         inputRefs.current[0]?.focus();
       } finally {
-        if (active) setBusy(false);
+        verifyingRef.current = false;
+        if (!cancelled) setBusy(false);
       }
     })();
 
     return () => {
-      active = false;
+      cancelled = true;
     };
-  }, [busy, challengeToken, codeValue, email, onAuthorized, stage]);
+  }, [challengeToken, codeValue, email, onAuthorized, stage]);
 
   const remainingSeconds = useMemo(() => {
     if (!expiresAtMs) return 0;
@@ -72,6 +76,7 @@ export default function AuthGate({ onAuthorized }) {
       return;
     }
 
+    verifyingRef.current = false;
     setBusy(true);
     setError("");
     setHint("");
@@ -98,6 +103,7 @@ export default function AuthGate({ onAuthorized }) {
   };
 
   const handleCodeChange = (index, rawValue) => {
+    if (busy) return;
     const value = toDigits(rawValue).slice(-1);
     setCode((prev) => {
       const next = [...prev];
@@ -111,6 +117,7 @@ export default function AuthGate({ onAuthorized }) {
   };
 
   const handleCodeKeyDown = (index, event) => {
+    if (busy) return;
     if (event.key === "Backspace" && !code[index] && index > 0) {
       inputRefs.current[index - 1]?.focus();
     }
@@ -123,6 +130,7 @@ export default function AuthGate({ onAuthorized }) {
   };
 
   const handlePasteCode = (event) => {
+    if (busy) return;
     event.preventDefault();
     const pasted = toDigits(event.clipboardData.getData("text")).slice(0, CODE_LENGTH);
     if (!pasted) return;
@@ -136,6 +144,7 @@ export default function AuthGate({ onAuthorized }) {
 
   const resetToEmail = () => {
     setStage("email");
+    verifyingRef.current = false;
     setChallengeToken("");
     setCode(Array(CODE_LENGTH).fill(""));
     setError("");
@@ -190,14 +199,13 @@ export default function AuthGate({ onAuthorized }) {
                   autoComplete={index === 0 ? "one-time-code" : "off"}
                   maxLength={1}
                   className="auth-code-cell"
+                  disabled={busy}
                   onChange={(event) => handleCodeChange(index, event.target.value)}
                   onKeyDown={(event) => handleCodeKeyDown(index, event)}
                 />
               ))}
             </div>
-            <small className="hint-inline">
-              {busy ? "Проверка кода..." : `Код действует: ${Math.max(remainingSeconds, 0)} сек.`}
-            </small>
+            <small className="hint-inline">{busy ? "Проверка кода..." : `Код действует: ${Math.max(remainingSeconds, 0)} сек.`}</small>
           </div>
         )}
 
