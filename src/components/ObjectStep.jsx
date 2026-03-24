@@ -6,13 +6,45 @@ import { ZONE_PRESETS, ZONE_TYPES } from "../config/zonesConfig";
 import { getZonePercentSum, normalizeZoneAreas } from "../lib/zoneEngine";
 import { num, toNumber } from "../lib/estimate";
 
+function makeFallbackImage(topColor, bottomColor, accentColor) {
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid slice">
+      <defs>
+        <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="${topColor}" />
+          <stop offset="100%" stop-color="${bottomColor}" />
+        </linearGradient>
+        <radialGradient id="glow" cx="0.2" cy="0.15" r="0.7">
+          <stop offset="0%" stop-color="rgba(255,255,255,0.45)" />
+          <stop offset="100%" stop-color="rgba(255,255,255,0)" />
+        </radialGradient>
+      </defs>
+      <rect width="1200" height="700" fill="url(#bg)" />
+      <rect width="1200" height="700" fill="url(#glow)" />
+      <circle cx="1010" cy="120" r="120" fill="${accentColor}" opacity="0.35" />
+      <path d="M0 490 C 230 420, 500 600, 770 520 C 950 470, 1080 420, 1200 460 L1200 700 L0 700 Z" fill="rgba(255,255,255,0.28)" />
+      <path d="M0 560 C 210 500, 430 660, 690 610 C 930 560, 1070 520, 1200 560 L1200 700 L0 700 Z" fill="rgba(9,24,44,0.24)" />
+    </svg>
+  `;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
 const OBJECT_TYPE_IMAGES = {
-  production: "https://images.unsplash.com/photo-1581094794329-c8112a89af12?auto=format&fit=crop&w=1600&q=80",
-  warehouse: "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=1600&q=80",
-  public: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1600&q=80",
-  residential: "https://images.unsplash.com/photo-1460317442991-0ec209397118?auto=format&fit=crop&w=1600&q=80",
-  transport: "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=1600&q=80",
-  energy: "https://images.unsplash.com/photo-1466611653911-95081537e5b7?auto=format&fit=crop&w=1600&q=80",
+  production: "/assets/object-types/production.jpg",
+  warehouse: "/assets/object-types/warehouse.jpg",
+  public: "/assets/object-types/public.jpg",
+  residential: "/assets/object-types/residential.jpg",
+  transport: "/assets/object-types/transport.jpg",
+  energy: "/assets/object-types/energy.jpg",
+};
+
+const OBJECT_TYPE_IMAGE_FALLBACKS = {
+  production: makeFallbackImage("#58748f", "#253c59", "#3bd0d5"),
+  warehouse: makeFallbackImage("#5e6f8f", "#293650", "#59a2f3"),
+  public: makeFallbackImage("#647ea2", "#2d4669", "#58c9f1"),
+  residential: makeFallbackImage("#7387a8", "#384f74", "#63b4ff"),
+  transport: makeFallbackImage("#607895", "#243a5e", "#5de2be"),
+  energy: makeFallbackImage("#5d7b8a", "#24445e", "#7adf72"),
 };
 
 export default function ObjectStep({
@@ -73,6 +105,7 @@ export default function ObjectStep({
           </div>
           {selectedObjectType ? <small className="hint-inline">{selectedObjectType.description}</small> : null}
         </div>
+
         <div className="object-photo-gallery">
           {OBJECT_TYPES.map((item) => {
             const isActive = objectData.objectType === item.value;
@@ -84,7 +117,15 @@ export default function ObjectStep({
                 onClick={() => updateObject("objectType", item.value)}
                 title={item.description}
               >
-                <img src={OBJECT_TYPE_IMAGES[item.value]} alt={item.label} loading="lazy" />
+                <img
+                  src={OBJECT_TYPE_IMAGES[item.value]}
+                  alt={item.label}
+                  loading="lazy"
+                  onError={(event) => {
+                    event.currentTarget.onerror = null;
+                    event.currentTarget.src = OBJECT_TYPE_IMAGE_FALLBACKS[item.value];
+                  }}
+                />
                 <div className="object-photo-overlay">
                   <strong>{item.label}</strong>
                   <span>{item.description}</span>
@@ -93,22 +134,51 @@ export default function ObjectStep({
             );
           })}
         </div>
+
         <div className="input-card">
           <label>Площадь по объекту, м²</label>
           <input type="number" value={objectData.totalArea} onChange={(event) => updateObject("totalArea", toNumber(event.target.value))} />
         </div>
+
         <div className="input-card">
-          <label>Площадь по зонам, м²</label>
-          <input type="number" value={recalculatedArea} readOnly />
+          <div className="label-with-tooltip">
+            <label htmlFor="protected-zone-area">Защищаемая площадь зон, м²</label>
+            <span
+              className="label-tooltip-help"
+              tabIndex={0}
+              role="button"
+              title="Пояснение к защищаемой площади зон"
+              aria-label="Пояснение к защищаемой площади зон"
+            >
+              ?
+            </span>
+            <div className="label-tooltip-popover" role="tooltip">
+              <p>
+                <strong>Площадь по объекту</strong> - вся площадь здания или комплекса, даже если часть помещений не оснащается
+                системами.
+              </p>
+              <p>
+                <strong>Защищаемая площадь зон</strong> - сумма только тех зон, где реально размещаются и рассчитываются средства
+                безопасности.
+              </p>
+            </div>
+          </div>
+          <input id="protected-zone-area" type="number" value={recalculatedArea} readOnly />
         </div>
+
         <div className="input-card">
           <label>Надземные этажи</label>
           <input type="number" value={objectData.floors} onChange={(event) => updateObject("floors", toNumber(event.target.value))} />
         </div>
         <div className="input-card">
           <label>Подземные этажи</label>
-          <input type="number" value={objectData.basementFloors} onChange={(event) => updateObject("basementFloors", toNumber(event.target.value))} />
+          <input
+            type="number"
+            value={objectData.basementFloors}
+            onChange={(event) => updateObject("basementFloors", toNumber(event.target.value))}
+          />
         </div>
+
         <div className="input-card full">
           <label>Субъект РФ</label>
           <div className="region-search-row">

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Building2, Layers, Wallet, Download, PieChart, FileText, Ruler } from "lucide-react";
 import useEstimate from "./hooks/useEstimate";
 import ObjectStep from "./components/ObjectStep";
@@ -11,15 +11,16 @@ import Summary from "./components/Summary";
 import { BUILD_NUMBER } from "./config/estimateConfig";
 
 const BACKGROUND_VIDEO_URLS = [
-  "https://storage.coverr.co/videos/O3x8lq1w7f2wV6xTt1lPmIfQ00j00iW4w5?download=1",
+  "/assets/background/city-loop.mp4",
   "https://videos.pexels.com/video-files/3129957/3129957-hd_1920_1080_25fps.mp4",
-  "https://cdn.pixabay.com/video/2020/03/24/34349-400574759_large.mp4",
+  "https://storage.coverr.co/videos/O3x8lq1w7f2wV6xTt1lPmIfQ00j00iW4w5?download=1",
 ];
 
 export default function App() {
   const vm = useEstimate();
   const [videoIndex, setVideoIndex] = useState(0);
   const [videoUnavailable, setVideoUnavailable] = useState(false);
+  const [videoReady, setVideoReady] = useState(false);
 
   const steps = [
     { key: "object", label: "Объект", icon: Building2 },
@@ -33,18 +34,27 @@ export default function App() {
   const currentVideoUrl = useMemo(() => BACKGROUND_VIDEO_URLS[Math.min(videoIndex, BACKGROUND_VIDEO_URLS.length - 1)], [videoIndex]);
   const hideSummary = vm.step === 5;
 
+  useEffect(() => {
+    setVideoReady(false);
+  }, [currentVideoUrl]);
+
   return (
     <div className="page-shell">
       <div className="bg-video-layer" aria-hidden>
+        <div className="bg-video-fallback" />
         {!videoUnavailable ? (
           <video
             key={currentVideoUrl}
+            className={videoReady ? "is-ready" : ""}
             autoPlay
             loop
             muted
             playsInline
             preload="auto"
+            onLoadedData={() => setVideoReady(true)}
+            onCanPlay={() => setVideoReady(true)}
             onError={() => {
+              setVideoReady(false);
               if (videoIndex < BACKGROUND_VIDEO_URLS.length - 1) {
                 setVideoIndex((prev) => prev + 1);
               } else {
@@ -54,9 +64,7 @@ export default function App() {
           >
             <source src={currentVideoUrl} type="video/mp4" />
           </video>
-        ) : (
-          <div className="bg-video-fallback" />
-        )}
+        ) : null}
       </div>
 
       <div className="build-badge">Сборка: {BUILD_NUMBER}</div>
