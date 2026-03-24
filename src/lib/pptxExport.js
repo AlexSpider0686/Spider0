@@ -1,401 +1,558 @@
 import PptxGenJS from "pptxgenjs";
-import { num } from "./estimate";
 
 const COLORS = {
-  bg: "F1F4F9",
-  panel: "FFFFFF",
-  text: "1F3348",
-  muted: "5D6E84",
-  line: "CAD5E3",
-  accent: "0F4E88",
-  teal: "1295A6",
-  green: "2E965B",
-  orange: "E79A25",
-  blue: "357ABD",
-  purple: "6B4AC7",
+  bg: "EEF4FC",
+  panel: "F7FAFF",
+  panelSoft: "FFFFFF",
+  line: "B7C7DC",
+  title: "1E3553",
+  text: "2F4A69",
+  muted: "6E8098",
+  accent: "1E9FC5",
+  accentDark: "1F5A99",
 };
 
-function safeCurrency(value) {
-  return `${num(value, 0)} ₽`;
+const CURRENCY_FORMATTER = new Intl.NumberFormat("ru-RU", {
+  maximumFractionDigits: 0,
+});
+
+function safeNum(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function addHeader(slide, title, subtitle, pageIndex) {
+function rub(value) {
+  return `${CURRENCY_FORMATTER.format(safeNum(value))} ₽`;
+}
+
+function num(value, digits = 1) {
+  return new Intl.NumberFormat("ru-RU", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(safeNum(value));
+}
+
+function sanitizeText(value) {
+  return String(value ?? "")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+    .trim();
+}
+
+function safeFileName(name) {
+  const base = sanitizeText(name || "Объект 1");
+  const cleaned = base.replace(/[<>:"/\\|?*]+/g, "_").slice(0, 80);
+  return `${cleaned || "Объект_1"}-presentation.pptx`;
+}
+
+function normalizeWidths(widths, totalWidth) {
+  const prepared = widths.map((value) => safeNum(value, 0));
+  const sum = prepared.reduce((acc, value) => acc + value, 0);
+  if (sum <= 0) return prepared.map(() => totalWidth / prepared.length);
+  if (sum <= 1.001) return prepared.map((value) => value * totalWidth);
+  return prepared.map((value) => (value / sum) * totalWidth);
+}
+
+function addSlideFrame(slide, title, subtitle, pageNumber) {
   slide.background = { color: COLORS.bg };
-  slide.addText(title, { x: 0.6, y: 0.35, w: 10.8, h: 0.45, fontSize: 23, bold: true, color: COLORS.text });
-  slide.addText(subtitle, { x: 0.6, y: 0.85, w: 11.8, h: 0.3, fontSize: 11, color: COLORS.muted });
   slide.addShape("rect", {
-    x: 0.6,
-    y: 1.22,
-    w: 12.1,
+    x: 0.35,
+    y: 0.2,
+    w: 12.63,
     h: 0.02,
-    fill: { color: COLORS.teal },
-    line: { color: COLORS.teal, pt: 0 },
+    fill: { color: COLORS.accent },
+    line: { color: COLORS.accent, pt: 0 },
   });
-  slide.addText(String(pageIndex), { x: 12.75, y: 7.0, w: 0.3, h: 0.2, fontSize: 9, color: COLORS.muted });
+
+  slide.addText(sanitizeText(title), {
+    x: 0.5,
+    y: 0.35,
+    w: 9.6,
+    h: 0.45,
+    fontFace: "Calibri",
+    fontSize: 21,
+    bold: true,
+    color: COLORS.title,
+  });
+
+  slide.addText(sanitizeText(subtitle), {
+    x: 0.5,
+    y: 0.82,
+    w: 9.8,
+    h: 0.28,
+    fontFace: "Calibri",
+    fontSize: 11,
+    color: COLORS.muted,
+  });
+
+  slide.addText(String(pageNumber), {
+    x: 12.52,
+    y: 7.02,
+    w: 0.25,
+    h: 0.2,
+    align: "right",
+    fontFace: "Calibri",
+    fontSize: 10,
+    color: COLORS.muted,
+  });
 }
 
-function addMetric(slide, label, value, x, y, w = 1.9) {
-  slide.addShape("rect", {
+function addMetricCards(slide, cards, x, y, w) {
+  const gap = 0.12;
+  const cardWidth = (w - gap * (cards.length - 1)) / cards.length;
+  cards.forEach((card, index) => {
+    const left = x + index * (cardWidth + gap);
+    slide.addShape("roundRect", {
+      x: left,
+      y,
+      w: cardWidth,
+      h: 0.9,
+      rectRadius: 0.08,
+      fill: { color: COLORS.panelSoft, transparency: 4 },
+      line: { color: COLORS.line, pt: 1 },
+    });
+    slide.addText(sanitizeText(card.label), {
+      x: left + 0.08,
+      y: y + 0.08,
+      w: cardWidth - 0.16,
+      h: 0.22,
+      fontFace: "Calibri",
+      fontSize: 9,
+      color: COLORS.muted,
+    });
+    slide.addText(sanitizeText(card.value), {
+      x: left + 0.08,
+      y: y + 0.3,
+      w: cardWidth - 0.16,
+      h: 0.4,
+      fontFace: "Calibri",
+      fontSize: 15,
+      bold: true,
+      color: COLORS.title,
+    });
+  });
+}
+
+function drawTable(slide, options) {
+  const {
     x,
     y,
     w,
-    h: 0.8,
-    fill: { color: COLORS.panel },
+    headers = [],
+    rows = [],
+    widths = [],
+    maxRows = 10,
+    rowH = 0.34,
+    fontSize = 9,
+    headerFill = "DFEBF8",
+  } = options;
+
+  if (!headers.length) return;
+
+  const columnWidths = normalizeWidths(widths.length ? widths : headers.map(() => 1), w);
+  const bodyRows = rows.slice(0, maxRows);
+  let currentY = y;
+
+  let currentX = x;
+  headers.forEach((header, columnIndex) => {
+    const cw = columnWidths[columnIndex];
+    slide.addShape("rect", {
+      x: currentX,
+      y: currentY,
+      w: cw,
+      h: rowH,
+      fill: { color: headerFill },
+      line: { color: COLORS.line, pt: 1 },
+    });
+    slide.addText(sanitizeText(header), {
+      x: currentX + 0.04,
+      y: currentY + 0.06,
+      w: Math.max(cw - 0.08, 0.01),
+      h: rowH - 0.08,
+      fontFace: "Calibri",
+      bold: true,
+      fontSize: Math.max(fontSize - 1, 8),
+      color: COLORS.title,
+      valign: "mid",
+    });
+    currentX += cw;
+  });
+
+  currentY += rowH;
+  bodyRows.forEach((row) => {
+    currentX = x;
+    headers.forEach((_, columnIndex) => {
+      const cw = columnWidths[columnIndex];
+      const raw = Array.isArray(row) ? row[columnIndex] : "";
+      slide.addShape("rect", {
+        x: currentX,
+        y: currentY,
+        w: cw,
+        h: rowH,
+        fill: { color: COLORS.panelSoft, transparency: 0 },
+        line: { color: COLORS.line, pt: 1 },
+      });
+      slide.addText(sanitizeText(raw), {
+        x: currentX + 0.04,
+        y: currentY + 0.05,
+        w: Math.max(cw - 0.08, 0.01),
+        h: rowH - 0.08,
+        fontFace: "Calibri",
+        fontSize,
+        color: COLORS.text,
+        valign: "mid",
+      });
+      currentX += cw;
+    });
+    currentY += rowH;
+  });
+}
+
+function buildTimeline(systemResults, objectData, totals) {
+  const systemsCount = Math.max(systemResults.length, 1);
+  const area = safeNum(objectData?.totalArea, 0);
+  const equipmentMillion = safeNum(totals?.totalEquipment, 0) / 1_000_000;
+  const designMonths = Math.max(...systemResults.map((item) => Math.max(Math.ceil(safeNum(item.designDurationMonths, 1)), 1)), 1);
+  const procurementMonths = Math.max(1, Math.min(5, Math.ceil(1 + systemsCount * 0.35 + equipmentMillion * 0.15)));
+  const deliveryMonths = Math.max(1, Math.min(5, Math.ceil(1 + systemsCount * 0.3 + equipmentMillion * 0.12)));
+  const smrMonths = Math.max(2, Math.min(9, Math.ceil(1 + area / 12000 + systemsCount * 0.4)));
+  const pnrMonths = Math.max(1, Math.min(4, Math.ceil(1 + systemsCount * 0.3)));
+
+  const bars = [
+    { label: "Проектирование", start: 1, duration: designMonths, color: "F59E0B" },
+    { label: "Закупка и логистика", start: 1, duration: procurementMonths, color: "7C3AED" },
+    { label: "Поставка оборудования", start: 2, duration: deliveryMonths, color: "0EA5A8" },
+    { label: "Строительно-монтажные работы", start: Math.max(2, designMonths), duration: smrMonths, color: "2563EB" },
+    { label: "ПНР и интеграция", start: Math.max(3, designMonths + smrMonths - 1), duration: pnrMonths, color: "16A34A" },
+  ];
+
+  const totalMonths = bars.reduce((acc, item) => Math.max(acc, item.start + item.duration - 1), 1);
+  return { bars, totalMonths };
+}
+
+function addGanttSlide(slide, systemResults, objectData, totals) {
+  const { bars, totalMonths } = buildTimeline(systemResults, objectData, totals);
+  const chartX = 3.1;
+  const chartY = 1.65;
+  const chartW = 8.6;
+  const rowH = 0.72;
+  const monthW = chartW / Math.max(totalMonths, 1);
+
+  slide.addShape("roundRect", {
+    x: 0.5,
+    y: 1.45,
+    w: 11.9,
+    h: 5.55,
+    rectRadius: 0.08,
+    fill: { color: COLORS.panel, transparency: 0 },
     line: { color: COLORS.line, pt: 1 },
   });
-  slide.addText(label, { x: x + 0.08, y: y + 0.08, w: w - 0.16, h: 0.2, fontSize: 8, color: COLORS.muted });
-  slide.addText(value, { x: x + 0.08, y: y + 0.32, w: w - 0.16, h: 0.3, fontSize: 13, bold: true, color: COLORS.text });
-}
 
-function buildTimeline({ objectData, recalculatedArea, systemResults, totals }) {
-  const designMonths = Math.max(...systemResults.map((item) => item.designDurationMonths || 1), 1);
-  const areaFactor = Math.max(recalculatedArea / 12000, 0.8);
-  const systemFactor = Math.max(systemResults.length, 1);
-  const regionFactor = objectData.regionCoef || 1;
-  const workFactor = Math.max((totals.totalWork + (totals.totalDesign || 0)) / 90_000_000, 0.7);
-
-  const procurementMonths = Math.max(1, Math.ceil(1 + systemFactor * 0.25 + areaFactor * 0.2));
-  const deliveryMonths = Math.max(1, Math.ceil(1 + regionFactor * 0.5 + areaFactor * 0.25));
-  const smrMonths = Math.max(2, Math.ceil(2 + areaFactor * 1.1 + workFactor * 0.8));
-  const pnrMonths = Math.max(1, Math.ceil(1 + systemFactor * 0.2 + workFactor * 0.4));
-
-  const startDesign = 1;
-  const startProcurement = 1;
-  const startDelivery = Math.max(2, startProcurement + 1);
-  const startSmr = Math.max(startDelivery + 1, designMonths);
-  const startPnr = startSmr + smrMonths - 1;
-  const totalMonths = Math.max(startPnr + pnrMonths - 1, designMonths);
-
-  return {
-    totalMonths,
-    tracks: [
-      { label: "Проектирование", start: startDesign, duration: designMonths, color: COLORS.orange },
-      { label: "Закупка и логистика", start: startProcurement, duration: procurementMonths, color: COLORS.purple },
-      { label: "Поставка оборудования", start: startDelivery, duration: deliveryMonths, color: COLORS.teal },
-      { label: "СМР", start: startSmr, duration: smrMonths, color: COLORS.blue },
-      { label: "ПНР и интеграция", start: startPnr, duration: pnrMonths, color: COLORS.green },
-    ],
-    designBySystem: systemResults.map((item) => ({
-      name: item.systemName,
-      months: item.designDurationMonths || 1,
-      team: item.designTeamSize || 1,
-    })),
-  };
-}
-
-function downloadArrayBuffer(fileName, arrayBuffer) {
-  const blob = new Blob([arrayBuffer], {
-    type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
-}
-
-async function writePptxFile(pptx, fileName) {
-  const data = await pptx.write({ outputType: "arraybuffer", compression: true });
-  downloadArrayBuffer(fileName, data);
-}
-
-export async function exportEstimatePptx({ objectData, budget, recalculatedArea, systemResults, totals }) {
-  const pptx = new PptxGenJS();
-  pptx.layout = "LAYOUT_WIDE";
-  pptx.author = "Spider0";
-  pptx.company = "Spider0";
-  pptx.subject = "Смета систем безопасности";
-  pptx.title = `Смета: ${objectData.projectName || "Проект"}`;
-
-  const slide1 = pptx.addSlide();
-  addHeader(slide1, "Общая бюджетная оценка проекта", "Оценка включает оборудование, материалы, СМР, ПНР и проектирование.", 1);
-  addMetric(slide1, "Оборудование", safeCurrency(totals.totalEquipment), 0.6, 1.55);
-  addMetric(slide1, "Материалы", safeCurrency(totals.totalMaterials), 2.6, 1.55);
-  addMetric(slide1, "СМР + ПНР", safeCurrency(totals.totalWork), 4.6, 1.55);
-  addMetric(slide1, "Проектирование", safeCurrency(totals.totalDesign || 0), 6.6, 1.55);
-  addMetric(slide1, "Итог проекта", safeCurrency(totals.total), 8.6, 1.55, 2.1);
-
-  slide1.addTable(
-    [
-      [{ text: "Статья", options: { bold: true } }, { text: "Сумма, ₽", options: { bold: true } }],
-      ["Оборудование", num(totals.totalEquipment, 0)],
-      ["Материалы", num(totals.totalMaterials, 0)],
-      ["СМР + ПНР", num(totals.totalWork, 0)],
-      ["Проектирование", num(totals.totalDesign || 0, 0)],
-      ["Накладные и начисления", num(totals.totalOverhead, 0)],
-      ["Прибыль", num(totals.totalProfit, 0)],
-      ["НДС", num(totals.totalVat, 0)],
-      ["Итог бюджета проекта", num(totals.total, 0)],
-    ],
-    {
-      x: 0.8,
-      y: 2.7,
-      w: 5.8,
-      h: 3.7,
-      border: { color: COLORS.line, pt: 1 },
-      fill: COLORS.panel,
-      color: COLORS.text,
-      fontSize: 10,
-      valign: "mid",
-      colW: [3.9, 1.9],
-    }
-  );
-
-  slide1.addTable(
-    [
-      [
-        { text: "Система", options: { bold: true } },
-        { text: "Оборуд.", options: { bold: true } },
-        { text: "Матер.", options: { bold: true } },
-        { text: "СМР+ПНР", options: { bold: true } },
-        { text: "Проект.", options: { bold: true } },
-        { text: "Итог", options: { bold: true } },
-      ],
-      ...systemResults.map((item) => [
-        item.systemName,
-        num(item.equipmentCost, 0),
-        num(item.materialCost, 0),
-        num(item.workTotal, 0),
-        num(item.designTotal || 0, 0),
-        num(item.total, 0),
-      ]),
-    ],
-    {
-      x: 6.9,
-      y: 2.7,
-      w: 5.6,
-      h: 3.7,
-      border: { color: COLORS.line, pt: 1 },
-      fill: COLORS.panel,
-      color: COLORS.text,
+  for (let month = 1; month <= totalMonths; month += 1) {
+    const x = chartX + (month - 1) * monthW;
+    slide.addShape("line", {
+      x,
+      y: chartY - 0.22,
+      w: 0,
+      h: bars.length * rowH + 0.22,
+      line: { color: "D9E5F3", pt: 1 },
+    });
+    slide.addText(`M${month}`, {
+      x: x + 0.02,
+      y: chartY - 0.43,
+      w: Math.max(monthW - 0.04, 0.2),
+      h: 0.18,
+      align: "center",
+      fontFace: "Calibri",
       fontSize: 9,
-      valign: "mid",
-      colW: [2.1, 0.8, 0.8, 0.8, 0.8, 0.7],
-    }
-  );
-
-  const slide2 = pptx.addSlide();
-  addHeader(slide2, "Системы и ключевое оборудование", "Наименование, количество, стоимость и маркер стоимости за единицу.", 2);
-  const rows = [
-    [
-      { text: "Система", options: { bold: true } },
-      { text: "Маркер", options: { bold: true } },
-      { text: "За ед., ₽", options: { bold: true } },
-      { text: "Ключевое оборудование", options: { bold: true } },
-      { text: "Кол-во", options: { bold: true } },
-      { text: "Сумма, ₽", options: { bold: true } },
-    ],
-  ];
-  for (const item of systemResults) {
-    const keyItems = item.equipmentData?.keyEquipment || [];
-    if (!keyItems.length) {
-      rows.push([item.systemName, item.unitWorkMarker?.label || "—", num(item.unitWorkMarker?.costPerUnit || 0, 0), "—", "—", "—"]);
-      continue;
-    }
-    keyItems.forEach((eq, idx) => {
-      rows.push([
-        idx === 0 ? item.systemName : "",
-        idx === 0 ? item.unitWorkMarker?.label || "—" : "",
-        idx === 0 ? num(item.unitWorkMarker?.costPerUnit || 0, 0) : "",
-        eq.name,
-        num(eq.qty, 0),
-        num(eq.total, 0),
-      ]);
+      bold: true,
+      color: COLORS.title,
     });
   }
-  slide2.addTable(rows, {
-    x: 0.6,
-    y: 1.6,
-    w: 12.2,
-    h: 5.9,
-    border: { color: COLORS.line, pt: 1 },
-    fill: COLORS.panel,
-    color: COLORS.text,
+
+  bars.forEach((item, index) => {
+    const y = chartY + index * rowH;
+    slide.addText(item.label, {
+      x: 0.78,
+      y: y + 0.17,
+      w: 2.25,
+      h: 0.2,
+      fontFace: "Calibri",
+      fontSize: 11,
+      bold: true,
+      color: COLORS.title,
+    });
+    slide.addShape("roundRect", {
+      x: chartX + (item.start - 1) * monthW + 0.02,
+      y: y + 0.1,
+      w: Math.max(item.duration * monthW - 0.04, monthW * 0.45),
+      h: 0.34,
+      rectRadius: 0.06,
+      fill: { color: item.color },
+      line: { color: item.color, pt: 1 },
+    });
+  });
+
+  slide.addShape("roundRect", {
+    x: 8.85,
+    y: 6.45,
+    w: 2.75,
+    h: 0.36,
+    rectRadius: 0.05,
+    fill: { color: COLORS.accentDark },
+    line: { color: COLORS.accentDark, pt: 1 },
+  });
+  slide.addText(`Готовность к сдаче: ${totalMonths} мес.`, {
+    x: 8.92,
+    y: 6.53,
+    w: 2.6,
+    h: 0.18,
+    align: "center",
+    fontFace: "Calibri",
+    fontSize: 11,
+    bold: true,
+    color: "FFFFFF",
+  });
+
+  slide.addText(
+    `Алгоритм сроков: площадь ${num(safeNum(objectData?.totalArea, 0), 0)} м², ` +
+      `${systemResults.length} систем, объём оборудования ${rub(safeNum(totals?.totalEquipment, 0))}.`,
+    {
+      x: 0.8,
+      y: 6.35,
+      w: 7.6,
+      h: 0.42,
+      fontFace: "Calibri",
+      fontSize: 9,
+      color: COLORS.muted,
+    }
+  );
+}
+
+export async function exportEstimatePptx({ objectData, budget, systemResults, totals }) {
+  const safeObject = objectData || {};
+  const safeBudget = budget || {};
+  const safeSystems = Array.isArray(systemResults) ? systemResults : [];
+  const safeTotals = totals || {};
+
+  const pptx = new PptxGenJS();
+  pptx.layout = "LAYOUT_WIDE";
+  pptx.author = "SmetaCore";
+  pptx.company = "SmetaCore";
+  pptx.subject = "Предварительный расчет бюджета систем безопасности";
+  pptx.title = "SmetaCore — Экспорт ТКП";
+  pptx.lang = "ru-RU";
+
+  const slide1 = pptx.addSlide();
+  addSlideFrame(
+    slide1,
+    "Общая бюджетная оценка проекта",
+    "Оценка включает оборудование, материалы, СМР/ПНР и проектирование.",
+    1
+  );
+  addMetricCards(
+    slide1,
+    [
+      { label: "Оборудование", value: rub(safeTotals.totalEquipment) },
+      { label: "Материалы", value: rub(safeTotals.totalMaterials) },
+      { label: "СМР + ПНР", value: rub(safeTotals.totalWork) },
+      { label: "Проектирование", value: rub(safeTotals.totalDesign) },
+      { label: "Итог проекта", value: rub(safeTotals.total) },
+    ],
+    0.55,
+    1.2,
+    12.2
+  );
+
+  drawTable(slide1, {
+    x: 0.58,
+    y: 2.25,
+    w: 6.2,
+    headers: ["Статья", "Сумма, ₽"],
+    widths: [0.67, 0.33],
+    rows: [
+      ["Оборудование", rub(safeTotals.totalEquipment)],
+      ["Материалы", rub(safeTotals.totalMaterials)],
+      ["СМР + ПНР", rub(safeTotals.totalWork)],
+      ["Проектирование", rub(safeTotals.totalDesign)],
+      ["Накладные и начисления", rub(safeTotals.totalOverhead)],
+      ["Прибыль", rub(safeTotals.totalProfit)],
+      ["НДС", rub(safeTotals.totalVat)],
+      ["Итог бюджета проекта", rub(safeTotals.total)],
+    ],
+    maxRows: 8,
+    rowH: 0.43,
+    fontSize: 10,
+  });
+
+  drawTable(slide1, {
+    x: 6.95,
+    y: 2.25,
+    w: 5.8,
+    headers: ["Система", "Оборуд.", "Матер.", "СМР+ПНР", "Проект.", "Итог"],
+    widths: [0.34, 0.13, 0.13, 0.14, 0.12, 0.14],
+    rows: safeSystems.map((item) => [
+      item.systemName || item.systemType || "—",
+      rub(item.equipmentCost),
+      rub(item.materialCost),
+      rub(item.workTotal),
+      rub(item.designTotal),
+      rub(item.total),
+    ]),
+    maxRows: 9,
+    rowH: 0.56,
     fontSize: 9,
-    valign: "mid",
-    colW: [1.8, 2.2, 1.0, 4.1, 0.9, 1.4],
+  });
+
+  const slide2 = pptx.addSlide();
+  addSlideFrame(
+    slide2,
+    "Системы и ключевое оборудование",
+    "Наименование, объём и стоимость ключевых позиций, влияющих на итоговую цену.",
+    2
+  );
+
+  const equipmentRows = [];
+  safeSystems.forEach((system) => {
+    const keyItems = system?.equipmentData?.keyEquipment || [];
+    if (!keyItems.length) {
+      equipmentRows.push([system.systemName || "—", system.vendor || "—", "Нет ключевой позиции", "—", "—", "—", "—"]);
+      return;
+    }
+
+    keyItems.forEach((item) => {
+      equipmentRows.push([
+        system.systemName || "—",
+        system.vendor || "—",
+        item.name || "—",
+        num(item.qty, 0),
+        rub(item.unitPrice),
+        rub(item.total),
+        item.basis || "Расчет по нормативной плотности",
+      ]);
+    });
+  });
+
+  drawTable(slide2, {
+    x: 0.55,
+    y: 1.2,
+    w: 12.2,
+    headers: ["Система", "Вендор", "Позиция", "Кол-во", "Цена", "Сумма", "Принцип расчета"],
+    widths: [0.18, 0.11, 0.24, 0.08, 0.1, 0.1, 0.19],
+    rows: equipmentRows,
+    maxRows: 10,
+    rowH: 0.53,
+    fontSize: 8,
+  });
+
+  const sourceRows = safeSystems.map((system) => {
+    const entries = system?.equipmentData?.marketEntries || [];
+    const usedSources = [...new Set(entries.flatMap((entry) => entry.usedSources || []))];
+    return [
+      system.systemName || "—",
+      entries.length ? String(entries.length) : "0",
+      usedSources.length ? String(usedSources.length) : "0",
+      usedSources.slice(0, 2).join(" | ") || "нет данных",
+    ];
+  });
+
+  drawTable(slide2, {
+    x: 0.55,
+    y: 6.05,
+    w: 12.2,
+    headers: ["Система", "Проверено источников", "Источников с ценой", "Примеры источников"],
+    widths: [0.22, 0.18, 0.16, 0.44],
+    rows: sourceRows,
+    maxRows: 4,
+    rowH: 0.28,
+    fontSize: 8,
+    headerFill: "D9E9F8",
   });
 
   const slide3 = pptx.addSlide();
-  addHeader(slide3, "Характеристики бюджета", "Коэффициенты и начисления, участвующие в расчете стоимости.", 3);
-  slide3.addTable(
-    [
-      [{ text: "Параметр", options: { bold: true } }, { text: "Значение", options: { bold: true } }, { text: "Комментарий", options: { bold: true } }],
-      ["Коэффициент кабельных работ", num(budget.cableCoef, 2), "Трассировка, резерв линий, плотность инженерной среды"],
-      ["Коэффициент оборудования", num(budget.equipmentCoef, 2), "Рыночная корректировка оборудования"],
-      ["Коэффициент трудозатрат", num(budget.laborCoef, 2), "Монтажные ограничения и доступ"],
-      ["Коэффициент сложности", num(budget.complexityCoef, 2), "Интеграционные и технологические требования"],
-      ["Ночные работы", num(budget.nightWorkCoef, 2), "Сменность и технологические окна"],
-      ["Стесненность", num(budget.constrainedCoef, 2), "Ограничения по доступу и логистике"],
-      ["Отчисления ФОТ, %", num(budget.payrollTaxesPercent, 1), "Начисляются на базу работ и проектирования"],
-      ["Утилизация, %", num(budget.utilizationPercent, 1), "Отпуска, больничные, потери рабочего времени"],
-      ["СИЗ, %", num(budget.ppePercent, 1), "Инструмент, расходники и СИЗ"],
-      ["АХР, %", num(budget.adminPercent, 1), "Административно-хозяйственные расходы"],
-      ["Региональный коэффициент", `x${num(objectData.regionCoef || 1, 2)}`, "Применяется к работам и проектированию"],
+  addSlideFrame(slide3, "Характеристики бюджета", "Коэффициенты и параметры, влияющие на стоимость работ.", 3);
+
+  drawTable(slide3, {
+    x: 0.55,
+    y: 1.2,
+    w: 12.2,
+    headers: ["Параметр", "Значение", "Пояснение"],
+    widths: [0.3, 0.12, 0.58],
+    rows: [
+      ["Коэффициент кабельных работ", `x${num(safeBudget.cableCoef, 2)}`, "Учитывает сложность трассировки и дополнительные кабельные резервы."],
+      ["Коэффициент стоимости оборудования", `x${num(safeBudget.equipmentCoef, 2)}`, "Используется для рыночной корректировки цен оборудования."],
+      ["Коэффициент трудозатрат", `x${num(safeBudget.laborCoef, 2)}`, "Корректирует трудоемкость монтажных и пусконаладочных работ."],
+      ["Коэффициент сложности", `x${num(safeBudget.complexityCoef, 2)}`, "Учитывает интеграцию, требования объекта и технологическую сложность."],
+      ["Высотность работ", `x${num(safeBudget.heightCoef, 2)}`, "Повышает трудоемкость при работах на высоте."],
+      ["Стесненность условий", `x${num(safeBudget.constrainedCoef, 2)}`, "Учитывает ограничения доступа и сложность логистики."],
+      ["Работа на действующем объекте", `x${num(safeBudget.operatingFacilityCoef, 2)}`, "Добавляет поправку при монтаже без остановки эксплуатации."],
+      ["Ночные работы", `x${num(safeBudget.nightWorkCoef, 2)}`, "Учитывает повышенную стоимость ночных смен."],
+      ["Сложность маршрутов", `x${num(safeBudget.routingCoef, 2)}`, "Учитывает длину и сложность прокладки трасс."],
+      ["Чистовая отделка", `x${num(safeBudget.finishCoef, 2)}`, "Повышает стоимость из-за аккуратного монтажа в отделке."],
+      ["ОПР / накладные расходы", `${num(safeBudget.overheadPercent, 1)}%`, "Начисляются на базовую стоимость работ."],
+      ["Отчисления ФОТ", `${num(safeBudget.payrollTaxesPercent, 1)}%`, "Начисляются на стоимость работ до применения регионального коэффициента."],
+      ["Утилизация (отпуска, больничные)", `${num(safeBudget.utilizationPercent, 1)}%`, "Учитывает нерабочее время персонала."],
+      ["СИЗ и расходники", `${num(safeBudget.ppePercent, 1)}%`, "Добавляются к стоимости работ."],
+      ["Административно-хозяйственные расходы", `${num(safeBudget.adminPercent, 1)}%`, "Начисляются после ФОТ/ОПР/утилизации/СИЗ."],
+      ["Рентабельность", `${num(safeBudget.profitabilityPercent, 1)}%`, "Маржинальная часть проекта."],
+      ["НДС", `${num(safeBudget.vatPercent, 1)}%`, "Налог на добавленную стоимость."],
+      ["Региональный коэффициент", `x${num(safeObject.regionCoef, 2)}`, `Регион: ${safeObject.regionName || "—"}. Применяется к стоимости работ.`],
     ],
-    {
-      x: 0.6,
-      y: 1.6,
-      w: 12.2,
-      h: 5.8,
-      border: { color: COLORS.line, pt: 1 },
-      fill: COLORS.panel,
-      color: COLORS.text,
-      fontSize: 9,
-      valign: "mid",
-      colW: [3.3, 1.4, 7.1],
-    }
-  );
+    maxRows: 18,
+    rowH: 0.31,
+    fontSize: 8,
+  });
 
   const slide4 = pptx.addSlide();
-  addHeader(slide4, "Декомпозиция бюджета по системам", "Оборудование, материалы, СМР/ПНР, проектирование и общий итог по каждой системе.", 4);
-  slide4.addTable(
+  addSlideFrame(slide4, "Декомпозиция бюджета по системам", "Разложение стоимости по каждой системе отдельно.", 4);
+
+  addMetricCards(
+    slide4,
     [
-      [
-        { text: "Система", options: { bold: true } },
-        { text: "Оборуд., ₽", options: { bold: true } },
-        { text: "Материалы, ₽", options: { bold: true } },
-        { text: "СМР+ПНР, ₽", options: { bold: true } },
-        { text: "Проектир., ₽", options: { bold: true } },
-        { text: "Итог, ₽", options: { bold: true } },
-      ],
-      ...systemResults.map((item) => [
-        item.systemName,
-        num(item.equipmentCost, 0),
-        num(item.materialCost, 0),
-        num(item.workTotal, 0),
-        num(item.designTotal || 0, 0),
-        num(item.total, 0),
-      ]),
-      ["ИТОГО", num(totals.totalEquipment, 0), num(totals.totalMaterials, 0), num(totals.totalWork, 0), num(totals.totalDesign || 0, 0), num(totals.total, 0)],
+      { label: "Оборудование", value: rub(safeTotals.totalEquipment) },
+      { label: "Материалы", value: rub(safeTotals.totalMaterials) },
+      { label: "Работы (СМР+ПНР)", value: rub(safeTotals.totalWork) },
+      { label: "Проектирование", value: rub(safeTotals.totalDesign) },
+      { label: "Общий бюджет", value: rub(safeTotals.total) },
     ],
-    {
-      x: 0.8,
-      y: 1.75,
-      w: 8.4,
-      h: 5.4,
-      border: { color: COLORS.line, pt: 1 },
-      fill: COLORS.panel,
-      color: COLORS.text,
-      fontSize: 10,
-      valign: "mid",
-      colW: [2.3, 1.2, 1.2, 1.2, 1.2, 1.3],
-    }
+    0.55,
+    1.2,
+    12.2
   );
 
-  slide4.addShape("rect", {
-    x: 9.45,
-    y: 1.75,
-    w: 3.25,
-    h: 5.4,
-    fill: { color: COLORS.panel },
-    line: { color: COLORS.line, pt: 1 },
+  drawTable(slide4, {
+    x: 0.55,
+    y: 2.28,
+    w: 12.2,
+    headers: ["Система", "Оборуд.", "Матер.", "СМР+ПНР", "Проект.", "Итог", "Доля"],
+    widths: [0.32, 0.11, 0.11, 0.12, 0.11, 0.13, 0.1],
+    rows: safeSystems.map((item) => {
+      const share = safeNum(safeTotals.total, 0) > 0 ? (safeNum(item.total, 0) / safeNum(safeTotals.total, 1)) * 100 : 0;
+      return [
+        item.systemName || "—",
+        rub(item.equipmentCost),
+        rub(item.materialCost),
+        rub(item.workTotal),
+        rub(item.designTotal),
+        rub(item.total),
+        `${num(share, 1)}%`,
+      ];
+    }),
+    maxRows: 8,
+    rowH: 0.6,
+    fontSize: 9,
   });
-  slide4.addText("Сводка", { x: 9.65, y: 2.0, w: 2.8, h: 0.3, fontSize: 13, bold: true, color: COLORS.text });
-  slide4.addText(`Оборудование: ${safeCurrency(totals.totalEquipment)}`, { x: 9.65, y: 2.45, w: 2.8, h: 0.25, fontSize: 9, color: COLORS.muted });
-  slide4.addText(`Материалы: ${safeCurrency(totals.totalMaterials)}`, { x: 9.65, y: 2.72, w: 2.8, h: 0.25, fontSize: 9, color: COLORS.muted });
-  slide4.addText(`СМР+ПНР: ${safeCurrency(totals.totalWork)}`, { x: 9.65, y: 2.99, w: 2.8, h: 0.25, fontSize: 9, color: COLORS.muted });
-  slide4.addText(`Проектирование: ${safeCurrency(totals.totalDesign || 0)}`, { x: 9.65, y: 3.26, w: 2.8, h: 0.25, fontSize: 9, color: COLORS.muted });
-  slide4.addText(`НДС: ${safeCurrency(totals.totalVat)}`, { x: 9.65, y: 3.53, w: 2.8, h: 0.25, fontSize: 9, color: COLORS.muted });
-  slide4.addText(`Итог: ${safeCurrency(totals.total)}`, { x: 9.65, y: 4.0, w: 2.8, h: 0.3, fontSize: 12, bold: true, color: COLORS.text });
 
   const slide5 = pptx.addSlide();
-  const timeline = buildTimeline({ objectData, recalculatedArea, systemResults, totals });
-  addHeader(slide5, "График реализации проекта", "Сроки по этапам и сроки проектирования по каждой системе.", 5);
+  addSlideFrame(
+    slide5,
+    "График реализации проекта",
+    "Ориентировочные сроки проектирования, поставки, СМР, ПНР и интеграции.",
+    5
+  );
+  addGanttSlide(slide5, safeSystems, safeObject, safeTotals);
 
-  const axisX = 3.05;
-  const axisY = 1.95;
-  const axisW = 7.35;
-  const rowH = 0.74;
-  const monthW = axisW / Math.max(timeline.totalMonths, 1);
-
-  for (let month = 1; month <= timeline.totalMonths; month += 1) {
-    slide5.addShape("rect", {
-      x: axisX + monthW * (month - 1),
-      y: 1.45,
-      w: monthW - 0.03,
-      h: 0.33,
-      fill: { color: "E6EDF7" },
-      line: { color: "D6DFEC", pt: 0.5 },
-    });
-    slide5.addText(`M${month}`, {
-      x: axisX + monthW * (month - 1),
-      y: 1.53,
-      w: monthW - 0.03,
-      h: 0.16,
-      fontSize: 10,
-      color: COLORS.text,
-      align: "center",
-      bold: true,
-    });
-  }
-
-  timeline.tracks.forEach((track, index) => {
-    const y = axisY + rowH * index;
-    slide5.addText(track.label, { x: 0.6, y: y + 0.12, w: 2.35, h: 0.3, fontSize: 10, color: COLORS.text, bold: true });
-    slide5.addShape("rect", {
-      x: axisX,
-      y,
-      w: axisW,
-      h: 0.42,
-      fill: { color: "E6EDF7" },
-      line: { color: "DCE4F0", pt: 0.5 },
-    });
-    slide5.addShape("rect", {
-      x: axisX + (track.start - 1) * monthW,
-      y,
-      w: Math.max(track.duration * monthW, 0.25),
-      h: 0.42,
-      fill: { color: track.color },
-      line: { color: track.color, pt: 0.5 },
-    });
+  await pptx.writeFile({
+    fileName: safeFileName(safeObject.projectName),
+    compression: false,
   });
-
-  slide5.addShape("rect", {
-    x: 10.7,
-    y: 1.95,
-    w: 2.0,
-    h: 4.6,
-    fill: { color: COLORS.panel },
-    line: { color: COLORS.line, pt: 1 },
-  });
-  slide5.addText("Проектирование\nпо системам", { x: 10.85, y: 2.1, w: 1.7, h: 0.5, fontSize: 11, bold: true, color: COLORS.text, valign: "mid" });
-
-  timeline.designBySystem.slice(0, 6).forEach((item, idx) => {
-    slide5.addText(`${item.name}`, { x: 10.85, y: 2.7 + idx * 0.58, w: 1.7, h: 0.18, fontSize: 8, color: COLORS.muted });
-    slide5.addText(`${item.months} мес., ~${item.team} чел.`, {
-      x: 10.85,
-      y: 2.88 + idx * 0.58,
-      w: 1.7,
-      h: 0.18,
-      fontSize: 8,
-      bold: true,
-      color: COLORS.text,
-    });
-  });
-
-  slide5.addShape("rect", {
-    x: 7.0,
-    y: 6.25,
-    w: 3.4,
-    h: 0.46,
-    fill: { color: COLORS.teal },
-    line: { color: COLORS.teal, pt: 0.5 },
-  });
-  slide5.addText(`Готовность к сдаче — ${timeline.totalMonths} месяцев`, {
-    x: 7.0,
-    y: 6.36,
-    w: 3.4,
-    h: 0.22,
-    fontSize: 11,
-    color: "FFFFFF",
-    align: "center",
-    bold: true,
-  });
-
-  const filename = `${objectData.projectName || "estimate"}-presentation.pptx`;
-  await writePptxFile(pptx, filename);
 }
