@@ -1,9 +1,16 @@
 import { calculateTotals } from "./estimate";
 import { calculateSystemWithBreakdown } from "./systemCalculators/index.js";
 
-export function calculateEstimateEngine(systems, zones, budget, objectData, vendorPriceSnapshots = {}) {
+export function calculateEstimateEngine(systems, zones, budget, objectData, vendorPriceSnapshots = {}, projectSpecSnapshots = {}) {
   const systemsDetailed = systems.map((system) =>
-    calculateSystemWithBreakdown(system, zones, budget, objectData, vendorPriceSnapshots?.[system.id] || null)
+    calculateSystemWithBreakdown(
+      system,
+      zones,
+      budget,
+      objectData,
+      vendorPriceSnapshots?.[system.id] || null,
+      projectSpecSnapshots?.[system.id] || null
+    )
   );
   const totals = calculateTotals(systemsDetailed);
   return {

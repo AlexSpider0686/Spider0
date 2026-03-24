@@ -81,8 +81,7 @@ async function requestPriceApi(payload) {
   throw lastError || new Error("Price API error: all endpoints failed");
 }
 
-export async function fetchVendorPrices(systemType, vendorName) {
-  const requests = buildPriceRequests(systemType, vendorName);
+export async function fetchPricesByRequests(requests = []) {
   const payload = await requestPriceApi({ requests });
   const resultsByKey = new Map((payload.results || []).map((entry) => [entry.key, entry]));
 
@@ -96,9 +95,14 @@ export async function fetchVendorPrices(systemType, vendorName) {
         status: result.status || "fallback",
         reason: result.reason || null,
         sourceCount: result.sourceCount || 0,
-        checkedSources: result.checkedSources || request.sourceUrls.length,
+        checkedSources: result.checkedSources || request.sourceUrls?.length || 0,
         usedSources: result.usedSources || [],
       };
     }),
   };
+}
+
+export async function fetchVendorPrices(systemType, vendorName) {
+  const requests = buildPriceRequests(systemType, vendorName);
+  return fetchPricesByRequests(requests);
 }

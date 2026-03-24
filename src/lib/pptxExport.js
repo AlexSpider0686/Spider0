@@ -212,9 +212,13 @@ function buildTimeline(systemResults, objectData, totals) {
   const area = safeNum(objectData?.totalArea, 0);
   const equipmentMillion = safeNum(totals?.totalEquipment, 0) / 1_000_000;
   const designMonths = Math.max(...systemResults.map((item) => Math.max(Math.ceil(safeNum(item.designDurationMonths, 1)), 1)), 1);
+  const executionMonthsFromSystems = Math.max(...systemResults.map((item) => Math.max(Math.ceil(safeNum(item.executionDurationMonths, 0)), 0)), 0);
   const procurementMonths = Math.max(1, Math.min(5, Math.ceil(1 + systemsCount * 0.35 + equipmentMillion * 0.15)));
   const deliveryMonths = Math.max(1, Math.min(5, Math.ceil(1 + systemsCount * 0.3 + equipmentMillion * 0.12)));
-  const smrMonths = Math.max(2, Math.min(9, Math.ceil(1 + area / 12000 + systemsCount * 0.4)));
+  const smrMonths =
+    executionMonthsFromSystems > 0
+      ? Math.max(1, Math.min(9, executionMonthsFromSystems))
+      : Math.max(2, Math.min(9, Math.ceil(1 + area / 12000 + systemsCount * 0.4)));
   const pnrMonths = Math.max(1, Math.min(4, Math.ceil(1 + systemsCount * 0.3)));
 
   const bars = [

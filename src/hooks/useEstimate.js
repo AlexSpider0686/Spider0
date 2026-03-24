@@ -3,9 +3,16 @@ import { DEFAULT_BUDGET, DEFAULT_SYSTEM, DEFAULT_ZONE, OBJECT_TYPES, SYSTEM_TYPE
 import { buildEstimateRows, downloadCsv, toNumber } from "../lib/estimate";
 import { calculateEstimateEngine } from "../lib/estimateEngine";
 import { buildZonesFromPreset, rebalanceZoneAreasWithLocks, validateZoneDistribution } from "../lib/zoneEngine";
-import { fetchVendorPrices } from "../lib/priceCollector";
+import { fetchPricesByRequests, fetchVendorPrices } from "../lib/priceCollector";
 import { VENDOR_EQUIPMENT } from "../config/vendorConfig";
 import { DEFAULT_REGION_NAME, getRegionCoef } from "../config/regionsConfig";
+
+function removeById(mapObject, id) {
+  if (!(id in mapObject)) return mapObject;
+  const next = { ...mapObject };
+  delete next[id];
+  return next;
+}
 
 export default function useEstimate() {
   const [step, setStep] = useState(0);
@@ -31,12 +38,14 @@ export default function useEstimate() {
   const [zonePreset, setZonePreset] = useState("business_center");
   const [lockedZoneIds, setLockedZoneIds] = useState([]);
   const [vendorPriceSnapshots, setVendorPriceSnapshots] = useState({});
-  const pricingSignaturesRef = useRef(new Map());
+  const [apsProjectSnapshots, setApsProjectSnapshots] = useState({});
+  const [apsImportStatuses, setApsImportStatuses] = useState({});
 
+  const pricingSignaturesRef = useRef(new Map());
   const recalculatedArea = useMemo(() => zones.reduce((sum, zone) => sum + toNumber(zone.area), 0), [zones]);
   const { systemsDetailed: systemResults, totals } = useMemo(
-    () => calculateEstimateEngine(systems, zones, budget, objectData, vendorPriceSnapshots),
-    [systems, zones, budget, objectData, vendorPriceSnapshots]
+    () => calculateEstimateEngine(systems, zones, budget, objectData, vendorPriceSnapshots, apsProjectSnapshots),
+    [systems, zones, budget, objectData, vendorPriceSnapshots, apsProjectSnapshots]
   );
   const zoneDistribution = useMemo(() => validateZoneDistribution(zones, objectData.totalArea), [zones, objectData.totalArea]);
 
@@ -48,23 +57,32 @@ export default function useEstimate() {
     setObjectData((prev) => ({ ...prev, [key]: value }));
   };
 
-  const updateZone = (id, key, value) => setZones((prev) => prev.map((zone) => (zone.id === id ? { ...zone, [key]: value } : zone)));
+  const updateZone = (id, key, value) => {
+    setZones((prev) => prev.map((zone) => (zone.id === id ? { ...zone, [key]: value } : zone)));
+  };
+
   const addZone = () => setZones((prev) => [...prev, DEFAULT_ZONE(Date.now(), `Зона ${prev.length + 1}`, "office", 1000, 1)]);
   const removeZone = (id) => setZones((prev) => (prev.length <= 1 ? prev : prev.filter((zone) => zone.id !== id)));
+
   const updateZoneShare = (zoneId, nextPercent) =>
     setZones((prev) => rebalanceZoneAreasWithLocks(prev, zoneId, nextPercent, objectData.totalArea, lockedZoneIds));
+
   const toggleZoneLock = (zoneId) =>
     setLockedZoneIds((prev) => (prev.includes(zoneId) ? prev.filter((item) => item !== zoneId) : [...prev, zoneId]));
 
   const applyZonePreset = (presetKey) => {
     const next = buildZonesFromPreset(presetKey, objectData.totalArea);
-    if (next.length) {
-      setZones(next);
-      setLockedZoneIds([]);
-    }
+    if (!next.length) return;
+    setZones(next);
+    setLockedZoneIds([]);
   };
 
-  const updateSystem = (id, key, value) =>
+  const updateSystem = (id, key, value) => {
+    if (key === "type" && value !== "aps") {
+      setApsProjectSnapshots((prev) => removeById(prev, id));
+      setApsImportStatuses((prev) => removeById(prev, id));
+    }
+
     setSystems((prev) => {
       if (key === "type" && prev.some((system) => system.id !== id && system.type === value)) {
         return prev;
@@ -73,6 +91,7 @@ export default function useEstimate() {
       return prev.map((system) => {
         if (system.id !== id) return system;
         if (key !== "type") return { ...system, [key]: value };
+
         const nextType = value;
         const nextVendors = VENDORS[nextType] || ["Базовый"];
         return {
@@ -85,6 +104,7 @@ export default function useEstimate() {
         };
       });
     });
+  };
 
   const addSystem = () =>
     setSystems((prev) => {
@@ -93,7 +113,12 @@ export default function useEstimate() {
       if (!nextType) return prev;
       return [...prev, DEFAULT_SYSTEM(Date.now(), nextType)];
     });
-  const removeSystem = (id) => setSystems((prev) => (prev.length <= 1 ? prev : prev.filter((system) => system.id !== id)));
+
+  const removeSystem = (id) => {
+    setSystems((prev) => (prev.length <= 1 ? prev : prev.filter((system) => system.id !== id)));
+    setApsProjectSnapshots((prev) => removeById(prev, id));
+    setApsImportStatuses((prev) => removeById(prev, id));
+  };
 
   const updateSystemEquipmentProfile = (systemId, equipmentKey, profileKey) =>
     setSystems((prev) =>
@@ -121,6 +146,70 @@ export default function useEstimate() {
       }));
     }
   };
+
+  const importApsProjectPdf = async (systemId, file) => {
+    const system = systems.find((item) => item.id === systemId);
+    if (!system || system.type !== "aps") {
+      throw new Error("Импорт PDF доступен только для системы АПС.");
+    }
+    if (!file) return;
+
+    setApsImportStatuses((prev) => ({
+      ...prev,
+      [systemId]: {
+        state: "loading",
+        message: "Идет анализ PDF и сбор цен...",
+      },
+    }));
+
+    try {
+      const [{ parseApsProjectPdf }, { buildApsProjectPriceRequests, buildApsProjectSnapshot }] = await Promise.all([
+        import("../lib/apsProjectParser"),
+        import("../lib/apsProjectEstimate"),
+      ]);
+
+      const parsedProject = await parseApsProjectPdf(file);
+      const requests = buildApsProjectPriceRequests(parsedProject.items, system.vendor);
+      const priceSnapshot = await fetchPricesByRequests(requests);
+      const snapshot = buildApsProjectSnapshot({
+        fileName: file.name,
+        parsedProject,
+        requests,
+        priceSnapshot,
+        objectData,
+        vendorName: system.vendor,
+      });
+
+      setApsProjectSnapshots((prev) => ({ ...prev, [systemId]: snapshot }));
+      setApsImportStatuses((prev) => ({
+        ...prev,
+        [systemId]: {
+          state: "success",
+          message: `Распознано позиций: ${snapshot.items.length}. Источников с ценой: ${snapshot.sourceStats.sourceWithPrice}.`,
+        },
+      }));
+    } catch (error) {
+      setApsImportStatuses((prev) => ({
+        ...prev,
+        [systemId]: {
+          state: "error",
+          message: error?.message || "Не удалось обработать PDF-проект.",
+        },
+      }));
+      throw error;
+    }
+  };
+
+  const clearApsProjectPdf = (systemId) => {
+    setApsProjectSnapshots((prev) => removeById(prev, systemId));
+    setApsImportStatuses((prev) => removeById(prev, systemId));
+  };
+
+  useEffect(() => {
+    const systemIds = new Set(systems.map((item) => String(item.id)));
+    setApsProjectSnapshots((prev) => Object.fromEntries(Object.entries(prev).filter(([id]) => systemIds.has(String(id)))));
+    setApsImportStatuses((prev) => Object.fromEntries(Object.entries(prev).filter(([id]) => systemIds.has(String(id)))));
+  }, [systems]);
 
   useEffect(() => {
     let cancelled = false;
@@ -202,6 +291,8 @@ export default function useEstimate() {
     setZonePreset,
     lockedZoneIds,
     vendorPriceSnapshots,
+    apsProjectSnapshots,
+    apsImportStatuses,
     recalculatedArea,
     systemResults,
     totals,
@@ -220,6 +311,8 @@ export default function useEstimate() {
     updateSystemEquipmentProfile,
     updateBudget,
     refreshVendorPricing,
+    importApsProjectPdf,
+    clearApsProjectPdf,
     exportEstimate,
     exportEstimateCsv,
     setZones,
