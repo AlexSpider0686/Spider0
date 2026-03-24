@@ -140,7 +140,9 @@ async function dispatchOtpCode(email, code) {
     return {
       delivery: "debug",
       debugCode: code,
-      warning: resendError ? "email_provider_failed_debug_mode" : "email_provider_not_configured_debug_mode",
+      warning: resendError
+        ? `email_provider_failed_debug_mode:${String(resendError?.message || "unknown_error").slice(0, 180)}`
+        : "email_provider_not_configured_debug_mode",
     };
   }
 

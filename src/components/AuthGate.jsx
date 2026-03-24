@@ -89,7 +89,13 @@ export default function AuthGate({ onAuthorized }) {
       setExpiresAtMs(Date.now() + Number(result.expiresInSeconds || 600) * 1000);
 
       if (result.delivery === "debug" && result.debugCode) {
-        setHint(`Тестовый код: ${result.debugCode}`);
+        let reason = "";
+        if (String(result.warning || "").startsWith("email_provider_not_configured_debug_mode")) {
+          reason = "Письмо не отправлено: почтовый провайдер не настроен.";
+        } else if (String(result.warning || "").startsWith("email_provider_failed_debug_mode")) {
+          reason = "Письмо не отправлено: ошибка провайдера, включен тестовый режим.";
+        }
+        setHint(`Тестовый код: ${result.debugCode}${reason ? `. ${reason}` : ""}`);
       } else {
         setHint("Код отправлен на почту");
       }
