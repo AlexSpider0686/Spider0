@@ -6,7 +6,6 @@ import { buildZonesFromPreset, rebalanceZoneAreasWithLocks, validateZoneDistribu
 import { fetchVendorPrices } from "../lib/priceCollector";
 import { VENDOR_EQUIPMENT } from "../config/vendorConfig";
 import { DEFAULT_REGION_NAME, getRegionCoef } from "../config/regionsConfig";
-import { exportEstimatePptx } from "../lib/pptxExport";
 
 export default function useEstimate() {
   const [step, setStep] = useState(0);
@@ -178,6 +177,7 @@ export default function useEstimate() {
     try {
       const objectTypeLabel = OBJECT_TYPES.find((item) => item.value === objectData.objectType)?.label || objectData.objectType;
       const payload = { objectData: { ...objectData, objectTypeLabel }, budget, zones, recalculatedArea, systemResults, totals };
+      const { exportEstimatePptx } = await import("../lib/pptxExport");
       await exportEstimatePptx(payload);
     } catch (error) {
       window.alert(`Ошибка экспорта PPTX: ${error?.message || "неизвестная ошибка"}`);
