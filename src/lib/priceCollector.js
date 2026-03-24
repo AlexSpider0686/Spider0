@@ -46,7 +46,8 @@ export function buildPriceRequests(systemType, vendorName) {
 }
 
 function buildApiEndpoints() {
-  const fromEnv = import.meta.env.VITE_PRICE_API_URL;
+  const fromEnv =
+    typeof import.meta !== "undefined" && import.meta?.env ? import.meta.env.VITE_PRICE_API_URL : undefined;
   const endpoints = ["/api/vendor-prices", "/vendor-prices", fromEnv];
 
   if (typeof window !== "undefined" && /localhost|127\.0\.0\.1/i.test(window.location.hostname)) {
@@ -85,16 +86,62 @@ export async function fetchPricesByRequests(requests = []) {
   const payload = await requestPriceApi({ requests });
   const resultsByKey = new Map((payload.results || []).map((entry) => [entry.key, entry]));
 
+  const sanitizePrice = (request, result) => {
+    const fallback = Number(request?.fallbackPrice);
+    const fetched = Number(result?.price);
+    if (!Number.isFinite(fetched) || fetched <= 0) {
+      return {
+        price: Number.isFinite(fallback) ? fallback : null,
+        status: "fallback",
+        reason: result?.reason || "price_not_found",
+        sourceCount: 0,
+      };
+    }
+
+    if (!Number.isFinite(fallback) || fallback <= 0) {
+      return {
+        price: fetched,
+        status: result?.status || "fetched",
+        reason: result?.reason || null,
+        sourceCount: result?.sourceCount || 0,
+      };
+    }
+
+    const label = `${request?.equipmentLabel || ""} ${request?.equipmentKey || ""}`.toLowerCase();
+    const isMaterialLike = /material|кабел|труб|короб|лоток|дюбел|саморез|хомут|пена/u.test(label);
+    const minRatio = isMaterialLike ? 0.15 : 0.2;
+    const maxRatio = isMaterialLike ? 6 : 10;
+    const minAllowed = fallback * minRatio;
+    const maxAllowed = fallback * maxRatio;
+
+    if (fetched < minAllowed || fetched > maxAllowed) {
+      return {
+        price: fallback,
+        status: "fallback_outlier",
+        reason: "outlier_filtered",
+        sourceCount: 0,
+      };
+    }
+
+    return {
+      price: fetched,
+      status: result?.status || "fetched",
+      reason: result?.reason || null,
+      sourceCount: result?.sourceCount || 0,
+    };
+  };
+
   return {
     fetchedAt: payload.fetchedAt,
     entries: requests.map((request) => {
       const result = resultsByKey.get(request.key) || {};
+      const sanitized = sanitizePrice(request, result);
       return {
         ...request,
-        price: result.price ?? request.fallbackPrice,
-        status: result.status || "fallback",
-        reason: result.reason || null,
-        sourceCount: result.sourceCount || 0,
+        price: sanitized.price,
+        status: sanitized.status,
+        reason: sanitized.reason,
+        sourceCount: sanitized.sourceCount,
         checkedSources: result.checkedSources || request.sourceUrls?.length || 0,
         usedSources: result.usedSources || [],
       };

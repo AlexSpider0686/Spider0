@@ -22,6 +22,44 @@ const INFLUENCE_WEIGHT_BY_CATEGORY = {
   equipment: 0.15,
 };
 
+const EXECUTION_HOURS_BY_CATEGORY = {
+  detector: 0.36,
+  panel: 2.1,
+  notification: 0.48,
+  power: 0.95,
+  equipment: 0.75,
+};
+
+const DESIGN_HOURS_BY_CATEGORY = {
+  detector: 0.07,
+  panel: 0.52,
+  notification: 0.1,
+  power: 0.22,
+  equipment: 0.15,
+};
+
+const EXECUTION_HOURS_BY_MATERIAL_UNIT = {
+  м: 0.028,
+  м2: 0.02,
+  кг: 0.015,
+  л: 0.02,
+  уп: 0.2,
+  лист: 0.35,
+  шт: 0.08,
+  компл: 0.45,
+};
+
+const DESIGN_HOURS_BY_MATERIAL_UNIT = {
+  м: 0.004,
+  м2: 0.003,
+  кг: 0.002,
+  л: 0.003,
+  уп: 0.02,
+  лист: 0.03,
+  шт: 0.015,
+  компл: 0.06,
+};
+
 function trimSlash(url) {
   return String(url || "").replace(/\/+$/, "");
 }
@@ -46,14 +84,15 @@ function fallbackPriceForItem(item) {
 }
 
 function buildSearchQuery(item, defaultVendor) {
-  const brand = item.brand || defaultVendor || "";
-  const modelOrName = item.model || item.name;
-  return `${brand} ${modelOrName}`.trim();
+  const parts = [item.mark || item.brand || defaultVendor || "", item.model || "", item.name || ""]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+  return parts.join(" ");
 }
 
 function buildRequestKey(index, item) {
-  const model = (item.model || item.name || "item").slice(0, 24).replace(/\s+/g, "_");
-  return `aps_pdf_${index}_${model}`;
+  const model = (item.model || item.name || "item").slice(0, 40).replace(/\s+/g, "_");
+  return `aps_pdf_${item.position || "row"}_${index}_${model}`;
 }
 
 function clamp(value, min, max) {
@@ -63,7 +102,7 @@ function clamp(value, min, max) {
 export function buildApsProjectPriceRequests(items = [], defaultVendor = "Базовый") {
   return items.map((item, index) => {
     const searchQuery = buildSearchQuery(item, defaultVendor);
-    const manufacturerName = item.brand || defaultVendor;
+    const manufacturerName = item.mark || item.brand || defaultVendor;
     const source = getManufacturerSource("aps", manufacturerName);
     const manufacturerSearch = buildManufacturerSearchUrl(source?.website, searchQuery);
     const sourceUrls = [manufacturerSearch, buildTinkoSearchUrl(searchQuery)].filter(Boolean);
@@ -82,35 +121,44 @@ export function buildApsProjectPriceRequests(items = [], defaultVendor = "Баз
   });
 }
 
-function estimateLaborByProjectMetrics(metrics = {}, objectData = {}) {
-  const detectorsQty = toSafeQty(metrics.detectorsQty);
-  const notificationQty = toSafeQty(metrics.notificationQty);
-  const panelQty = toSafeQty(metrics.panelQty);
-  const powerQty = toSafeQty(metrics.powerQty);
-  const cableLengthM = toSafeQty(metrics.cableLengthM);
-  const materialLines = toSafeQty(metrics.materialLines);
+function estimateLaborByProjectItems(items = [], metrics = {}, objectData = {}) {
   const floors = Math.max(toSafeQty(objectData.floors), 1);
   const basementFloors = toSafeQty(objectData.basementFloors);
+  const cableLengthM = toSafeQty(metrics.cableLengthM);
 
-  const baseExecutionHours =
-    detectorsQty * 0.35 +
-    notificationQty * 0.42 +
-    panelQty * 1.7 +
-    powerQty * 0.9 +
-    cableLengthM * 0.028 +
-    materialLines * 0.4;
+  let executionHours = 0;
+  let designHours = 0;
+  let materialLines = 0;
+  let devicesQty = 0;
 
-  const baseDesignHours =
-    detectorsQty * 0.07 +
-    notificationQty * 0.08 +
-    panelQty * 1.25 +
-    powerQty * 0.5 +
-    cableLengthM * 0.004 +
-    Math.max(6, materialLines * 0.35);
+  for (const item of items) {
+    const qty = toSafeQty(item.qty);
+    if (qty <= 0) continue;
+
+    if (item.kind === "material") {
+      materialLines += 1;
+      executionHours += qty * (EXECUTION_HOURS_BY_MATERIAL_UNIT[item.unit] || 0.08);
+      designHours += qty * (DESIGN_HOURS_BY_MATERIAL_UNIT[item.unit] || 0.015);
+      continue;
+    }
+
+    devicesQty += qty;
+    const executionNorm = EXECUTION_HOURS_BY_CATEGORY[item.category] || EXECUTION_HOURS_BY_CATEGORY.equipment;
+    const designNorm = DESIGN_HOURS_BY_CATEGORY[item.category] || DESIGN_HOURS_BY_CATEGORY.equipment;
+    executionHours += qty * executionNorm;
+    designHours += qty * designNorm;
+  }
+
+  executionHours += cableLengthM * 0.032;
+  designHours += cableLengthM * 0.004;
 
   const objectComplexity = 1 + Math.max(floors - 1, 0) * 0.02 + basementFloors * 0.03;
-  const executionHours = baseExecutionHours * objectComplexity;
-  const designHours = baseDesignHours * (1 + Math.max(objectComplexity - 1, 0) * 0.65);
+  const sectionComplexity = 1 + Math.max(materialLines - 10, 0) * 0.004;
+  executionHours = executionHours * objectComplexity * sectionComplexity;
+  designHours = designHours * (1 + Math.max(objectComplexity - 1, 0) * 0.65);
+
+  executionHours = Math.max(executionHours, 24);
+  designHours = Math.max(designHours, 8);
 
   const crewSize = clamp(Math.ceil(executionHours / 176), 2, 18);
   const executionDays = Math.max(5, Math.ceil(executionHours / (crewSize * 8)));
@@ -129,6 +177,8 @@ function estimateLaborByProjectMetrics(metrics = {}, objectData = {}) {
     designMonths,
     baseExecutionCost: executionHours * LABOR_RATE_PER_HOUR,
     baseDesignCost: designHours * DESIGN_RATE_PER_HOUR,
+    materialLines,
+    devicesQty,
   };
 }
 
@@ -179,7 +229,7 @@ function buildKeyEquipment(pricedItems) {
       qty: item.qty,
       unitPrice: item.unitPrice,
       total: item.total,
-      basis: `Позиция загружена из PDF-спецификации (${item.unit}).`,
+      basis: `Позиция ${item.position || "без номера"} загружена из PDF-спецификации (${item.unit}).`,
     }));
 }
 
@@ -193,7 +243,7 @@ export function buildApsProjectSnapshot({
 }) {
   const pricedItems = mapPricesToItems(parsedProject.items, requests, priceSnapshot);
   const totals = splitTotals(pricedItems);
-  const labor = estimateLaborByProjectMetrics(parsedProject.metrics, objectData);
+  const labor = estimateLaborByProjectItems(pricedItems, parsedProject.metrics, objectData);
   const sourceChecked = pricedItems.reduce((sum, item) => sum + item.checkedSources, 0);
   const sourceWithPrice = pricedItems.reduce((sum, item) => sum + (item.sourceCount > 0 ? 1 : 0), 0);
 
@@ -221,7 +271,7 @@ export function buildApsProjectSnapshot({
     },
     priceEntries: pricedItems.map((item, index) => ({
       key: `aps-pdf-price-${index + 1}`,
-      equipmentLabel: item.name,
+      equipmentLabel: item.model ? `${item.name} (${item.model})` : item.name,
       price: item.unitPrice,
       fallbackPrice: fallbackPriceForItem(item),
       influenceWeight: INFLUENCE_WEIGHT_BY_CATEGORY[item.category] || 0.1,
