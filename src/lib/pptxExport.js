@@ -507,7 +507,7 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
   });
 
   const slide4 = pptx.addSlide();
-  addSlideFrame(slide4, "Декомпозиция бюджета по системам", "Разложение стоимости по каждой системе отдельно.", 4);
+  addSlideFrame(slide4, "Стоимость проекта по системам", "Разложение стоимости по каждой системе отдельно.", 4);
 
   addMetricCards(
     slide4,

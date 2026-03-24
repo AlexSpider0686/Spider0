@@ -6,7 +6,7 @@ export default function CostBreakdownStep({ systemResults, totals }) {
     <section className="panel">
       <div className="panel-header">
         <div>
-          <h2>Декомпозиция бюджета</h2>
+          <h2>Стоимость проекта</h2>
           <p>Разложение стоимости по системам: оборудование, материалы, СМР/ПНР, проектирование и итог.</p>
         </div>
       </div>

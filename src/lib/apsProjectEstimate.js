@@ -68,26 +68,77 @@ function buildTinkoSearchUrl(query) {
   return `https://www.tinko.ru/search/?q=${encodeURIComponent(query)}`;
 }
 
-function buildManufacturerSearchUrl(website, query) {
-  const base = trimSlash(website);
-  if (!base) return "";
-  return `${base}/search?q=${encodeURIComponent(query)}`;
-}
-
 function toSafeQty(value) {
   return Math.max(toNumber(value, 0), 0);
 }
 
+function normalizeSearchText(value) {
+  return String(value || "")
+    .replace(/[«»"'`]/g, " ")
+    .replace(/[(){}\[\],;:]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function shortenSearchText(value, max = 120) {
+  return normalizeSearchText(value).slice(0, max).trim();
+}
+
+function dedupe(values) {
+  return [...new Set(values.filter(Boolean))];
+}
+
 function fallbackPriceForItem(item) {
-  if (item.category === "material" && item.unit === "м") return 95;
+  const title = normalizeSearchText(`${item.name || ""} ${item.model || ""} ${item.mark || item.brand || ""}`).toLowerCase();
+
+  if (item.kind === "material") {
+    if (item.unit === "м") {
+      if (/(кабел|utp|cat\d|ввг|кпс|провод)/iu.test(title)) return 95;
+      if (/(труб|гофр)/iu.test(title)) return 70;
+      if (/(короб|лоток)/iu.test(title)) return 180;
+      return 120;
+    }
+    if (item.unit === "шт") {
+      if (/(дюбел|саморез|хомут|скоб)/iu.test(title)) return 8;
+      if (/(коробка огнестойк|огнестойк[а-я]* короб)/iu.test(title)) return 4500;
+      if (/(пен[аы])/iu.test(title)) return 1200;
+      return 220;
+    }
+  }
+
   return FALLBACK_PRICE_BY_CATEGORY[item.category] || FALLBACK_PRICE_BY_CATEGORY[item.kind] || 1000;
 }
 
-function buildSearchQuery(item, defaultVendor) {
-  const parts = [item.mark || item.brand || defaultVendor || "", item.model || "", item.name || ""]
-    .map((value) => String(value || "").trim())
-    .filter(Boolean);
-  return parts.join(" ");
+function buildSearchQueries(item, defaultVendor) {
+  const vendor = shortenSearchText(item.mark || item.brand || defaultVendor || "", 48);
+  const model = shortenSearchText(item.model || "", 72);
+  const name = shortenSearchText(item.name || "", 96);
+  const nameStart = shortenSearchText(name.split(/\s+/).slice(0, 10).join(" "), 72);
+
+  return dedupe([
+    model,
+    `${vendor} ${model}`.trim(),
+    `${nameStart} ${model}`.trim(),
+    `${vendor} ${nameStart}`.trim(),
+    nameStart,
+  ]).slice(0, 5);
+}
+
+function buildSourceUrls(source, queries) {
+  const base = trimSlash(source?.website || "");
+  const urls = [];
+
+  for (const query of queries) {
+    urls.push(buildTinkoSearchUrl(query));
+  }
+
+  if (base) {
+    for (const query of queries.slice(0, 2)) {
+      urls.push(`${base}/search?q=${encodeURIComponent(query)}`);
+    }
+  }
+
+  return dedupe(urls).slice(0, 6);
 }
 
 function buildRequestKey(index, item) {
@@ -101,17 +152,19 @@ function clamp(value, min, max) {
 
 export function buildApsProjectPriceRequests(items = [], defaultVendor = "Базовый") {
   return items.map((item, index) => {
-    const searchQuery = buildSearchQuery(item, defaultVendor);
+    const queries = buildSearchQueries(item, defaultVendor);
+    const searchQuery = queries[0] || shortenSearchText(item.name || item.model || "", 72);
     const manufacturerName = item.mark || item.brand || defaultVendor;
     const source = getManufacturerSource("aps", manufacturerName);
-    const manufacturerSearch = buildManufacturerSearchUrl(source?.website, searchQuery);
-    const sourceUrls = [manufacturerSearch, buildTinkoSearchUrl(searchQuery)].filter(Boolean);
+    const sourceUrls = buildSourceUrls(source, queries);
 
     return {
       key: buildRequestKey(index, item),
       equipmentKey: item.category || item.kind,
       equipmentLabel: item.name,
       sourceUrls,
+      unit: item.unit || "шт",
+      kind: item.kind || "equipment",
       fallbackPrice: fallbackPriceForItem(item),
       influenceWeight: INFLUENCE_WEIGHT_BY_CATEGORY[item.category] || INFLUENCE_WEIGHT_BY_CATEGORY[item.kind] || 0.1,
       searchQuery,
@@ -229,7 +282,7 @@ function buildKeyEquipment(pricedItems) {
       qty: item.qty,
       unitPrice: item.unitPrice,
       total: item.total,
-      basis: `Позиция ${item.position || "без номера"} загружена из PDF-спецификации (${item.unit}).`,
+      basis: `Наименование ${item.position || "без номера"} загружено из PDF-спецификации (${item.unit}).`,
     }));
 }
 
@@ -254,6 +307,7 @@ export function buildApsProjectSnapshot({
     vendorName,
     fileName,
     parsedAt: parsedProject.parsedAt,
+    gostStandard: parsedProject.gostStandard || "ГОСТ 21.110-2013",
     linesScanned: parsedProject.linesScanned,
     pages: parsedProject.pages,
     metrics: parsedProject.metrics,

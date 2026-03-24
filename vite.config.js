@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import path from "node:path";
 import fs from "node:fs";
 import { resolveVendorPrices } from "./api/vendor-prices.js";
+import { issueOtpChallenge, verifyOtpChallenge } from "./api/auth-otp-core.js";
 
 const packageJson = JSON.parse(fs.readFileSync(new URL("./package.json", import.meta.url), "utf8"));
 const buildTimestamp = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
@@ -34,7 +35,7 @@ function localVendorPriceApiPlugin() {
     name: "local-vendor-price-api",
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
-        if (!req.url?.startsWith("/api/vendor-prices")) {
+        if (!req.url?.startsWith("/api/")) {
           next();
           return;
         }
@@ -58,11 +59,23 @@ function localVendorPriceApiPlugin() {
 
         try {
           const payload = await readJsonBody(req);
-          const requests = Array.isArray(payload?.requests) ? payload.requests : [];
-          const results = await resolveVendorPrices(requests);
+          let body = null;
+          if (req.url.startsWith("/api/vendor-prices")) {
+            const requests = Array.isArray(payload?.requests) ? payload.requests : [];
+            const results = await resolveVendorPrices(requests);
+            body = { results, fetchedAt: new Date().toISOString() };
+          } else if (req.url.startsWith("/api/auth-send-code")) {
+            body = await issueOtpChallenge(payload?.email);
+          } else if (req.url.startsWith("/api/auth-verify-code")) {
+            body = await verifyOtpChallenge(payload?.email, payload?.code, payload?.challengeToken);
+          } else {
+            next();
+            return;
+          }
+
           res.statusCode = 200;
           res.setHeader("Content-Type", "application/json; charset=utf-8");
-          res.end(JSON.stringify({ results, fetchedAt: new Date().toISOString() }));
+          res.end(JSON.stringify(body));
         } catch (error) {
           res.statusCode = 500;
           res.setHeader("Content-Type", "application/json; charset=utf-8");

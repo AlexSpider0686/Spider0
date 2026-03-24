@@ -1,6 +1,6 @@
 const PRICE_FIELD_REGEX = /"price"\s*:\s*"?([\d\s.,]+)"?/gi;
 const META_PRICE_REGEX = /itemprop=["']price["'][^>]*content=["']([\d\s.,]+)["']/gi;
-const MONEY_REGEX = /(?:₽|руб\.?|RUB|USD|EUR)\s*([\d\s.,]{2,})|([\d\s.,]{2,})\s*(?:₽|руб\.?|RUB|USD|EUR)/giu;
+const MONEY_REGEX = /(?:₽|руб\.?|RUB|USD|EUR)\s*([\d\s.,]{1,})|([\d\s.,]{1,})\s*(?:₽|руб\.?|RUB|USD|EUR)/giu;
 const TINKO_PRODUCT_LINK_REGEX = /\/catalog\/product\/\d+\//gi;
 
 function normalizePrice(raw) {
@@ -10,7 +10,7 @@ function normalizePrice(raw) {
   if (!numericMatch) return null;
   const value = Number(numericMatch[0]);
   if (!Number.isFinite(value) || value <= 0) return null;
-  if (value < 100 || value > 10_000_000) return null;
+  if (value > 10_000_000) return null;
   return value;
 }
 
@@ -40,17 +40,28 @@ function extractPrices(html) {
     if (value) prices.push(value);
   }
 
-  return prices;
+  return [...new Set(prices)];
 }
 
-function pickPrice(html) {
+function pickPrice(html, fallbackPrice = null) {
   const prices = extractPrices(html);
   if (!prices.length) return null;
-  const filtered = prices.filter((value) => value >= 500);
-  return median(filtered.length ? filtered : prices);
+
+  const sensible = prices.filter((value) => value >= 1 && value <= 5_000_000);
+  if (!sensible.length) return null;
+
+  const fallback = Number(fallbackPrice);
+  if (Number.isFinite(fallback) && fallback > 0) {
+    const candidates = sensible.filter((value) => value >= fallback * 0.03 && value <= fallback * 30);
+    const source = candidates.length ? candidates : sensible;
+    return source.sort((a, b) => Math.abs(Math.log(a / fallback)) - Math.abs(Math.log(b / fallback)))[0];
+  }
+
+  const filtered = sensible.filter((value) => value >= 10);
+  return median(filtered.length ? filtered : sensible);
 }
 
-async function fetchHtml(url, timeoutMs = 7000) {
+async function fetchHtml(url, timeoutMs = 20000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -59,7 +70,8 @@ async function fetchHtml(url, timeoutMs = 7000) {
       signal: controller.signal,
       redirect: "follow",
       headers: {
-        "user-agent": "Mozilla/5.0 (compatible; Spider0PriceBot/5.0)",
+        "user-agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
         accept: "text/html,application/xhtml+xml",
         "accept-language": "ru-RU,ru;q=0.9,en;q=0.8",
       },
@@ -85,45 +97,57 @@ function extractTinkoProductUrls(searchHtml) {
     if (seen.has(url)) continue;
     seen.add(url);
     urls.push(url);
-    if (urls.length >= 3) break;
+    if (urls.length >= 4) break;
   }
 
   return urls;
 }
 
-async function fetchPriceFromTinkoSearch(searchUrl) {
-  const searchHtml = await fetchHtml(searchUrl, 7000);
+async function fetchPriceFromTinkoSearch(searchUrl, fallbackPrice) {
+  const searchHtml = await fetchHtml(searchUrl, 18000);
   const productUrls = extractTinkoProductUrls(searchHtml);
 
   if (!productUrls.length) {
-    const price = pickPrice(searchHtml);
+    const price = pickPrice(searchHtml, fallbackPrice);
     return price ? { prices: [price], usedSources: [searchUrl] } : { prices: [], usedSources: [] };
   }
 
-  const settled = await Promise.allSettled(productUrls.slice(0, 2).map((url) => fetchHtml(url, 7000)));
-  const prices = [];
-  const usedSources = [];
+  const settled = await Promise.allSettled(productUrls.slice(0, 3).map((url) => fetchHtml(url, 18000)));
+  const candidates = [];
 
   settled.forEach((result, index) => {
     if (result.status !== "fulfilled") return;
-    const price = pickPrice(result.value);
+    const price = pickPrice(result.value, fallbackPrice);
     if (!price) return;
-    prices.push(price);
-    usedSources.push(productUrls[index]);
+    candidates.push({ price, url: productUrls[index] });
   });
 
-  return { prices, usedSources };
+  if (!candidates.length) {
+    return { prices: [], usedSources: [] };
+  }
+
+  const fallback = Number(fallbackPrice);
+  if (Number.isFinite(fallback) && fallback > 0) {
+    candidates.sort((a, b) => Math.abs(Math.log(a.price / fallback)) - Math.abs(Math.log(b.price / fallback)));
+    return { prices: [candidates[0].price], usedSources: [candidates[0].url] };
+  }
+
+  const medianPrice = median(candidates.map((item) => item.price));
+  return {
+    prices: medianPrice ? [medianPrice] : [candidates[0].price],
+    usedSources: [candidates[0].url],
+  };
 }
 
-async function fetchPriceForUrl(url) {
+async function fetchPriceForUrl(url, fallbackPrice) {
   if (!url) return { prices: [], usedSources: [] };
 
   if (url.includes("tinko.ru/search/")) {
-    return fetchPriceFromTinkoSearch(url);
+    return fetchPriceFromTinkoSearch(url, fallbackPrice);
   }
 
-  const html = await fetchHtml(url, 4500);
-  const price = pickPrice(html);
+  const html = await fetchHtml(url, 12000);
+  const price = pickPrice(html, fallbackPrice);
   return price ? { prices: [price], usedSources: [url] } : { prices: [], usedSources: [] };
 }
 
@@ -144,7 +168,7 @@ export async function resolveVendorPrices(requests = []) {
   return Promise.all(
     requests.map(async (entry) => {
       const { key, sourceUrls, sourceUrl, fallbackPrice } = entry || {};
-      const urls = Array.isArray(sourceUrls) ? sourceUrls.filter(Boolean).slice(0, 3) : sourceUrl ? [sourceUrl] : [];
+      const urls = Array.isArray(sourceUrls) ? sourceUrls.filter(Boolean).slice(0, 6) : sourceUrl ? [sourceUrl] : [];
 
       if (!urls.length) {
         return {
@@ -158,7 +182,7 @@ export async function resolveVendorPrices(requests = []) {
         };
       }
 
-      const settled = await Promise.allSettled(urls.map((url) => fetchPriceForUrl(url)));
+      const settled = await Promise.allSettled(urls.map((url) => fetchPriceForUrl(url, fallbackPrice)));
       const prices = [];
       const usedSources = [];
 
@@ -220,6 +244,5 @@ export default async function handler(req, res) {
   }
 
   const results = await resolveVendorPrices(requests);
-
   res.status(200).json({ results, fetchedAt: new Date().toISOString() });
 }

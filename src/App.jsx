@@ -8,7 +8,9 @@ import BudgetStep from "./components/BudgetStep";
 import CostBreakdownStep from "./components/CostBreakdownStep";
 import CalculationLogicStep from "./components/CalculationLogicStep";
 import Summary from "./components/Summary";
+import AuthGate from "./components/AuthGate";
 import { BUILD_NUMBER } from "./config/estimateConfig";
+import { isStoredAuthTokenValid } from "./lib/authApi";
 
 const BACKGROUND_VIDEO_URLS = [
   "/assets/background/city-loop.mp4",
@@ -21,13 +23,18 @@ export default function App() {
   const [videoIndex, setVideoIndex] = useState(0);
   const [videoUnavailable, setVideoUnavailable] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
+  const [authorized, setAuthorized] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const storedToken = window.localStorage.getItem("smetacore_auth_token");
+    return isStoredAuthTokenValid(storedToken);
+  });
 
   const steps = [
     { key: "object", label: "Объект", icon: Building2 },
     { key: "systems", label: "Системы", icon: Layers },
     { key: "design", label: "Проектирование", icon: Ruler },
     { key: "budget", label: "Бюджет", icon: Wallet },
-    { key: "breakdown", label: "Декомпозиция", icon: PieChart },
+    { key: "breakdown", label: "Стоимость проекта", icon: PieChart },
     { key: "logic", label: "Логика расчета", icon: FileText },
   ];
 
@@ -37,6 +44,13 @@ export default function App() {
   useEffect(() => {
     setVideoReady(false);
   }, [currentVideoUrl]);
+
+  const handleAuthorized = (accessToken) => {
+    if (typeof window !== "undefined" && accessToken) {
+      window.localStorage.setItem("smetacore_auth_token", accessToken);
+    }
+    setAuthorized(true);
+  };
 
   return (
     <div className="page-shell">
@@ -69,7 +83,7 @@ export default function App() {
 
       <div className="build-badge">Сборка: {BUILD_NUMBER}</div>
 
-      <div className="app-wrap">
+      <div className={`app-wrap ${authorized ? "" : "locked"}`} aria-hidden={!authorized}>
         <header className="hero-card">
           <div>
             <div className="hero-kicker">SmetaCore</div>
@@ -93,6 +107,7 @@ export default function App() {
                   className={`step-chip ${active ? "active" : ""} ${done ? "done" : ""}`}
                   onClick={() => vm.setStep(index)}
                   type="button"
+                  disabled={!authorized}
                 >
                   <span className="step-icon">
                     <Icon size={14} />
@@ -113,6 +128,8 @@ export default function App() {
 
         {!hideSummary ? <Summary totals={vm.totals} systemResults={vm.systemResults} objectData={vm.objectData} /> : null}
       </div>
+
+      {!authorized ? <AuthGate onAuthorized={handleAuthorized} /> : null}
     </div>
   );
 }

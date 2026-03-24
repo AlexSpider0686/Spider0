@@ -58,7 +58,7 @@ export default function SystemsStep({
 
           const pricedSourceCount =
             snapshot?.entries
-              ?.filter((item) => item.status?.startsWith("fetched"))
+              ?.filter((item) => (item.sourceCount || 0) > 0)
               .reduce((sum, item) => sum + (item.sourceCount || 0), 0) || 0;
           const checkedSourceCount =
             snapshot?.entries?.reduce((sum, item) => sum + (item.checkedSources || item.sourceUrls?.length || 0), 0) || 0;
@@ -148,11 +148,12 @@ export default function SystemsStep({
 
               {system.type === "aps" ? (
                 <div className="calc-explain aps-import-card">
-                  <h4>Импорт проекта АПС (PDF по ГОСТ)</h4>
+                  <h4>Импорт проекта АПС (PDF по ГОСТ 21.110-2013)</h4>
                   <p className="hint-inline">
                     Если проект загружен, расчет АПС выполняется по спецификации (оборудование, материалы, трудозатраты и сроки). Если
                     проект не загружен, используется внутренняя модель.
                   </p>
+                  <p className="hint-inline">Норматив: СПДС, ГОСТ Р 21.101-2020 и ГОСТ 21.110-2013 (спецификация оборудования, изделий и материалов).</p>
                   <div className="aps-import-actions">
                     <label className="ghost-btn file-upload-btn" htmlFor={`aps-pdf-${system.id}`}>
                       <FileUp size={14} /> Загрузить PDF
@@ -181,6 +182,7 @@ export default function SystemsStep({
                     ) : null}
                   </div>
                   {renderApsImportStatus(apsStatus)}
+                  {apsSnapshot?.gostStandard ? <p className="hint-inline">Стандарт PDF: {apsSnapshot.gostStandard}</p> : null}
 
                   {apsSnapshot ? (
                     <>
@@ -190,7 +192,7 @@ export default function SystemsStep({
                           <strong>{apsSnapshot.fileName}</strong>
                         </div>
                         <div className="metric-card">
-                          <span>Позиции спецификации</span>
+                          <span>Наименования спецификации</span>
                           <strong>{num(apsSnapshot.items.length, 0)}</strong>
                         </div>
                         <div className="metric-card">
@@ -211,7 +213,7 @@ export default function SystemsStep({
                         <table>
                           <thead>
                             <tr>
-                              <th>Позиция</th>
+                              <th>Наименование</th>
                               <th>Марка/модель</th>
                               <th>Категория</th>
                               <th>Кол-во</th>
@@ -220,7 +222,7 @@ export default function SystemsStep({
                             </tr>
                           </thead>
                           <tbody>
-                            {apsSnapshot.items.slice(0, 14).map((item) => (
+                            {apsSnapshot.items.map((item) => (
                               <tr key={`${system.id}-aps-item-${item.id}`}>
                                 <td>{item.name}</td>
                                 <td>{item.model || item.brand || "—"}</td>
@@ -284,7 +286,7 @@ export default function SystemsStep({
                     <table>
                       <thead>
                         <tr>
-                          <th>Позиция</th>
+                          <th>Наименование</th>
                           <th>Кол-во</th>
                           <th>Цена</th>
                           <th>Сумма</th>

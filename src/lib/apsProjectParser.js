@@ -161,9 +161,10 @@ function parseQuantity(text) {
 }
 
 function parsePosition(text) {
-  const value = normalizeText(text).replace(/\s+/g, "");
-  if (!POSITION_REGEX.test(value)) return "";
-  const sanitized = value.replace(/\.$/u, "");
+  const normalized = normalizeText(text).replace(/\s+/g, "");
+  const candidate = normalized.match(/\d+(?:\.\d+){1,3}\.?/u)?.[0] || "";
+  if (!candidate || !POSITION_REGEX.test(candidate)) return "";
+  const sanitized = candidate.replace(/\.$/u, "");
   const parts = sanitized.split(".").map((part) => Number(part));
   if (!parts.length) return "";
   if (!Number.isFinite(parts[0]) || parts[0] <= 0 || parts[0] > 99) return "";
@@ -398,19 +399,34 @@ function finalizeDraft(draft) {
 }
 
 function mergeItems(items) {
-  const map = new Map();
+  const seen = new Set();
+  const list = [];
 
   for (const item of items) {
-    const key = `${item.kind}|${item.category}|${item.mark}|${item.model}|${item.name}|${item.unit}`.toLowerCase();
-    if (!map.has(key)) {
-      map.set(key, { ...item });
-      continue;
-    }
-    const current = map.get(key);
-    current.qty += item.qty;
+    const key = `${item.position}|${item.name}|${item.model}|${item.mark}|${item.qty}|${item.unit}`.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    list.push(item);
   }
 
-  return [...map.values()].sort((a, b) => b.qty - a.qty);
+  const comparePosition = (left, right) => {
+    const a = String(left || "")
+      .split(".")
+      .map((part) => Number(part));
+    const b = String(right || "")
+      .split(".")
+      .map((part) => Number(part));
+    const len = Math.max(a.length, b.length);
+    for (let index = 0; index < len; index += 1) {
+      const av = Number.isFinite(a[index]) ? a[index] : -1;
+      const bv = Number.isFinite(b[index]) ? b[index] : -1;
+      if (av === bv) continue;
+      return av - bv;
+    }
+    return 0;
+  };
+
+  return list.sort((a, b) => comparePosition(a.position, b.position));
 }
 
 function buildMetrics(items) {
@@ -494,17 +510,9 @@ function parseRowsToItems(rows) {
 
     const position = parsePosition(joinParts(buckets.position));
     if (position) {
-      const rowQty = parseQuantity(joinParts(buckets.qty));
-      const rowUnit = normalizeUnit(joinParts(buckets.unit));
       const rowName = joinParts(buckets.name);
       const rowModel = joinParts(buckets.model);
-      const rowMajor = getSectionMajor(position);
       if (!isMeaningfulChunk(rowName) && !isMeaningfulChunk(rowModel)) continue;
-      if (rowQty <= 0) continue;
-      if (!isKnownUnit(rowUnit)) {
-        const guessedUnit = inferUnitFromContext(rowName, rowModel, rowMajor);
-        if (!isKnownUnit(guessedUnit)) continue;
-      }
 
       flushCurrent();
       current = makeDraft(position, buckets, row.pageNum, row.y, draftIndex++);
@@ -525,7 +533,19 @@ function parseRowsToItems(rows) {
       continue;
     }
 
-    if (current && row.pageNum === current.pageNum && Math.abs(current.rowY - row.y) <= 30 && !SPEC_HEADER_REGEX.test(plainRow)) {
+    if (current && row.pageNum === current.pageNum && Math.abs(current.rowY - row.y) <= 22 && !SPEC_HEADER_REGEX.test(plainRow)) {
+      const incomingQty = parseQuantity(joinParts(buckets.qty));
+      const incomingName = joinParts(buckets.name);
+      const incomingModel = joinParts(buckets.model);
+      const currentHasQty = current.qtyCandidates.length > 0;
+      const incomingLooksLikeNewRow = incomingQty > 0 || (isMeaningfulChunk(incomingName) && isMeaningfulChunk(incomingModel));
+
+      if (currentHasQty && incomingLooksLikeNewRow) {
+        prelude.push(buckets);
+        if (prelude.length > 3) prelude = prelude.slice(-3);
+        continue;
+      }
+
       appendChunks(current, buckets);
       prelude = [];
       continue;
@@ -573,6 +593,7 @@ export async function parseApsProjectPdf(file) {
   return {
     fileName: file.name,
     parsedAt: new Date().toISOString(),
+    gostStandard: "ГОСТ 21.110-2013",
     pages: pdf.numPages,
     linesScanned: allRows.length,
     items,
