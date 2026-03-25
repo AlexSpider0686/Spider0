@@ -9,7 +9,7 @@ export const siteConfig = {
   operatorEmail: 'privacy@example.ru',
   supportEmail: 'support@example.ru',
   dpoEmail: 'dpo@example.ru',
-  videoSource: '/media/manhattan-loop.mp4',
+  videoSource: '/assets/background/city-loop.mp4',
   videoPoster: '/assets/manhattan-poster.svg',
 };
 
