@@ -290,6 +290,7 @@ export async function fetchPricesByRequests(requests = []) {
     entries: requests.map((request) => {
       const result = resultsByKey.get(request.key) || {};
       const sanitized = sanitizePrice(request, result);
+      const unitHints = Array.isArray(result.unitHints) ? result.unitHints : [];
       const checkedSourceUrls = (request.sourceUrls || []).map(extractSourceUrl).filter(Boolean);
       const checkedSourceHosts = [...new Set(checkedSourceUrls.map(toSourceHost).filter(Boolean))];
       const usedSourceHosts = [...new Set((result.usedSources || []).map(toSourceHost).filter(Boolean))];
@@ -304,6 +305,7 @@ export async function fetchPricesByRequests(requests = []) {
         checkedSourceHosts,
         usedSources: result.usedSources || [],
         usedSourceHosts,
+        unitHints,
       };
     }),
   };

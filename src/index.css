@@ -1103,6 +1103,57 @@ select {
   line-height: 1.35;
 }
 
+.table-edit-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.table-number-input {
+  width: 96px;
+  border: 1px solid rgba(141, 163, 196, 0.45);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--text);
+  padding: 4px 6px;
+  font-size: 11px;
+}
+
+.table-number-input:focus {
+  outline: none;
+  border-color: rgba(47, 127, 241, 0.8);
+  box-shadow: 0 0 0 2px rgba(47, 127, 241, 0.16);
+}
+
+.unit-audit-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.unit-audit-badge.match {
+  background: rgba(34, 197, 94, 0.14);
+  color: #166534;
+  border-color: rgba(22, 101, 52, 0.25);
+}
+
+.unit-audit-badge.mismatch {
+  background: rgba(245, 158, 11, 0.16);
+  color: #92400e;
+  border-color: rgba(146, 64, 14, 0.28);
+}
+
+.unit-audit-badge.unknown {
+  background: rgba(71, 85, 105, 0.14);
+  color: #334155;
+  border-color: rgba(51, 65, 85, 0.3);
+}
+
 .aps-import-card {
   margin-top: 8px;
 }

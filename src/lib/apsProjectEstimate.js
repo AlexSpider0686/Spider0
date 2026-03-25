@@ -1,5 +1,6 @@
 import { getManufacturerSource } from "../config/vendorsConfig";
 import { toNumber } from "./estimate";
+import { buildApsProjectMetrics } from "./apsProjectParser";
 
 const LABOR_RATE_PER_HOUR = 1850;
 const DESIGN_RATE_PER_HOUR = 2100;
@@ -14,6 +15,28 @@ const UNIT = {
   pack: "\u0443\u043f",
   sheet: "\u043b\u0438\u0441\u0442",
 };
+
+const UNIT_ALIAS_MAP = {
+  "шт": UNIT.piece,
+  "штук": UNIT.piece,
+  "ед": UNIT.piece,
+  "ед.": UNIT.piece,
+  "компл": UNIT.set,
+  "комплект": UNIT.set,
+  "м": UNIT.meter,
+  "мп": UNIT.meter,
+  "п.м": UNIT.meter,
+  "м2": UNIT.meter2,
+  "м²": UNIT.meter2,
+  "кг": UNIT.kg,
+  "л": UNIT.liter,
+  "уп": UNIT.pack,
+  "упак": UNIT.pack,
+  "лист": UNIT.sheet,
+};
+
+const CABLE_KEYWORDS = /(?:кабел|провод|utp|ftp|sftp|cat\d|rg-?\d|coax|кпс|ввг|пвс|wire|cable)/iu;
+const FASTENER_KEYWORDS = /(?:крепеж|дюбел|саморез|скоб|хомут|анкер|шпильк|зажим|метиз|fastener|anchor|clamp|screw)/iu;
 
 const FALLBACK_PRICE_BY_CATEGORY = {
   detector: 2800,
@@ -145,6 +168,56 @@ function dedupeSourceRequests(entries = []) {
   return result;
 }
 
+function normalizeUnitToken(unit) {
+  const normalized = String(unit || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/\./g, "");
+  return UNIT_ALIAS_MAP[normalized] || normalized;
+}
+
+function buildUnitAudit(projectUnit, unitHints = []) {
+  const normalizedProjectUnit = normalizeUnitToken(projectUnit) || UNIT.piece;
+  const supplierUnits = dedupe(unitHints.map((item) => normalizeUnitToken(item)).filter(Boolean));
+  if (!supplierUnits.length) {
+    return {
+      projectUnit: normalizedProjectUnit,
+      supplierUnits: [],
+      status: "unknown",
+      message: "единица поставщика не определена",
+    };
+  }
+
+  if (supplierUnits.includes(normalizedProjectUnit)) {
+    return {
+      projectUnit: normalizedProjectUnit,
+      supplierUnits,
+      status: "match",
+      message: `совпадение (${normalizedProjectUnit})`,
+    };
+  }
+
+  return {
+    projectUnit: normalizedProjectUnit,
+    supplierUnits,
+    status: "mismatch",
+    message: `поставщик: ${supplierUnits.join(", ")}, проект: ${normalizedProjectUnit}`,
+  };
+}
+
+function computeLiveMetrics(items = [], fallbackMetrics = {}) {
+  const metrics = buildApsProjectMetrics(items);
+  return {
+    ...fallbackMetrics,
+    ...metrics,
+    cableLengthM: toSafeQty(metrics.cableLengthM || fallbackMetrics.cableLengthM),
+    cableLines: toSafeQty(metrics.cableLines || fallbackMetrics.cableLines),
+    fastenerQty: toSafeQty(metrics.fastenerQty || fallbackMetrics.fastenerQty),
+    fastenerLines: toSafeQty(metrics.fastenerLines || fallbackMetrics.fastenerLines),
+  };
+}
+
 function fallbackPriceForItem(item) {
   const title = normalizeSearchText(`${item.name || ""} ${item.model || ""} ${item.mark || item.brand || ""}`).toLowerCase();
 
@@ -260,7 +333,8 @@ export function buildApsProjectPriceRequests(items = [], defaultVendor = "\u0411
 function estimateLaborByProjectItems(items = [], metrics = {}, objectData = {}) {
   const floors = Math.max(toSafeQty(objectData.floors), 1);
   const basementFloors = toSafeQty(objectData.basementFloors);
-  const cableLengthM = toSafeQty(metrics.cableLengthM);
+  const resolvedMetrics = computeLiveMetrics(items, metrics);
+  const cableLengthM = toSafeQty(resolvedMetrics.cableLengthM);
 
   let executionHours = 0;
   let designHours = 0;
@@ -318,24 +392,33 @@ function estimateLaborByProjectItems(items = [], metrics = {}, objectData = {}) 
   };
 }
 
-function mapPricesToItems(items, requests, priceSnapshot) {
+function mapPricesToItems(items, requests, priceSnapshot, itemOverrides = {}) {
   const requestByItemId = new Map(requests.map((request) => [request.itemId, request]));
   const resultByKey = new Map((priceSnapshot?.entries || []).map((entry) => [entry.key, entry]));
 
   return items.map((item) => {
     const request = requestByItemId.get(item.id);
     const apiResult = request ? resultByKey.get(request.key) : null;
-    const unitPrice = toNumber(apiResult?.price, toNumber(request?.fallbackPrice, 0));
-    const qty = toSafeQty(item.qty);
+    const override = itemOverrides?.[item.id] || {};
+    const baseUnitPrice = toNumber(apiResult?.price, toNumber(request?.fallbackPrice, 0));
+    const unitPrice = toNumber(override.unitPrice, baseUnitPrice);
+    const qty = toSafeQty(override.qty ?? item.qty);
+    const manualPrice = override.unitPrice !== undefined;
+    const manualQty = override.qty !== undefined;
+    const unitAudit = buildUnitAudit(item.unit, apiResult?.unitHints || []);
 
     return {
       ...item,
+      qty,
       unitPrice,
       total: unitPrice * qty,
       sourceCount: toNumber(apiResult?.sourceCount, 0),
       checkedSources: toNumber(apiResult?.checkedSources, request?.sourceUrls?.length || 0),
       usedSources: apiResult?.usedSources || [],
-      status: apiResult?.status || "fallback",
+      status: manualPrice ? "manual_override" : apiResult?.status || "fallback",
+      unitAudit,
+      manualPrice,
+      manualQty,
     };
   });
 }
@@ -351,6 +434,33 @@ function splitTotals(items) {
       return acc;
     },
     { equipment: 0, materials: 0 }
+  );
+}
+
+function buildItemsWithoutPrice(items = []) {
+  return items
+    .filter((item) => item.sourceCount <= 0 && !item.manualPrice)
+    .map((item) => ({
+      id: item.id,
+      position: item.position || "",
+      name: item.name || "",
+      model: item.model || "",
+      unit: item.unit || UNIT.piece,
+      qty: toSafeQty(item.qty),
+      reason: item.status || "price_not_found",
+    }));
+}
+
+function buildUnitMatchSummary(items = []) {
+  return items.reduce(
+    (acc, item) => {
+      const status = item?.unitAudit?.status || "unknown";
+      if (status === "match") acc.match += 1;
+      else if (status === "mismatch") acc.mismatch += 1;
+      else acc.unknown += 1;
+      return acc;
+    },
+    { match: 0, mismatch: 0, unknown: 0 }
   );
 }
 
@@ -377,11 +487,45 @@ export function buildApsProjectSnapshot({
   objectData,
   vendorName = "\u0411\u0430\u0437\u043e\u0432\u044b\u0439",
 }) {
-  const pricedItems = mapPricesToItems(parsedProject.items, requests, priceSnapshot);
+  const baseItems = Array.isArray(parsedProject?.items) ? parsedProject.items : [];
+  const pricedItems = mapPricesToItems(baseItems, requests, priceSnapshot, {});
+  return buildSnapshotPayload({
+    pricedItems,
+    fileName,
+    parsedProject,
+    requests,
+    priceSnapshot,
+    objectData,
+    vendorName,
+    itemOverrides: {},
+  });
+}
+
+function buildSnapshotPayload({
+  pricedItems = [],
+  fileName,
+  parsedProject,
+  requests,
+  priceSnapshot,
+  objectData,
+  vendorName = "\u0411\u0430\u0437\u043e\u0432\u044b\u0439",
+  itemOverrides = {},
+}) {
   const totals = splitTotals(pricedItems);
-  const labor = estimateLaborByProjectItems(pricedItems, parsedProject.metrics, objectData);
+  const metrics = computeLiveMetrics(pricedItems, parsedProject?.metrics || {});
+  const labor = estimateLaborByProjectItems(pricedItems, metrics, objectData);
   const sourceChecked = pricedItems.reduce((sum, item) => sum + item.checkedSources, 0);
-  const sourceWithPrice = pricedItems.reduce((sum, item) => sum + (item.sourceCount > 0 ? 1 : 0), 0);
+  const itemsWithSupplierPrice = pricedItems.reduce((sum, item) => sum + (item.sourceCount > 0 ? 1 : 0), 0);
+  const itemsWithManualPrice = pricedItems.reduce((sum, item) => sum + (item.manualPrice ? 1 : 0), 0);
+  const itemsWithoutPrice = buildItemsWithoutPrice(pricedItems);
+  const unrecognizedRows = parsedProject?.unrecognizedRows || [];
+  const parseQuality = parsedProject?.parseQuality || {
+    candidateRows: pricedItems.length + unrecognizedRows.length,
+    recognizedPositions: pricedItems.length,
+    unresolvedPositions: unrecognizedRows.length,
+    recognitionRate: pricedItems.length / Math.max(pricedItems.length + unrecognizedRows.length, 1),
+  };
+  const unitMatch = buildUnitMatchSummary(pricedItems);
 
   return {
     active: true,
@@ -393,9 +537,12 @@ export function buildApsProjectSnapshot({
     gostStandard: parsedProject.gostStandard || "\u0413\u041e\u0421\u0422 21.110-2013",
     linesScanned: parsedProject.linesScanned,
     pages: parsedProject.pages,
-    metrics: parsedProject.metrics,
+    metrics,
     items: pricedItems,
     keyEquipment: buildKeyEquipment(pricedItems),
+    parseQuality,
+    unrecognizedRows,
+    itemsWithoutPrice,
     totals: {
       equipment: totals.equipment,
       materials: totals.materials,
@@ -404,7 +551,17 @@ export function buildApsProjectSnapshot({
     labor,
     sourceStats: {
       sourceChecked,
-      sourceWithPrice,
+      itemsWithSupplierPrice,
+      itemsWithManualPrice,
+      itemsWithoutPrice: itemsWithoutPrice.length,
+      resolvedItems: pricedItems.length - itemsWithoutPrice.length,
+      unitMatch: unitMatch.match,
+      unitMismatch: unitMatch.mismatch,
+      unitUnknown: unitMatch.unknown,
+      candidateRows: parseQuality.candidateRows,
+      recognizedPositions: parseQuality.recognizedPositions,
+      unresolvedPositions: parseQuality.unresolvedPositions,
+      recognitionRate: parseQuality.recognitionRate,
     },
     priceEntries: pricedItems.map((item, index) => ({
       key: `aps-pdf-price-${index + 1}`,
@@ -416,6 +573,59 @@ export function buildApsProjectSnapshot({
       checkedSources: item.checkedSources,
       usedSources: item.usedSources,
       status: item.status,
+      unitAudit: item.unitAudit,
+      manualPrice: item.manualPrice,
     })),
+    requests,
+    priceSnapshot,
+    originalItems: baseItemsForSnapshot(pricedItems, parsedProject?.items || []),
+    itemOverrides,
   };
+}
+
+function baseItemsForSnapshot(pricedItems = [], fallbackItems = []) {
+  if (fallbackItems.length) return fallbackItems;
+  return pricedItems.map((item) => ({
+    ...item,
+    total: undefined,
+    unitPrice: undefined,
+    sourceCount: undefined,
+    checkedSources: undefined,
+    usedSources: undefined,
+    status: undefined,
+    unitAudit: undefined,
+    manualPrice: undefined,
+    manualQty: undefined,
+  }));
+}
+
+export function recalculateApsProjectSnapshot(snapshot, patch = {}, objectData = {}) {
+  if (!snapshot || !snapshot.active) return snapshot;
+
+  const nextOverrides = {
+    ...(snapshot.itemOverrides || {}),
+    ...(patch || {}),
+  };
+
+  const originalItems = Array.isArray(snapshot.originalItems) && snapshot.originalItems.length ? snapshot.originalItems : snapshot.items;
+  const pricedItems = mapPricesToItems(originalItems, snapshot.requests || [], snapshot.priceSnapshot || {}, nextOverrides);
+
+  return buildSnapshotPayload({
+    pricedItems,
+    fileName: snapshot.fileName,
+    parsedProject: {
+      parsedAt: snapshot.parsedAt,
+      gostStandard: snapshot.gostStandard,
+      linesScanned: snapshot.linesScanned,
+      pages: snapshot.pages,
+      metrics: snapshot.metrics,
+      unrecognizedRows: snapshot.unrecognizedRows || [],
+      parseQuality: snapshot.parseQuality,
+    },
+    requests: snapshot.requests || [],
+    priceSnapshot: snapshot.priceSnapshot || {},
+    objectData,
+    vendorName: snapshot.vendorName,
+    itemOverrides: nextOverrides,
+  });
 }

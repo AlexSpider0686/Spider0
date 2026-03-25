@@ -12,11 +12,7 @@ import AuthGate from "./AuthGate";
 import { BUILD_NUMBER } from "../config/estimateConfig";
 import { isStoredAuthTokenValid } from "../lib/authApi";
 
-const BACKGROUND_VIDEO_URLS = [
-  "/assets/background/city-loop.mp4",
-  "https://videos.pexels.com/video-files/3129957/3129957-hd_1920_1080_25fps.mp4",
-  "https://storage.coverr.co/videos/O3x8lq1w7f2wV6xTt1lPmIfQ00j00iW4w5?download=1",
-];
+const BACKGROUND_VIDEO_URLS = ["/assets/background/city-loop.mp4"];
 
 export default function EstimatorApp() {
   const vm = useEstimate();

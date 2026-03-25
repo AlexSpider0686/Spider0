@@ -17,10 +17,12 @@ const EXTRA_CHAR_MAP = {
   "\u026d": "\u043b",
 };
 
-const POSITION_REGEX = /^\d+(?:\.\d+){1,3}\.?$/u;
+const POSITION_REGEX = /^\d+(?:\.\d+){0,3}\.?$/u;
 const NUMBER_REGEX = /\d+(?:[.,]\d+)?/gu;
 const MODEL_REGEX = /[A-Z\u0410-\u042f\u04010-9]{2,}(?:[-/.][A-Z\u0410-\u042f\u04010-9]{1,})+/gu;
+const MODEL_TEST_REGEX = /[A-Z\u0410-\u042f\u04010-9]{2,}(?:[-/.][A-Z\u0410-\u042f\u04010-9]{1,})+/u;
 const SOFT_MODEL_REGEX = /[A-Z\u0410-\u042f\u0401]{1,8}\s?\d{1,8}[A-Z\u0410-\u042f\u04010-9-]*/gu;
+const NOTE_SPLIT_REGEX = /(?:^|\b)(?:\u043f\u0440\u0438\u043c(?:\.|\b)|\u043f\u0440\u0438\u043c\u0435\u0447(?:\u0430\u043d\u0438\u0435|\u0430\u043d\u0438\u044f)?|\u0437\u0430\u043c\u0435\u0447(?:\u0430\u043d\u0438\u0435|\u0430\u043d\u0438\u044f)?|note)(?:\b|:)/iu;
 
 const UNIT = {
   piece: "\u0448\u0442",
@@ -50,6 +52,15 @@ const CATEGORY_KEYWORDS = {
   power: /(\u0431\u043b\u043e\u043a\s*\u043f\u0438\u0442\u0430\u043d|\u0430\u043a\u0431|\u0430\u043a\u043a\u0443\u043c|\u0431\u0430\u0442\u0430\u0440\u0435|\u0438\u0431\u043f|\u0440\u0435\u0437\u0435\u0440\u0432\u043d|battery|power)/iu,
   material: /(\u043a\u0430\u0431\u0435\u043b|\u043f\u0440\u043e\u0432\u043e\u0434|\u0433\u043e\u0444\u0440|\u043b\u043e\u0442\u043e\u043a|\u0442\u0440\u0443\u0431|\u043a\u043e\u0440\u043e\u0431|\u043a\u0440\u0435\u043f\u0435\u0436|\u043c\u0435\u0442\u0438\u0437|\u043c\u043e\u043d\u0442\u0430\u0436\u043d|\u043a\u0430\u043d\u0430\u043b|\u0445\u043e\u043c\u0443\u0442|\u0434\u044e\u0431\u0435\u043b|\u0441\u0430\u043c\u043e\u0440\u0435\u0437|\u043f\u0435\u043d\u0430|cable|wire|pipe|tray)/iu,
 };
+
+const CABLE_KEYWORDS = /(\u043a\u0430\u0431\u0435\u043b|\u043f\u0440\u043e\u0432\u043e\u0434|utp|ftp|sftp|cat\d|rg-?\d|coax|\u043a\u043f\u0441|\u0432\u0432\u0433|\u043f\u0432\u0441|wire|cable)/iu;
+const FASTENER_KEYWORDS = /(\u043a\u0440\u0435\u043f\u0435\u0436|\u0434\u044e\u0431\u0435\u043b|\u0441\u0430\u043c\u043e\u0440\u0435\u0437|\u0441\u043a\u043e\u0431|\u0445\u043e\u043c\u0443\u0442|\u0430\u043d\u043a\u0435\u0440|\u0448\u043f\u0438\u043b\u044c\u043a|\u0437\u0430\u0436\u0438\u043c|\u043c\u0435\u0442\u0438\u0437|fastener|anchor|clamp|screw)/iu;
+const HEADER_HINT_REGEX =
+  /(\u043f\u043e\u0437\u0438\u0446|\u043d\u0430\u0438\u043c\u0435\u043d|\u043c\u0430\u0440\u043a\u0430|\u043c\u043e\u0434\u0435\u043b|\u043e\u0431\u043e\u0437\u043d\u0430\u0447|\u0437\u0430\u0432\u043e\u0434|\u0435\u0434\.?\s*\u0438\u0437\u043c|\u043a\u043e\u043b-?\u0432\u043e|\u043f\u0440\u0438\u043c\u0435\u0447|\u0441\u043f\u0435\u0446\u0438\u0444\u0438\u043a)/iu;
+const SPEC_EQUIPMENT_HINT_REGEX =
+  /(\u0438\u0437\u0432\u0435\u0449|\u0434\u0430\u0442\u0447\u0438\u043a|\u043f\u0440\u0438\u0431\u043e\u0440|\u043f\u0430\u043d\u0435\u043b|\u0448\u043a\u0430\u0444|\u0431\u043b\u043e\u043a|\u043c\u043e\u0434\u0443\u043b|\u043a\u043e\u043d\u0442\u0440\u043e\u043b|\u043e\u043f\u043e\u0432\u0435\u0449|\u0430\u043a\u0431|\u043a\u0430\u0431\u0435\u043b|\u043f\u0440\u043e\u0432\u043e\u0434|\u043a\u043e\u0440\u043e\u0431|\u0442\u0440\u0443\u0431|\u043b\u043e\u0442\u043e\u043a|\u043a\u0440\u0435\u043f\u0435\u0436|\u0445\u043e\u043c\u0443\u0442|\u0434\u044e\u0431\u0435\u043b|\u0441\u0430\u043c\u043e\u0440\u0435\u0437|detector|panel|controller|module|cable|wire|tray|fastener)/iu;
+const STAMP_META_HINT_REGEX =
+  /(\u0438\u0437\u043c\.?|\u043a\u043e\u043b\.?\s*\u0443\u0447|N\u0434\u043e\u043a|\u043d\.?\s*\u043a\u043e\u043d\u0442\u0440|\u043b\u0438\u0441\u0442(?:\u043e\u0432)?|\u043f\u043e\u0434\u043f(?:\u0438\u0441\u044c)?|\u0434\u0430\u0442\u0430|\u0441\u0442\u0430\u0434\u0438\u044f|\u0442\u043e\u043c|\u0438\u043d\u0432\.?|^\s*\u0437\u0430\u043c\b|\u0440\u0430\u0437\u0440\u0430\u0431|^\s*\u043f\u0440\u043e\u0435\u043a\u0442\b)/iu;
 
 const MODEL_ALIGNMENT_HINTS = [
   {
@@ -203,16 +214,41 @@ function detectModel(text) {
   return candidate ? tidyText(candidate) : "";
 }
 
-function parseQuantity(text) {
-  const matches = [...normalizeText(text).matchAll(NUMBER_REGEX)];
+function parseNumericToken(raw) {
+  if (raw === null || raw === undefined) return null;
+  const token = normalizeText(String(raw)).replace(",", ".").replace(/\s/g, "");
+  if (!/^\d+(?:\.\d+)?$/u.test(token)) return null;
+  const value = Number(token);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return value;
+}
+
+function parseQuantity(text, strategy = "last") {
+  const normalized = normalizeText(text);
+  if (!normalized) return 0;
+
+  const noNotes = normalized.split(NOTE_SPLIT_REGEX)[0] || normalized;
+  const matches = [...noNotes.matchAll(NUMBER_REGEX)];
   if (!matches.length) return 0;
-  const raw = matches[matches.length - 1][0];
-  return Math.max(toNumber(raw.replace(",", "."), 0), 0);
+
+  const selected = strategy === "first" ? matches[0][0] : matches[matches.length - 1][0];
+  return Math.max(toNumber(String(selected).replace(",", "."), 0), 0);
+}
+
+function parseQtyFromQtyBucket(parts = []) {
+  const joined = joinParts(parts);
+  if (!joined) return 0;
+
+  const leftOfNotes = joined.split(NOTE_SPLIT_REGEX)[0] || joined;
+  const firstCandidate = parseQuantity(leftOfNotes, "first");
+  if (firstCandidate > 0) return firstCandidate;
+
+  return parseQuantity(leftOfNotes, "last");
 }
 
 function parsePosition(text) {
   const normalized = normalizeText(text).replace(/\s+/g, "");
-  const candidate = normalized.match(/\d+(?:\.\d+){1,3}\.?/u)?.[0] || "";
+  const candidate = normalized.match(/\d+(?:\.\d+){0,3}\.?/u)?.[0] || "";
   if (!candidate || !POSITION_REGEX.test(candidate)) return "";
   const sanitized = candidate.replace(/\.$/u, "");
   const parts = sanitized.split(".").map((part) => Number(part));
@@ -220,6 +256,12 @@ function parsePosition(text) {
   if (!Number.isFinite(parts[0]) || parts[0] <= 0 || parts[0] > 99) return "";
   if (parts.slice(1).some((part) => !Number.isFinite(part) || part <= 0 || part > 999)) return "";
   return sanitized;
+}
+
+function parseLeadingPosition(text) {
+  const normalized = normalizeText(text);
+  const match = normalized.match(/^\s*(\d+(?:\.\d+){0,3})\.?(?:\s+|$)/u);
+  return match ? parsePosition(match[1]) : "";
 }
 
 function isMeaningfulChunk(text) {
@@ -260,6 +302,140 @@ function joinParts(parts) {
   return tidyText(parts.join(" "));
 }
 
+function rowToPlainText(row) {
+  return tidyText((row?.cells || []).map((cell) => tidyText(cell?.text)).filter(Boolean).join(" "));
+}
+
+function stripNotesTail(text) {
+  const normalized = normalizeText(text);
+  if (!normalized) return "";
+  const noteStart = normalized.search(NOTE_SPLIT_REGEX);
+  const left = noteStart >= 0 ? normalized.slice(0, noteStart) : normalized;
+  return tidyText(left);
+}
+
+function countStampMetaHits(text) {
+  const normalized = normalizeText(text).toLowerCase();
+  if (!normalized) return 0;
+  const hints = [
+    "\u0438\u0437\u043c",
+    "\u043a\u043e\u043b \u0443\u0447",
+    "n\u0434\u043e\u043a",
+    "\u043d \u043a\u043e\u043d\u0442\u0440",
+    "\u043f\u043e\u0434\u043f",
+    "\u0434\u0430\u0442\u0430",
+    "\u0441\u0442\u0430\u0434\u0438\u044f",
+    "\u0438\u043d\u0432",
+    "\u0440\u0430\u0437\u0440\u0430\u0431",
+    "\u043f\u0440\u043e\u0435\u043a\u0442",
+    "\u0442\u043e\u043c",
+    "\u043b\u0438\u0441\u0442",
+  ];
+  return hints.reduce((sum, hint) => (normalized.includes(hint) ? sum + 1 : sum), 0);
+}
+
+function looksLikeAdministrativeLine(text) {
+  const normalized = normalizeText(text);
+  if (!normalized) return true;
+
+  const lower = normalized.toLowerCase();
+  const hasModel = MODEL_TEST_REGEX.test(normalized);
+  const hasSpecHint = SPEC_EQUIPMENT_HINT_REGEX.test(lower);
+  const hasQtyUnit = Boolean(extractQtyAndUnitFromText(normalized));
+  const stampHit = STAMP_META_HINT_REGEX.test(lower);
+  const stampHits = countStampMetaHits(normalized);
+
+  if (/\u0438\u0437\u043c\.?\s*\u043a\u043e\u043b\.?\s*\u0443\u0447/iu.test(lower)) return true;
+  if (/\u043f\u043e\u0434\u043f(?:\.|\u0438\u0441\u044c)?\s*\u0438\s*\u0434\u0430\u0442\u0430/iu.test(lower)) return true;
+  if (!hasSpecHint && !hasModel && !hasQtyUnit && stampHit) return true;
+  if (!hasSpecHint && stampHits >= 2) return true;
+  if (!hasSpecHint && !hasModel && normalized.length > 120 && stampHits >= 1) return true;
+
+  return false;
+}
+
+function isHeaderRowText(text) {
+  const normalized = normalizeText(text);
+  if (!normalized) return false;
+  if (normalized.length < 4) return false;
+  if (HEADER_HINT_REGEX.test(normalized)) return true;
+  return false;
+}
+
+function isSectionHeaderText(text) {
+  const normalized = normalizeText(text).toLowerCase();
+  if (!normalized) return false;
+  const cleaned = normalized.replace(/^[\divxlcdm.\-:\s]+/iu, "").trim();
+  return /^(?:\u043e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u0435|\u043a\u0430\u0431\u0435\u043b\u044c\u043d\u044b\u0435 \u0438\u0437\u0434\u0435\u043b\u0438\u044f|\u043a\u0430\u0431\u0435\u043b\u0435\u043d\u0435\u0441\u0443\u0449|\u043c\u043e\u043d\u0442\u0430\u0436\u043d\u044b\u0435 \u0438\u0437\u0434\u0435\u043b\u0438\u044f|\u0437\u0438\u043f)\b/iu.test(
+    cleaned
+  );
+}
+
+function removePositionPrefix(text) {
+  const normalized = normalizeText(text);
+  const match = normalized.match(/^\s*\d+(?:\.\d+){1,3}\.?\s*/u);
+  return tidyText(match ? normalized.slice(match[0].length) : normalized);
+}
+
+function extractQtyAndUnitFromText(text) {
+  const source = stripNotesTail(text);
+  if (!source) return null;
+
+  const qtyUnitRegex =
+    /(\d+(?:[.,]\d+)?)\s*(\u0448\u0442(?:\u0443\u043a)?|\u0435\u0434(?:\u0438\u043d\u0438\u0446[\u0430\u044b]?)?|\u043a\u043e\u043c\u043f\u043b(?:\u0435\u043a\u0442)?|\u043c2|\u043c\u00b2|\u043c|\u043a\u0433|\u043b|\u0443\u043f(?:\u0430\u043a)?|\u043b\u0438\u0441\u0442(?:\u043e\u0432|\u0430)?)(?:\b|$)/giu;
+  let match = null;
+  let last = null;
+  while ((match = qtyUnitRegex.exec(source)) !== null) {
+    const qty = parseNumericToken(match[1]);
+    if (!qty) continue;
+    last = {
+      qty,
+      unit: normalizeUnit(match[2]),
+      start: match.index,
+      end: qtyUnitRegex.lastIndex,
+    };
+  }
+  if (last) return last;
+
+  const unitQtyRegex =
+    /(\u0448\u0442(?:\u0443\u043a)?|\u0435\u0434(?:\u0438\u043d\u0438\u0446[\u0430\u044b]?)?|\u043a\u043e\u043c\u043f\u043b(?:\u0435\u043a\u0442)?|\u043c2|\u043c\u00b2|\u043c|\u043a\u0433|\u043b|\u0443\u043f(?:\u0430\u043a)?|\u043b\u0438\u0441\u0442(?:\u043e\u0432|\u0430)?)[\s:]{0,3}(\d+(?:[.,]\d+)?)(?:\b|$)/giu;
+  while ((match = unitQtyRegex.exec(source)) !== null) {
+    const qty = parseNumericToken(match[2]);
+    if (!qty) continue;
+    last = {
+      qty,
+      unit: normalizeUnit(match[1]),
+      start: match.index,
+      end: unitQtyRegex.lastIndex,
+    };
+  }
+  if (last) return last;
+
+  const numberMatches = [...source.matchAll(NUMBER_REGEX)];
+  const lastNumber = numberMatches.at(-1);
+  if (!lastNumber) return null;
+  const qty = parseNumericToken(lastNumber[0]);
+  if (!qty) return null;
+  const index = lastNumber.index || 0;
+  const around = source.slice(Math.max(0, index - 12), Math.min(source.length, index + lastNumber[0].length + 12));
+  const unitCandidate = around.match(
+    /(\u0448\u0442(?:\u0443\u043a)?|\u0435\u0434(?:\u0438\u043d\u0438\u0446[\u0430\u044b]?)?|\u043a\u043e\u043c\u043f\u043b(?:\u0435\u043a\u0442)?|\u043c2|\u043c\u00b2|\u043c|\u043a\u0433|\u043b|\u0443\u043f(?:\u0430\u043a)?|\u043b\u0438\u0441\u0442(?:\u043e\u0432|\u0430)?)/iu
+  );
+  if (!unitCandidate) return null;
+  return {
+    qty,
+    unit: normalizeUnit(unitCandidate[1]),
+    start: index,
+    end: index + String(lastNumber[0]).length,
+  };
+}
+
+function cutSlice(text, start = 0, end = 0) {
+  if (!text) return "";
+  if (start >= end) return tidyText(text);
+  return tidyText(`${text.slice(0, start)} ${text.slice(end)}`);
+}
+
 function getSectionMajor(position) {
   const major = Number(String(position || "").split(".")[0]);
   return Number.isFinite(major) ? major : 0;
@@ -282,7 +458,7 @@ function isLikelySpecRow(buckets) {
   if (!position) return false;
   const name = joinParts(buckets.name);
   if (!isMeaningfulChunk(name)) return false;
-  const qty = parseQuantity(joinParts(buckets.qty));
+  const qty = parseQtyFromQtyBucket(buckets.qty);
   if (qty <= 0) return false;
   const unit = normalizeUnit(joinParts(buckets.unit));
   return isKnownUnit(unit);
@@ -296,9 +472,19 @@ function pickSpecPages(rows) {
   }
 
   const pages = new Set();
+  const pageScores = [];
   for (const [pageNum, pageRows] of byPage.entries()) {
     const count = pageRows.reduce((sum, row) => sum + (isLikelySpecRow(splitBuckets(row)) ? 1 : 0), 0);
+    pageScores.push({ pageNum, count });
     if (count >= 3) pages.add(pageNum);
+  }
+
+  if (!pages.size) {
+    pageScores
+      .filter((item) => item.count > 0)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 6)
+      .forEach((item) => pages.add(item.pageNum));
   }
 
   if (!pages.size) {
@@ -320,7 +506,7 @@ function appendChunks(draft, buckets) {
   const unitText = joinParts(buckets.unit);
   if (unitText) draft.unitCandidates.push({ value: normalizeUnit(unitText), y: buckets.y, order: draft.order++ });
 
-  const qty = parseQuantity(joinParts(buckets.qty));
+  const qty = parseQtyFromQtyBucket(buckets.qty);
   if (qty > 0) draft.qtyCandidates.push({ value: qty, y: buckets.y, order: draft.order++ });
 }
 
@@ -340,7 +526,7 @@ function isContinuationCandidate(buckets) {
   const plain = [joinParts(buckets.name), joinParts(buckets.model), joinParts(buckets.brand)].join(" ").trim();
   if (!plain) return false;
   if (parsePosition(joinParts(buckets.position))) return false;
-  if (parseQuantity(joinParts(buckets.qty)) > 0) return false;
+  if (parseQtyFromQtyBucket(buckets.qty) > 0) return false;
   const hasUnit = isKnownUnit(normalizeUnit(joinParts(buckets.unit)));
   return !hasUnit;
 }
@@ -350,7 +536,7 @@ function isPureNamePrelude(buckets) {
   const hasModel = isMeaningfulChunk(joinParts(buckets.model));
   const hasBrand = isMeaningfulChunk(joinParts(buckets.brand));
   const hasUnit = isKnownUnit(normalizeUnit(joinParts(buckets.unit)));
-  const hasQty = parseQuantity(joinParts(buckets.qty)) > 0;
+  const hasQty = parseQtyFromQtyBucket(buckets.qty) > 0;
   return hasName && !hasModel && !hasBrand && !hasUnit && !hasQty;
 }
 
@@ -410,24 +596,37 @@ function alignNameAndCategory(name, model, category, isMaterialPosition) {
   };
 }
 
-function finalizeDraft(draft) {
-  let name = tidyText(sortChunks(draft.nameChunks));
-  const modelColumn = tidyText(sortChunks(draft.modelChunks));
-  const brandColumn = tidyText(sortChunks(draft.brandChunks));
-  const model = modelColumn || detectModel(name);
-  const brand = brandColumn || detectBrand(`${name} ${model}`);
-  let unit = pickLastCandidate(draft.unitCandidates, "");
-  const qty = pickLastCandidate(draft.qtyCandidates, 0);
+function normalizeSpecItem({ id, position, name, model = "", brand = "", qty = 0, unit = "", rawLine = "" }) {
+  const cleanPosition = parsePosition(position);
+  if (!cleanPosition) return null;
 
-  if (qty <= 0) return null;
-  if (!name && !model) return null;
+  const numericQty = toNumber(qty, 0);
+  if (numericQty <= 0) return null;
 
-  const major = getSectionMajor(draft.position);
+  let normalizedName = tidyText(name || "");
+  const normalizedModel = tidyText(model || "") || detectModel(normalizedName);
+  const normalizedBrand = tidyText(brand || "") || detectBrand(`${normalizedName} ${normalizedModel}`);
+
+  if (!normalizedName && !normalizedModel) return null;
+  if (looksLikeAdministrativeLine(`${normalizedName} ${normalizedModel} ${rawLine}`)) return null;
+
+  const major = getSectionMajor(cleanPosition);
+  const isTopLevelPosition = !String(cleanPosition).includes(".");
+  const nameWords = normalizedName.split(/\s+/u).filter(Boolean);
+  const hasEquipmentSignal = SPEC_EQUIPMENT_HINT_REGEX.test(`${normalizedName} ${normalizedModel}`.toLowerCase()) || Boolean(normalizedBrand);
+  const weakDateLikeModel = /^\d{1,2}[./]\d{1,2}$/u.test(normalizedModel);
+  const lettersInName = (normalizedName.match(/\p{L}/gu) || []).length;
+  if (!lettersInName) return null;
+  if (lettersInName < 3 && !hasEquipmentSignal) return null;
+  if (isTopLevelPosition && nameWords.length > 14 && !hasEquipmentSignal) return null;
+  if (isTopLevelPosition && weakDateLikeModel && !hasEquipmentSignal) return null;
+  if (isTopLevelPosition && isSectionHeaderText(normalizedName)) return null;
+
   const isMaterialPosition = major === 2 || major === 3;
-  let category = detectCategory(`${name} ${model} ${brand}`);
+  let category = detectCategory(`${normalizedName} ${normalizedModel} ${normalizedBrand}`);
 
-  const aligned = alignNameAndCategory(name, model, category, isMaterialPosition);
-  name = aligned.name || name || model;
+  const aligned = alignNameAndCategory(normalizedName, normalizedModel, category, isMaterialPosition);
+  normalizedName = aligned.name || normalizedName || normalizedModel;
   category = aligned.category || category;
 
   if (isMaterialPosition && category === "equipment") {
@@ -437,27 +636,47 @@ function finalizeDraft(draft) {
     category = "equipment";
   }
 
-  if (!isKnownUnit(unit)) {
-    unit = inferUnitFromContext(name, model, major, category) || UNIT.piece;
+  let normalizedUnit = normalizeUnit(unit || "");
+  if (!isKnownUnit(normalizedUnit)) {
+    normalizedUnit = inferUnitFromContext(normalizedName, normalizedModel, major, category) || UNIT.piece;
   }
 
-  const isMaterialUnit = [UNIT.meter, UNIT.meter2, UNIT.kg, UNIT.liter, UNIT.pack, UNIT.sheet].includes(unit);
+  const isMaterialUnit = [UNIT.meter, UNIT.meter2, UNIT.kg, UNIT.liter, UNIT.pack, UNIT.sheet].includes(normalizedUnit);
   const kind = category === "material" || isMaterialUnit || isMaterialPosition ? "material" : "equipment";
-  if (!isReasonableQty(draft.position, qty, unit, category)) return null;
+  if (!isReasonableQty(cleanPosition, numericQty, normalizedUnit, category)) return null;
 
   return {
-    id: draft.id,
-    position: draft.position,
-    name: name || model,
-    model: model || "",
-    mark: brand || "",
-    brand: brand || "",
+    id,
+    position: cleanPosition,
+    name: normalizedName || normalizedModel,
+    model: normalizedModel || "",
+    mark: normalizedBrand || "",
+    brand: normalizedBrand || "",
     category,
     kind,
+    qty: numericQty,
+    unit: normalizedUnit,
+    rawLine: tidyText(rawLine || `${normalizedName} ${normalizedModel} ${normalizedBrand}`),
+  };
+}
+
+function finalizeDraft(draft) {
+  const name = tidyText(sortChunks(draft.nameChunks));
+  const model = tidyText(sortChunks(draft.modelChunks));
+  const brand = tidyText(sortChunks(draft.brandChunks));
+  const unit = pickLastCandidate(draft.unitCandidates, "");
+  const qty = pickLastCandidate(draft.qtyCandidates, 0);
+
+  return normalizeSpecItem({
+    id: draft.id,
+    position: draft.position,
+    name,
+    model,
+    brand,
     qty,
     unit,
     rawLine: `${name} ${model} ${brand}`.trim(),
-  };
+  });
 }
 
 function mergeItems(items) {
@@ -470,6 +689,63 @@ function mergeItems(items) {
     seen.add(key);
     list.push(item);
   }
+
+  const cleanKeyToken = (value) =>
+    String(value || "")
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, "");
+  const scoreItem = (item) => {
+    const nameLength = String(item.name || "").length;
+    const raw = String(item.rawLine || "");
+    let score = 0;
+    if (nameLength >= 6 && nameLength <= 120) score += 4;
+    if (nameLength > 120) score -= 2;
+    if (item.model) score += 3;
+    if (item.brand || item.mark) score += 2;
+    if (SPEC_EQUIPMENT_HINT_REGEX.test(String(item.name || "").toLowerCase())) score += 2;
+    if (/[\u0000-\u001f]/u.test(raw)) score -= 3;
+    if (looksLikeAdministrativeLine(`${item.name} ${item.model} ${raw}`)) score -= 5;
+    return score;
+  };
+
+  const strongByPosition = new Map();
+  for (const item of list) {
+    const modelKey = cleanKeyToken(item.model) || cleanKeyToken(item.name);
+    const dedupeKey = `${item.position}|${modelKey}|${item.unit}`;
+    const existing = strongByPosition.get(dedupeKey);
+    if (!existing) {
+      strongByPosition.set(dedupeKey, item);
+      continue;
+    }
+    if (scoreItem(item) > scoreItem(existing)) {
+      strongByPosition.set(dedupeKey, item);
+    }
+  }
+  const deduped = [...strongByPosition.values()];
+  const bestByPosition = new Map();
+  const isMoreSpecific = (next, prev) => {
+    const nextModel = String(next.model || "");
+    const prevModel = String(prev.model || "");
+    if (nextModel && !prevModel) return true;
+    if (!nextModel && prevModel) return false;
+    if (nextModel.length !== prevModel.length) return nextModel.length > prevModel.length;
+    const nextName = String(next.name || "");
+    const prevName = String(prev.name || "");
+    return nextName.length > prevName.length;
+  };
+  for (const item of deduped) {
+    const existing = bestByPosition.get(item.position);
+    if (!existing) {
+      bestByPosition.set(item.position, item);
+      continue;
+    }
+    const nextScore = scoreItem(item);
+    const prevScore = scoreItem(existing);
+    if (nextScore > prevScore || (nextScore === prevScore && isMoreSpecific(item, existing))) {
+      bestByPosition.set(item.position, item);
+    }
+  }
+  const positionDeduped = [...bestByPosition.values()];
 
   const comparePosition = (left, right) => {
     const a = String(left || "")
@@ -488,20 +764,38 @@ function mergeItems(items) {
     return 0;
   };
 
-  return list.sort((a, b) => comparePosition(a.position, b.position));
+  return positionDeduped.sort((a, b) => comparePosition(a.position, b.position));
 }
 
 function buildMetrics(items) {
   const sumBy = (predicate) => items.reduce((sum, item) => (predicate(item) ? sum + toNumber(item.qty, 0) : sum), 0);
+  const isCable = (item) => {
+    const text = `${item.name || ""} ${item.model || ""} ${item.rawLine || ""}`;
+    return CABLE_KEYWORDS.test(text);
+  };
+  const isFastener = (item) => {
+    const text = `${item.name || ""} ${item.model || ""} ${item.rawLine || ""}`;
+    return FASTENER_KEYWORDS.test(text);
+  };
+  const cableLengthM = sumBy((item) => item.kind === "material" && item.unit === UNIT.meter && isCable(item));
+  const fastenerQty = sumBy((item) => item.kind === "material" && isFastener(item));
+
   return {
     detectorsQty: sumBy((item) => item.category === "detector"),
     notificationQty: sumBy((item) => item.category === "notification"),
     panelQty: sumBy((item) => item.category === "panel"),
     powerQty: sumBy((item) => item.category === "power"),
-    cableLengthM: sumBy((item) => item.kind === "material" && item.unit === UNIT.meter),
+    cableLengthM,
+    cableLines: items.filter((item) => item.kind === "material" && isCable(item)).length,
+    fastenerQty,
+    fastenerLines: items.filter((item) => item.kind === "material" && isFastener(item)).length,
     materialLines: items.filter((item) => item.kind === "material").length,
     devicesQty: sumBy((item) => item.kind === "equipment"),
   };
+}
+
+export function buildApsProjectMetrics(items = []) {
+  return buildMetrics(items);
 }
 
 async function extractPageRows(page, pageNum) {
@@ -536,6 +830,8 @@ async function extractPageRows(page, pageNum) {
 
 function parseRowsToItems(rows) {
   const parsed = [];
+  const unresolvedRows = [];
+  let candidateRows = 0;
   let current = null;
   let draftIndex = 0;
   let prelude = [];
@@ -543,7 +839,21 @@ function parseRowsToItems(rows) {
   const flushCurrent = () => {
     if (!current) return;
     const ready = finalizeDraft(current);
-    if (ready) parsed.push(ready);
+    if (ready) {
+      parsed.push(ready);
+    } else {
+      const rawLine = tidyText(`${sortChunks(current.nameChunks)} ${sortChunks(current.modelChunks)} ${sortChunks(current.brandChunks)}`);
+      if (looksLikeAdministrativeLine(rawLine) || isHeaderRowText(rawLine) || isSectionHeaderText(rawLine)) {
+        current = null;
+        return;
+      }
+      unresolvedRows.push({
+        id: `${current.id}-unresolved`,
+        position: current.position || "",
+        rawLine,
+        reason: "validation_failed",
+      });
+    }
     current = null;
   };
 
@@ -566,13 +876,15 @@ function parseRowsToItems(rows) {
       const rowName = joinParts(buckets.name);
       const rowModel = joinParts(buckets.model);
       if (!isMeaningfulChunk(rowName) && !isMeaningfulChunk(rowModel)) continue;
+      if (looksLikeAdministrativeLine(plainRow)) continue;
 
       flushCurrent();
       current = makeDraft(position, buckets, row.pageNum, row.y, draftIndex++);
+      candidateRows += 1;
 
       const rowNameWordCount = rowName.split(/\s+/u).filter(Boolean).length;
       const hasModelInRow = isMeaningfulChunk(rowModel);
-      const hasQtyInRow = parseQuantity(joinParts(buckets.qty)) > 0;
+      const hasQtyInRow = parseQtyFromQtyBucket(buckets.qty) > 0;
       const hasUnitInRow = isKnownUnit(normalizeUnit(joinParts(buckets.unit)));
       const needPrelude = rowNameWordCount < 3 && !hasModelInRow && (!hasQtyInRow || !hasUnitInRow);
 
@@ -591,7 +903,7 @@ function parseRowsToItems(rows) {
     }
 
     if (current && row.pageNum === current.pageNum && Math.abs(current.rowY - row.y) <= 22) {
-      const incomingQty = parseQuantity(joinParts(buckets.qty));
+      const incomingQty = parseQtyFromQtyBucket(buckets.qty);
       const incomingUnit = normalizeUnit(joinParts(buckets.unit));
       const incomingName = joinParts(buckets.name);
       const incomingModel = joinParts(buckets.model);
@@ -621,7 +933,185 @@ function parseRowsToItems(rows) {
   }
 
   flushCurrent();
-  return parsed;
+  return {
+    items: parsed,
+    candidateRows,
+    unrecognizedRows: cleanupUnrecognizedRows(unresolvedRows),
+  };
+}
+
+function buildFallbackItemFromLine(line, index) {
+  const sourceText = stripNotesTail(line?.text || "");
+  const position = parseLeadingPosition(sourceText || line?.position || "");
+  if (!position) {
+    return {
+      item: null,
+      unresolved: {
+        id: `aps-unresolved-${index + 1}`,
+        position: "",
+        rawLine: tidyText(line?.text || ""),
+        reason: "position_not_found",
+      },
+    };
+  }
+
+  const descriptor = removePositionPrefix(sourceText);
+  if (!descriptor) {
+    return {
+      item: null,
+      unresolved: {
+        id: `aps-unresolved-${index + 1}`,
+        position,
+        rawLine: sourceText,
+        reason: "descriptor_missing",
+      },
+    };
+  }
+
+  const qtyAndUnit = extractQtyAndUnitFromText(descriptor);
+  if (!qtyAndUnit?.qty) {
+    return {
+      item: null,
+      unresolved: {
+        id: `aps-unresolved-${index + 1}`,
+        position,
+        rawLine: descriptor,
+        reason: "qty_or_unit_not_found",
+      },
+    };
+  }
+
+  const body = cutSlice(descriptor, qtyAndUnit.start, qtyAndUnit.end);
+  const model = detectModel(body);
+  const brand = detectBrand(`${body} ${model}`);
+  const item = normalizeSpecItem({
+    id: `aps-fallback-${index + 1}`,
+    position,
+    name: body,
+    model,
+    brand,
+    qty: qtyAndUnit.qty,
+    unit: qtyAndUnit.unit,
+    rawLine: descriptor,
+  });
+
+  if (!item) {
+    return {
+      item: null,
+      unresolved: {
+        id: `aps-unresolved-${index + 1}`,
+        position,
+        rawLine: descriptor,
+        reason: "validation_failed",
+      },
+    };
+  }
+
+  return { item, unresolved: null };
+}
+
+function cleanupUnrecognizedRows(rows = [], knownPositions = new Set()) {
+  const seen = new Set();
+  const normalized = [];
+
+  for (const row of rows) {
+    const rawLine = tidyText(row?.rawLine || "");
+    if (!rawLine) continue;
+    if (!/\p{L}/u.test(rawLine)) continue;
+    if (looksLikeAdministrativeLine(rawLine) || isSectionHeaderText(rawLine) || isHeaderRowText(rawLine)) continue;
+    if (knownPositions.has(String(row?.position || "")) && row?.reason === "validation_failed") continue;
+    const key = `${row?.position || ""}|${rawLine}|${row?.reason || ""}`.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    normalized.push({
+      id: row?.id || `aps-unresolved-${normalized.length + 1}`,
+      position: row?.position || "",
+      rawLine,
+      reason: row?.reason || "not_parsed",
+    });
+  }
+
+  return normalized.slice(0, 120);
+}
+
+function parseRowsFallback(rows) {
+  const specPages = pickSpecPages(rows);
+  const pageRows = rows
+    .filter((row) => specPages.has(row.pageNum))
+    .sort((a, b) => a.pageNum - b.pageNum || b.y - a.y);
+
+  const candidates = [];
+  let current = null;
+
+  const flushCurrent = () => {
+    if (!current) return;
+    candidates.push(current);
+    current = null;
+  };
+
+  for (const row of pageRows) {
+    const plainText = rowToPlainText(row);
+    const rowText = stripNotesTail(plainText);
+    if (!rowText || isHeaderRowText(rowText)) continue;
+    if (looksLikeAdministrativeLine(rowText)) continue;
+
+    const rowPosition = parseLeadingPosition(rowText);
+    if (rowPosition) {
+      flushCurrent();
+      current = {
+        position: rowPosition,
+        text: rowText,
+        pageNum: row.pageNum,
+        y: row.y,
+      };
+      continue;
+    }
+
+    if (!current || current.pageNum !== row.pageNum) {
+      flushCurrent();
+      continue;
+    }
+
+    const isCloseRow = Math.abs(current.y - row.y) <= 24;
+    const hasOwnQtyAndUnit = Boolean(extractQtyAndUnitFromText(rowText));
+    const hasOwnPosition = Boolean(parseLeadingPosition(rowText));
+
+    if (isCloseRow && !hasOwnQtyAndUnit && !hasOwnPosition) {
+      current.text = tidyText(`${current.text} ${rowText}`);
+      continue;
+    }
+  }
+
+  flushCurrent();
+
+  const items = [];
+  const unresolvedRows = [];
+
+  candidates.forEach((candidate, index) => {
+    const result = buildFallbackItemFromLine(candidate, index);
+    if (result.item) items.push(result.item);
+    if (result.unresolved) unresolvedRows.push(result.unresolved);
+  });
+
+  return {
+    items,
+    candidateRows: candidates.length,
+    unrecognizedRows: cleanupUnrecognizedRows(unresolvedRows),
+  };
+}
+
+function buildParseQuality({ items = [], candidateRows = 0, unrecognizedRows = [] }) {
+  const recognizedPositions = items.length;
+  const unresolvedPositions = unrecognizedRows.length;
+  const denominator = Math.max(candidateRows, recognizedPositions + unresolvedPositions, 1);
+  const recognitionRate = recognizedPositions / denominator;
+
+  return {
+    candidateRows,
+    recognizedPositions,
+    unresolvedPositions,
+    recognitionRate,
+  };
 }
 
 export async function parseApsProjectPdf(file) {
@@ -644,8 +1134,19 @@ export async function parseApsProjectPdf(file) {
   }
   await loadingTask.destroy();
 
-  const parsedRows = parseRowsToItems(allRows);
-  const items = mergeItems(parsedRows);
+  const primaryRows = parseRowsToItems(allRows);
+  const fallbackRows = parseRowsFallback(allRows);
+  const items = mergeItems([...(primaryRows.items || []), ...fallbackRows.items]);
+  const recognizedPositions = new Set(items.map((item) => String(item.position || "")));
+  const unrecognizedRows = cleanupUnrecognizedRows(
+    [...(primaryRows.unrecognizedRows || []), ...(fallbackRows.unrecognizedRows || [])],
+    recognizedPositions
+  );
+  const parseQuality = buildParseQuality({
+    items,
+    candidateRows: Math.max(primaryRows.candidateRows || 0, fallbackRows.candidateRows || 0, items.length + unrecognizedRows.length),
+    unrecognizedRows,
+  });
   if (!items.length) {
     throw new Error("Не удалось распознать строки спецификации в PDF. Проверьте, что документ содержит табличную спецификацию.");
   }
@@ -658,5 +1159,7 @@ export async function parseApsProjectPdf(file) {
     linesScanned: allRows.length,
     items,
     metrics: buildMetrics(items),
+    unrecognizedRows,
+    parseQuality,
   };
 }

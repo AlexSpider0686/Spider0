@@ -155,7 +155,7 @@ export function HomePage() {
   return (
     <main>
       <section className="hero">
-        <HeroVideo />
+        <HeroVideo variant="legacy" />
         <div className="container hero__content">
           <div className="hero__badge">Presale / Budget Intelligence / Security Systems</div>
           <h1>SmetaCore — предварительная бюджетная оценка систем безопасности без Excel-хаоса</h1>
@@ -188,6 +188,18 @@ export function HomePage() {
             <Link to="/legal/personal-data">политикой обработки персональных данных</Link> и{" "}
             <Link to="/legal/disclaimer">отказом от ответственности по точности расчетов</Link>.
           </div>
+        </div>
+      </section>
+
+      <section className="video-transition" id="video-transition">
+        <HeroVideo variant="manhattan" mode="block" />
+        <div className="container video-transition__content">
+          <div className="video-transition__badge">Новая подложка</div>
+          <h2>Переход на Manhattan video loop</h2>
+          <p>
+            Ниже старой подложки включен новый автономный локальный ролик `manhattan-loop-2min.mp4` (120 секунд), после
+            чего воспроизведение продолжается по кругу.
+          </p>
         </div>
       </section>
 

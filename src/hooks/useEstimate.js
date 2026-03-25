@@ -7,6 +7,7 @@ import { fetchPricesByRequests, fetchVendorPrices } from "../lib/priceCollector"
 import { VENDOR_EQUIPMENT } from "../config/vendorConfig";
 import { DEFAULT_REGION_NAME, getRegionCoef } from "../config/regionsConfig";
 import { validateEstimateInput } from "../lib/input-normalization";
+import { recalculateApsProjectSnapshot } from "../lib/apsProjectEstimate";
 
 function removeById(mapObject, id) {
   if (!(id in mapObject)) return mapObject;
@@ -198,7 +199,7 @@ export default function useEstimate() {
         ...prev,
         [systemId]: {
           state: "success",
-          message: `Распознано позиций: ${snapshot.items.length}. Источников с ценой: ${snapshot.sourceStats.sourceWithPrice}.`,
+          message: `Позиции в спецификации: ${snapshot.items.length}. С ценой от поставщиков: ${snapshot.sourceStats.itemsWithSupplierPrice}. Без цены: ${snapshot.sourceStats.itemsWithoutPrice}.`,
         },
       }));
     } catch (error) {
@@ -218,11 +219,53 @@ export default function useEstimate() {
     setApsImportStatuses((prev) => removeById(prev, systemId));
   };
 
+  const updateApsProjectItem = (systemId, itemId, patch = {}) => {
+    const normalizedPatch = {};
+    if (Object.prototype.hasOwnProperty.call(patch, "qty")) {
+      normalizedPatch.qty = Math.max(toNumber(patch.qty, 0), 0);
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, "unitPrice")) {
+      normalizedPatch.unitPrice = Math.max(toNumber(patch.unitPrice, 0), 0);
+    }
+
+    setApsProjectSnapshots((prev) => {
+      const current = prev?.[systemId];
+      if (!current) return prev;
+      const next = recalculateApsProjectSnapshot(current, { [itemId]: normalizedPatch }, objectData);
+      return { ...prev, [systemId]: next };
+    });
+
+    setApsImportStatuses((prev) => {
+      const currentStatus = prev?.[systemId];
+      if (!currentStatus || currentStatus.state === "loading") return prev;
+      return {
+        ...prev,
+        [systemId]: {
+          ...currentStatus,
+          state: "success",
+          message: "Позиции отредактированы вручную. Пересчет выполнен.",
+        },
+      };
+    });
+  };
+
   useEffect(() => {
     const systemIds = new Set(systems.map((item) => String(item.id)));
     setApsProjectSnapshots((prev) => Object.fromEntries(Object.entries(prev).filter(([id]) => systemIds.has(String(id)))));
     setApsImportStatuses((prev) => Object.fromEntries(Object.entries(prev).filter(([id]) => systemIds.has(String(id)))));
   }, [systems]);
+
+  useEffect(() => {
+    setApsProjectSnapshots((prev) => {
+      const entries = Object.entries(prev || {});
+      if (!entries.length) return prev;
+      const next = {};
+      for (const [systemId, snapshot] of entries) {
+        next[systemId] = recalculateApsProjectSnapshot(snapshot, {}, objectData);
+      }
+      return next;
+    });
+  }, [objectData.totalArea, objectData.floors, objectData.basementFloors, objectData.regionCoef, objectData.buildingStatus]);
 
   useEffect(() => {
     let cancelled = false;
@@ -327,6 +370,7 @@ export default function useEstimate() {
     refreshVendorPricing,
     importApsProjectPdf,
     clearApsProjectPdf,
+    updateApsProjectItem,
     exportEstimate,
     exportEstimateCsv,
     setZones,

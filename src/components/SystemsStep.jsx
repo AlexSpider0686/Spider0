@@ -1,7 +1,7 @@
 import React from "react";
 import { Plus, Trash2, Shield, FileUp, RefreshCcw } from "lucide-react";
 import { SYSTEM_TYPES, VENDORS } from "../config/estimateConfig";
-import { getVendorByName } from "../config/vendorsConfig";
+import { getManufacturerSource, getVendorByName } from "../config/vendorsConfig";
 import { num, rub, toNumber } from "../lib/estimate";
 import VendorConfigurator from "./VendorConfigurator";
 
@@ -16,6 +16,30 @@ function renderApsImportStatus(status) {
   return <p className="hint-inline">Статус: {status.message}</p>;
 }
 
+function toHost(url) {
+  if (!url) return "";
+  try {
+    return new URL(url).hostname.replace(/^www\./i, "").toLowerCase();
+  } catch {
+    return String(url)
+      .replace(/^https?:\/\//i, "")
+      .replace(/^www\./i, "")
+      .split("/")[0]
+      .toLowerCase();
+  }
+}
+
+function resolveUnrecognizedReason(reason) {
+  const map = {
+    position_not_found: "не найден номер позиции",
+    descriptor_missing: "нет описания позиции",
+    qty_or_unit_not_found: "не определены количество или единица измерения",
+    validation_failed: "не пройдена валидация строки",
+    not_parsed: "строка не распознана",
+  };
+  return map[reason] || "строка требует ручной проверки";
+}
+
 export default function SystemsStep({
   systems,
   addSystem,
@@ -27,6 +51,7 @@ export default function SystemsStep({
   canAddMoreSystems,
   importApsProjectPdf,
   clearApsProjectPdf,
+  updateApsProjectItem,
   apsProjectSnapshots,
   apsImportStatuses,
 }) {
@@ -55,6 +80,9 @@ export default function SystemsStep({
           const keyEquipment = result?.equipmentData?.keyEquipment || [];
           const apsSnapshot = apsProjectSnapshots?.[system.id];
           const apsStatus = apsImportStatuses?.[system.id];
+          const manufacturerSource = getManufacturerSource(system.type, system.vendor);
+          const manufacturerWebsite = manufacturerSource?.website || "";
+          const manufacturerHost = toHost(manufacturerWebsite);
 
           const pricedSourceCount =
             snapshot?.entries
@@ -67,6 +95,11 @@ export default function SystemsStep({
             .slice(0, 6);
           const checkedSourceHosts = [...new Set((snapshot?.entries || []).flatMap((item) => item.checkedSourceHosts || []))].slice(0, 10);
           const usedSourceHosts = [...new Set((snapshot?.entries || []).flatMap((item) => item.usedSourceHosts || []))].slice(0, 10);
+          const manufacturerChecked = manufacturerHost ? checkedSourceHosts.includes(manufacturerHost) : false;
+          const manufacturerUsedUrls = manufacturerHost
+            ? [...new Set((snapshot?.entries || []).flatMap((item) => item.usedSources || []).filter((url) => toHost(url) === manufacturerHost))]
+            : [];
+          const manufacturerSuccess = manufacturerUsedUrls.length > 0;
 
           return (
             <div className="system-card" key={system.id}>
@@ -135,8 +168,8 @@ export default function SystemsStep({
 
               {snapshot ? (
                 <div className="pricing-caption">
-                  Актуализация цен: {snapshot.fetchedAt ? new Date(snapshot.fetchedAt).toLocaleString("ru-RU") : "—"}. Источников с ценой:{" "}
-                  {pricedSourceCount} из {checkedSourceCount}.
+                  Актуализация цен: {snapshot.fetchedAt ? new Date(snapshot.fetchedAt).toLocaleString("ru-RU") : "—"}. Успешных ценовых ответов:{" "}
+                  {pricedSourceCount} из {checkedSourceCount} проверенных источников.
                   {snapshot.error ? <span className="warn-inline"> Ошибка API: {snapshot.error}</span> : null}
                   {checkedSourceHosts.length ? (
                     <div className="pricing-source-list">
@@ -160,6 +193,20 @@ export default function SystemsStep({
                       {usedSourcePreview.map((url) => (
                         <span key={`${system.id}-used-${url}`}>{url}</span>
                       ))}
+                    </div>
+                  ) : null}
+                  {manufacturerHost ? (
+                    <div className="pricing-source-list">
+                      <strong>Сайт производителя ({system.vendor}):</strong>
+                      <span>{manufacturerHost}</span>
+                      <span>
+                        {manufacturerSuccess
+                          ? `цены получены (${manufacturerUsedUrls.length})`
+                          : manufacturerChecked
+                            ? "сайт опрошен, цены не найдены"
+                            : "сайт еще не опрашивался"}
+                      </span>
+                      {manufacturerSuccess ? <span>{manufacturerUsedUrls[0]}</span> : null}
                     </div>
                   ) : null}
                 </div>
@@ -211,20 +258,32 @@ export default function SystemsStep({
                           <strong>{apsSnapshot.fileName}</strong>
                         </div>
                         <div className="metric-card">
-                          <span>Наименования спецификации</span>
+                          <span>Позиции в спецификации</span>
                           <strong>{num(apsSnapshot.items.length, 0)}</strong>
                         </div>
                         <div className="metric-card">
-                          <span>Оборудование (по проекту)</span>
-                          <strong>{rub(apsSnapshot.totals.equipment)}</strong>
+                          <span>Позиции с ценой от поставщиков</span>
+                          <strong>{num(apsSnapshot.sourceStats.itemsWithSupplierPrice, 0)}</strong>
                         </div>
                         <div className="metric-card">
-                          <span>Материалы (по проекту)</span>
-                          <strong>{rub(apsSnapshot.totals.materials)}</strong>
+                          <span>Позиции без цены поставщика</span>
+                          <strong>{num(apsSnapshot.sourceStats.itemsWithoutPrice, 0)}</strong>
                         </div>
                         <div className="metric-card">
-                          <span>Источников с ценой</span>
-                          <strong>{num(apsSnapshot.sourceStats.sourceWithPrice, 0)}</strong>
+                          <span>Нераспознанные строки PDF</span>
+                          <strong>{num(apsSnapshot.sourceStats.unresolvedPositions, 0)}</strong>
+                        </div>
+                        <div className="metric-card">
+                          <span>Точность распознавания</span>
+                          <strong>{num((apsSnapshot.sourceStats.recognitionRate || 0) * 100, 1)}%</strong>
+                        </div>
+                        <div className="metric-card">
+                          <span>Кабель (из проекта/модели)</span>
+                          <strong>{num(apsSnapshot.metrics?.cableLengthM || 0, 1)} м</strong>
+                        </div>
+                        <div className="metric-card">
+                          <span>Крепеж (из проекта/модели)</span>
+                          <strong>{num(apsSnapshot.metrics?.fastenerQty || 0, 0)} шт</strong>
                         </div>
                       </div>
 
@@ -236,7 +295,8 @@ export default function SystemsStep({
                               <th>Марка/модель</th>
                               <th>Категория</th>
                               <th>Кол-во</th>
-                              <th>Цена</th>
+                              <th>Цена, ₽</th>
+                              <th>Ед. проект/поставщик</th>
                               <th>Сумма</th>
                             </tr>
                           </thead>
@@ -247,15 +307,97 @@ export default function SystemsStep({
                                 <td>{item.model || item.brand || "—"}</td>
                                 <td>{item.category}</td>
                                 <td>
-                                  {num(item.qty, 0)} {item.unit}
+                                  <div className="table-edit-cell">
+                                    <input
+                                      className="table-number-input"
+                                      type="number"
+                                      min="0"
+                                      step="1"
+                                      value={item.qty}
+                                      onChange={(event) => updateApsProjectItem(system.id, item.id, { qty: event.target.value })}
+                                    />
+                                    <span>{item.unit}</span>
+                                  </div>
                                 </td>
-                                <td>{rub(item.unitPrice)}</td>
+                                <td>
+                                  <input
+                                    className="table-number-input"
+                                    type="number"
+                                    min="0"
+                                    step="1"
+                                    value={item.unitPrice}
+                                    onChange={(event) => updateApsProjectItem(system.id, item.id, { unitPrice: event.target.value })}
+                                  />
+                                </td>
+                                <td>
+                                  <span className={`unit-audit-badge ${item?.unitAudit?.status || "unknown"}`}>
+                                    {item?.unitAudit?.message || "нет данных"}
+                                  </span>
+                                </td>
                                 <td>{rub(item.total)}</td>
                               </tr>
                             ))}
                           </tbody>
                         </table>
                       </div>
+
+                      {apsSnapshot.itemsWithoutPrice?.length ? (
+                        <div className="calc-explain">
+                          <h4>Позиции без найденной цены поставщика</h4>
+                          <div className="table-wrap compact">
+                            <table>
+                              <thead>
+                                <tr>
+                                  <th>Поз.</th>
+                                  <th>Наименование</th>
+                                  <th>Марка/модель</th>
+                                  <th>Кол-во</th>
+                                  <th>Причина</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {apsSnapshot.itemsWithoutPrice.map((item) => (
+                                  <tr key={`${system.id}-no-price-${item.id}`}>
+                                    <td>{item.position || "—"}</td>
+                                    <td>{item.name}</td>
+                                    <td>{item.model || "—"}</td>
+                                    <td>
+                                      {num(item.qty, 0)} {item.unit}
+                                    </td>
+                                    <td>{item.reason}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {apsSnapshot.unrecognizedRows?.length ? (
+                        <div className="calc-explain">
+                          <h4>Нераспознанные позиции PDF (требуют проверки)</h4>
+                          <div className="table-wrap compact">
+                            <table>
+                              <thead>
+                                <tr>
+                                  <th>Поз.</th>
+                                  <th>Строка из PDF</th>
+                                  <th>Причина</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {apsSnapshot.unrecognizedRows.map((row) => (
+                                  <tr key={`${system.id}-unrecognized-${row.id}`}>
+                                    <td>{row.position || "—"}</td>
+                                    <td>{row.rawLine}</td>
+                                    <td>{resolveUnrecognizedReason(row.reason)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      ) : null}
 
                       <div className="equipment-principles">
                         <p>
@@ -265,6 +407,15 @@ export default function SystemsStep({
                         <p>
                           <strong>Трудоемкость проектирования:</strong> {num(apsSnapshot.labor.designHoursBase, 1)} ч; группа{" "}
                           {num(apsSnapshot.labor.designTeamSize, 0)} чел.; срок {num(apsSnapshot.labor.designMonths, 0)} мес.
+                        </p>
+                        <p>
+                          <strong>Проверка единиц измерения:</strong> совпало {num(apsSnapshot.sourceStats.unitMatch, 0)}, требуется проверка{" "}
+                          {num(apsSnapshot.sourceStats.unitMismatch, 0)}, без данных {num(apsSnapshot.sourceStats.unitUnknown, 0)}.
+                        </p>
+                        <p>
+                          <strong>Кабель и крепеж по системе:</strong> кабель {num(apsSnapshot.metrics?.cableLengthM || 0, 1)} м, линий{" "}
+                          {num(apsSnapshot.metrics?.cableLines || 0, 0)}; крепеж {num(apsSnapshot.metrics?.fastenerQty || 0, 0)} шт, позиций{" "}
+                          {num(apsSnapshot.metrics?.fastenerLines || 0, 0)}.
                         </p>
                       </div>
                     </>
@@ -329,6 +480,11 @@ export default function SystemsStep({
                         <strong>{item.name}:</strong> {item.basis}
                       </p>
                     ))}
+                    <p>
+                      <strong>Кабель:</strong> {num(result?.cable || 0, 1)} м; <strong>Крепеж:</strong>{" "}
+                      {num(apsSnapshot?.metrics?.fastenerQty ?? result?.fastenerUnits ?? 0, 0)} шт; <strong>КНС:</strong>{" "}
+                      {num(result?.knsLength || result?.trace?.knsLengthM || 0, 1)} м.
+                    </p>
                   </div>
                 </div>
               </div>
