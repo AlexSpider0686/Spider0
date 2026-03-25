@@ -158,7 +158,7 @@ export function HomePage() {
         <HeroVideo />
         <div className="container hero__content">
           <div className="hero__badge">Presale / Budget Intelligence / Security Systems</div>
-          <h1>Smeta App — предварительная бюджетная оценка систем безопасности без Excel-хаоса</h1>
+          <h1>SmetaCore — предварительная бюджетная оценка систем безопасности без Excel-хаоса</h1>
           <p className="hero__lead">
             Система собирает финансовую модель по АПС, СОУЭ, СОТС, СОТ, СКУД и ССОИ, учитывает зонирование, тип
             объекта и региональные коэффициенты и превращает пресейл в управляемый цифровой процесс.
@@ -193,7 +193,7 @@ export function HomePage() {
 
       <section className="section section--dark" id="positioning">
         <div className="container">
-          <SectionHeader eyebrow="Позиционирование" title="Почему Smeta App нужен рынку прямо сейчас">
+          <SectionHeader eyebrow="Позиционирование" title="Почему SmetaCore нужен рынку прямо сейчас">
             В РФ рынок сметных и инженерных инструментов переполнен тяжелыми системами и самодельными таблицами. Ниша
             быстрого браузерного пресейл-калькулятора для нескольких систем безопасности почти свободна.
           </SectionHeader>
@@ -209,7 +209,7 @@ export function HomePage() {
                     <p>{card.disadvantage}</p>
                   </div>
                   <div>
-                    <strong>Преимущество Smeta App</strong>
+                    <strong>Преимущество SmetaCore</strong>
                     <p>{card.advantage}</p>
                   </div>
                 </div>
@@ -235,7 +235,7 @@ export function HomePage() {
                   <th>Характеристика</th>
                   <th>Гранд-Смета</th>
                   <th>Excel-таблицы</th>
-                  <th>Smeta App</th>
+                  <th>SmetaCore</th>
                 </tr>
               </thead>
               <tbody>
@@ -292,7 +292,7 @@ export function HomePage() {
             <div className="spotlight-card__eyebrow">Для кого продукт</div>
             <h3>Пресейл-менеджеры, ГИПы, руководители проектов, интеграторы и коммерческие службы</h3>
             <p>
-              Smeta App сокращает цикл первичной оценки, дает единый язык для инженерии и коммерции и делает расчет
+              SmetaCore сокращает цикл первичной оценки, дает единый язык для инженерии и коммерции и делает расчет
               презентабельным для клиента уже на первой итерации переговоров.
             </p>
             <button className="btn btn--primary" onClick={() => setAuthOpen(true)}>
