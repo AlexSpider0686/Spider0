@@ -1,500 +1,547 @@
-import { getSystemResourceModel, getSystemRules } from "../../config/systemsConfig";
-import { getZoneCalcProfile, getZoneRateProfile } from "../../config/zonesConfig";
+import { SYSTEM_TYPES } from "../../config/estimateConfig";
+import { getSystemRules } from "../../config/systemsConfig";
 import { calculateSystem, toNumber } from "../estimate";
+import { estimateCableBySystem } from "../cable-estimator";
+import { buildCoefficientLayer } from "../coefficient-engine";
+import { buildSystemExplainability } from "../explainability-engine";
+import { normalizeEstimateInput } from "../input-normalization";
+import { estimateKnsBySystem } from "../kns-estimator";
+import { calculateLaborCost } from "../labor-cost-engine";
+import { classifyObject } from "../object-classifier";
+import { estimateSystemQuantities } from "../system-estimator";
+import { classifyZonesForSystem } from "../zone-classifier";
 
-const DESIGN_RATE_PER_HOUR = 2100;
-
-const SYSTEM_MARKERS = {
-  sots: { resourceKey: "sensor", label: "Монтаж+ПНР 1 охранного датчика" },
-  sot: { resourceKey: "camera", label: "Монтаж+ПНР 1 камеры" },
-  skud: { resourceKey: "reader", label: "Монтаж+ПНР 1 точки прохода" },
-  ssoi: { resourceKey: "gateway", label: "Интеграция 1 элемента" },
-  aps: { resourceKey: "detector", label: "Монтаж+ПНР 1 извещателя" },
-  soue: { resourceKey: "speaker", label: "Монтаж+ПНР 1 оповещателя" },
-};
-
-function pickOptimalCoefficient({ key, value, objectData, zones }) {
-  const maxFloors = Math.max(...zones.map((zone) => toNumber(zone.floors, 1)), 1);
-  const parkingShare =
-    zones.filter((zone) => zone.type === "parking").reduce((sum, zone) => sum + toNumber(zone.area), 0) /
-    Math.max(zones.reduce((sum, zone) => sum + toNumber(zone.area), 0), 1);
-
-  const recommendations = {
-    vendorFactor:
-      value > 1.15
-        ? "Повышенный индекс вендора оправдан для объектов с высокой надежностью и сложной интеграцией."
-        : "Для типового объекта обычно достаточно диапазона 0.95–1.10.",
-    marketSnapshotFactor:
-      value > 1.08
-        ? "Рынок выше базового уровня, лучше закладывать дополнительный резерв по оборудованию."
-        : "Индекс рынка близок к базе, можно работать в стандартном ценовом коридоре.",
-    regionCoef:
-      value > 1.1
-        ? "Для удаленных и северных регионов коэффициент выше 1.1 обычно обоснован."
-        : "Для центральной части РФ обычно достаточно диапазона 0.98–1.08.",
-    cableCoef:
-      parkingShare > 0.25
-        ? "При большой доле паркинга и сложной трассировке рекомендуется 1.05–1.20."
-        : "Для стандартного объекта обычно достаточно 0.95–1.05.",
-    laborCoef:
-      maxFloors > 8
-        ? "Для высотных объектов чаще применяется коэффициент трудозатрат 1.05–1.20."
-        : "Для типовых объектов обычно достаточно 0.95–1.05.",
-    complexityCoef:
-      objectData.objectType === "transport" || objectData.objectType === "energy"
-        ? "Для транспортных и энергетических объектов обычно применяют 1.10–1.30."
-        : "Для стандартных объектов обычно 1.00–1.10.",
-    conditionLaborFactor:
-      value > 1.2
-        ? "Сложные условия подтверждают повышенный совокупный коэффициент."
-        : "Совокупный коэффициент условий в районе 1.00–1.15 обычно достаточен.",
-    designComplexityFactor:
-      value > 1.2
-        ? "Проектирование заметно усложнено (этажность, тип объекта, интеграция)."
-        : "Сложность проектирования близка к базовой.",
-  };
-
-  return recommendations[key] || "Оптимальное значение зависит от сложности объекта и условий выполнения работ.";
+function getSystemName(systemType) {
+  return SYSTEM_TYPES.find((item) => item.code === systemType)?.name || systemType;
 }
 
-function calcDesignComplexityFactor(system, objectData, zones) {
-  const maxFloors = Math.max(...zones.map((zone) => toNumber(zone.floors, 1)), 1);
-  const objectTypeBoost =
-    objectData.objectType === "transport" || objectData.objectType === "energy"
-      ? 0.16
-      : objectData.objectType === "production"
-        ? 0.1
-        : 0.05;
-
-  const systemBoost = system.type === "ssoi" ? 0.14 : system.type === "aps" || system.type === "soue" ? 0.1 : 0.07;
-  const floorsBoost = Math.max(0, maxFloors - 3) * 0.018;
-
-  return 1 + objectTypeBoost + systemBoost + floorsBoost;
+function sum(list, selector) {
+  return (list || []).reduce((acc, item) => acc + selector(item), 0);
 }
 
-function calcDesignDurationMonths(designHours, totalUnits) {
-  const teamSize = Math.max(1, Math.min(5, Math.ceil(totalUnits / 120)));
-  const monthlyCapacity = teamSize * 150;
-  const months = Math.max(1, Math.ceil(designHours / Math.max(monthlyCapacity, 1)));
-  return { months, teamSize };
-}
-
-function calcExecutionDuration(executionHours, totalUnits, suggestedCrewSize = null, suggestedMonths = null) {
-  const crewSize = Math.max(1, Math.round(suggestedCrewSize || Math.max(2, Math.min(18, Math.ceil(totalUnits / 160)))));
-  const executionDays = Math.max(1, Math.ceil(executionHours / Math.max(crewSize * 8, 1)));
-  const executionMonths = Math.max(1, Math.ceil(executionDays / 22));
+function buildInvalidResult(system, objectData, errors = [], warnings = []) {
+  const regionCoef = Math.max(toNumber(objectData?.regionCoef, 1), 0.5);
   return {
-    crewSize,
-    executionDays,
-    executionMonths: Math.max(executionMonths, toNumber(suggestedMonths, executionMonths)),
-  };
-}
-
-function calcCharges(baseRaw, budget, regionCoef) {
-  const overheadRaw = baseRaw * (toNumber(budget.overheadPercent) / 100);
-  const ppeRaw = baseRaw * (toNumber(budget.ppePercent) / 100);
-  const payrollTaxesRaw = baseRaw * (toNumber(budget.payrollTaxesPercent) / 100);
-  const utilizationRaw = baseRaw * (toNumber(budget.utilizationPercent) / 100);
-  const adminRaw = (baseRaw + overheadRaw + ppeRaw + payrollTaxesRaw + utilizationRaw) * (toNumber(budget.adminPercent) / 100);
-
-  const base = baseRaw * regionCoef;
-  const overhead = overheadRaw * regionCoef;
-  const ppe = ppeRaw * regionCoef;
-  const payrollTaxes = payrollTaxesRaw * regionCoef;
-  const utilization = utilizationRaw * regionCoef;
-  const admin = adminRaw * regionCoef;
-  const charges = overhead + ppe + payrollTaxes + utilization + admin;
-
-  return {
-    base,
-    overhead,
-    ppe,
-    payrollTaxes,
-    utilization,
-    admin,
-    charges,
-    total: base + charges,
-  };
-}
-
-function buildSystemMarker(systemType, resourceRows, workTotal, totalUnits) {
-  const markerMeta = SYSTEM_MARKERS[systemType] || { resourceKey: "", label: "Стоимость 1 единицы" };
-  const markerRow = resourceRows.find((row) => row.key === markerMeta.resourceKey);
-  const markerQty = Math.max(toNumber(markerRow?.qty, 0) || toNumber(totalUnits, 0) || 1, 1);
-  const costPerUnit = toNumber(workTotal, 0) / markerQty;
-
-  return {
-    key: markerMeta.resourceKey || "generic",
-    label: markerMeta.label,
-    qty: markerQty,
-    costPerUnit,
-  };
-}
-
-function buildModelResourceRows(resourceModel, zones) {
-  return resourceModel.elements.map((element) =>
-    zones.reduce(
-      (acc, zone) => {
-        const zoneArea = Math.max(toNumber(zone.area), 0);
-        const floors = Math.max(toNumber(zone.floors, 1), 1);
-        const zoneProfileKey = getZoneRateProfile(zone.type || "office");
-        const zoneCalc = getZoneCalcProfile(zone.type || "office");
-        const density = element.densityPer1000[zoneProfileKey] || element.densityPer1000.office || 0;
-        const floorReserve = 1 + (floors - 1) * 0.012;
-        const qty = (zoneArea / 1000) * density * zoneCalc.densityCoef;
-
-        acc.qty += qty;
-        acc.cable += qty * element.cablePerUnit * zoneCalc.cableCoef * floorReserve;
-        acc.materials += qty * element.materialPerUnit;
-        acc.mountHours += qty * element.mountHours * zoneCalc.laborCoef;
-        acc.connectHours += qty * element.connectHours * zoneCalc.laborCoef;
-        acc.setupHours += qty * element.setupHours * zoneCalc.laborCoef;
-        acc.pnrHours += qty * element.pnrHours * zoneCalc.laborCoef;
-        acc.designHours += qty * element.designHours * zoneCalc.laborCoef;
-        return acc;
-      },
+    systemType: system.type,
+    systemName: getSystemName(system.type),
+    vendor: system.vendor,
+    cable: 0,
+    units: 0,
+    equipCost: 0,
+    equipmentCost: 0,
+    cableMaterials: 0,
+    trayAndFasteners: 0,
+    materialCost: 0,
+    materialsBase: 0,
+    laborBase: 0,
+    workBase: 0,
+    workCharges: 0,
+    workTotal: 0,
+    executionHours: 0,
+    executionTeamSize: 0,
+    executionDurationDays: 0,
+    executionDurationMonths: 0,
+    designHours: 0,
+    designBase: 0,
+    designCharges: 0,
+    designTotal: 0,
+    designDurationMonths: 0,
+    designTeamSize: 0,
+    overhead: 0,
+    ppe: 0,
+    payrollTaxes: 0,
+    utilization: 0,
+    admin: 0,
+    designOverhead: 0,
+    designPpe: 0,
+    designPayrollTaxes: 0,
+    designUtilization: 0,
+    designAdmin: 0,
+    profit: 0,
+    vat: 0,
+    total: 0,
+    unitWorkMarker: {
+      key: "invalid",
+      label: "Маркер недоступен",
+      qty: 0,
+      costPerUnit: 0,
+    },
+    equipmentData: {
+      sourceMode: "invalid-input",
+      details: [],
+      keyEquipment: [],
+      marketEntries: [],
+      unitPrice: 0,
+      selectionKey: "invalid",
+    },
+    bom: [],
+    formulaRows: [
       {
-        key: element.key,
-        label: element.label,
-        qty: 0,
-        cable: 0,
-        materials: 0,
-        mountHours: 0,
-        connectHours: 0,
-        setupHours: 0,
-        pnrHours: 0,
-        designHours: 0,
-        priceShare: element.priceShare || 0,
-      }
-    )
-  );
-}
-
-function buildApsRowsFromProject(modelRows, projectSnapshot) {
-  if (!projectSnapshot?.active || !Array.isArray(projectSnapshot.items) || !projectSnapshot.items.length) {
-    return null;
-  }
-
-  const rows = modelRows.map((row) => ({ ...row, qty: 0, cable: 0, materials: 0, mountHours: 0, connectHours: 0, setupHours: 0, pnrHours: 0, designHours: 0 }));
-  const rowByKey = new Map(rows.map((row) => [row.key, row]));
-  const modelByKey = new Map(modelRows.map((row) => [row.key, row]));
-
-  const metrics = projectSnapshot.metrics || {};
-  const detectorQty = Math.max(toNumber(metrics.detectorsQty, 0), 0);
-  const panelQty = Math.max(toNumber(metrics.panelQty, 0) + toNumber(metrics.powerQty, 0), 0);
-  const notificationQty = Math.max(toNumber(metrics.notificationQty, 0), 0);
-  const cableLengthM = Math.max(toNumber(metrics.cableLengthM, 0), 0);
-
-  if (rowByKey.has("detector")) rowByKey.get("detector").qty = detectorQty;
-  if (rowByKey.has("module")) rowByKey.get("module").qty = panelQty;
-  if (rowByKey.has("notification")) rowByKey.get("notification").qty = notificationQty;
-
-  rows.forEach((row) => {
-    const model = modelByKey.get(row.key);
-    if (!model) return;
-    row.cable += row.qty * toNumber(model.cable, 0) / Math.max(toNumber(model.qty, 0), 1);
-    row.materials += row.qty * toNumber(model.materials, 0) / Math.max(toNumber(model.qty, 0), 1);
-    row.mountHours += row.qty * toNumber(model.mountHours, 0) / Math.max(toNumber(model.qty, 0), 1);
-    row.connectHours += row.qty * toNumber(model.connectHours, 0) / Math.max(toNumber(model.qty, 0), 1);
-    row.setupHours += row.qty * toNumber(model.setupHours, 0) / Math.max(toNumber(model.qty, 0), 1);
-    row.pnrHours += row.qty * toNumber(model.pnrHours, 0) / Math.max(toNumber(model.qty, 0), 1);
-    row.designHours += row.qty * toNumber(model.designHours, 0) / Math.max(toNumber(model.qty, 0), 1);
-  });
-
-  if (cableLengthM > 0) {
-    if (rowByKey.has("detector")) rowByKey.get("detector").cable += cableLengthM * 0.62;
-    if (rowByKey.has("notification")) rowByKey.get("notification").cable += cableLengthM * 0.24;
-    if (rowByKey.has("module")) rowByKey.get("module").cable += cableLengthM * 0.14;
-  }
-
-  const totalMaterialsFromRows = rows.reduce((sum, row) => sum + row.materials, 0);
-  const projectedMaterials = Math.max(toNumber(projectSnapshot.totals?.materials, 0), 0);
-  if (projectedMaterials > totalMaterialsFromRows && rowByKey.has("module")) {
-    rowByKey.get("module").materials += projectedMaterials - totalMaterialsFromRows;
-  }
-
-  const totalUnits = rows.reduce((sum, row) => sum + row.qty, 0);
-  const totalCable = rows.reduce((sum, row) => sum + row.cable, 0);
-  const totalMaterials = rows.reduce((sum, row) => sum + row.materials, 0);
-  const computedExecutionHours = rows.reduce((sum, row) => sum + row.mountHours + row.connectHours + row.setupHours + row.pnrHours, 0);
-  const computedDesignHours = rows.reduce((sum, row) => sum + row.designHours, 0);
-
-  const labor = projectSnapshot.labor || {};
-  return {
-    mode: "project_pdf",
-    fileName: projectSnapshot.fileName,
-    resourceRows: rows,
-    totalUnits,
-    totalCable,
-    totalMaterials,
-    executionHours: Math.max(toNumber(labor.executionHoursBase, computedExecutionHours), computedExecutionHours),
-    designHours: Math.max(toNumber(labor.designHoursBase, computedDesignHours), computedDesignHours),
-    equipmentCost: Math.max(toNumber(projectSnapshot.totals?.equipment, 0), 0),
-    materialCost: projectedMaterials,
-    keyEquipment: projectSnapshot.keyEquipment || [],
-    marketEntries: projectSnapshot.priceEntries || [],
-    bomItems: projectSnapshot.items || [],
-    timeline: {
-      crewSize: toNumber(labor.crewSize, null),
-      executionMonths: toNumber(labor.executionMonths, null),
-      designTeamSize: toNumber(labor.designTeamSize, null),
-      designMonths: toNumber(labor.designMonths, null),
-      executionDays: toNumber(labor.executionDays, null),
+        key: "validation",
+        label: "Проверка исходных данных",
+        value: 0,
+        useCase: "Финальный расчет не выполнен из-за ошибок валидации входных данных.",
+      },
+    ],
+    coefficientInsights: [],
+    breakdown: {
+      equipment: [],
+      works: { smr: 0, pnr: 0, design: 0, integration: 0, kns: 0 },
+      materials: { cable: 0, trayAndFasteners: 0, resourceMaterials: 0 },
+      resources: [],
+    },
+    explanation: [
+      "Финальный расчет не выполнен.",
+      ...errors.map((item) => `Ошибка: ${item}`),
+      ...warnings.map((item) => `Предупреждение: ${item}`),
+    ],
+    trace: {
+      regionCoef,
+      validationErrors: errors,
+      validationWarnings: warnings,
     },
   };
 }
 
-export function calculateSystemWithBreakdown(system, zones, budget, objectData = {}, marketSnapshot = null, projectSnapshot = null) {
-  const base = calculateSystem(system, zones, budget, objectData, marketSnapshot);
-  const rules = getSystemRules(system.type);
-  const resourceModel = getSystemResourceModel(system.type);
-  const budgetComplexity = toNumber(budget.complexityCoef, 1);
-  const budgetLabor = toNumber(budget.laborCoef, 1);
+function buildEquipmentBreakdown(systemType, equipmentCost) {
+  const rules = getSystemRules(systemType);
+  return (rules?.equipmentMix || []).map((item) => ({
+    key: item.key,
+    label: item.label,
+    cost: equipmentCost * toNumber(item.share, 0),
+  }));
+}
 
-  const modelRows = buildModelResourceRows(resourceModel, zones);
-  const apsProjectData = system.type === "aps" ? buildApsRowsFromProject(modelRows, projectSnapshot) : null;
-  const resourceRows = apsProjectData?.resourceRows || modelRows;
-
-  let totalUnits = resourceRows.reduce((sum, row) => sum + row.qty, 0);
-  let totalCable = resourceRows.reduce((sum, row) => sum + row.cable, 0);
-  let totalMaterialsByRows = resourceRows.reduce((sum, row) => sum + row.materials, 0);
-  let totalExecutionHours = resourceRows.reduce((sum, row) => sum + row.mountHours + row.connectHours + row.setupHours + row.pnrHours, 0);
-  let totalDesignHours = resourceRows.reduce((sum, row) => sum + row.designHours, 0);
-
-  if (apsProjectData) {
-    totalUnits = apsProjectData.totalUnits;
-    totalCable = apsProjectData.totalCable;
-    totalMaterialsByRows = apsProjectData.totalMaterials;
-    totalExecutionHours = apsProjectData.executionHours;
-    totalDesignHours = apsProjectData.designHours;
-  }
-
-  const executionRate = totalExecutionHours > 0 ? base.workBase / totalExecutionHours : DESIGN_RATE_PER_HOUR;
-  const executionBaseRaw = totalExecutionHours * executionRate * budgetLabor * budgetComplexity;
-  const designComplexityFactor = calcDesignComplexityFactor(system, objectData, zones);
-  const designBaseRaw = totalDesignHours * DESIGN_RATE_PER_HOUR * budgetComplexity * designComplexityFactor;
-
-  let cableMaterials = totalCable * 92;
-  let trayAndFasteners = totalCable * 51;
-  const equipmentFromRows = resourceRows.reduce((sum, row) => sum + base.equipmentCost * row.priceShare, 0);
-  let equipmentCost = equipmentFromRows > 0 ? equipmentFromRows : base.equipmentCost;
-  let materialCost = cableMaterials + trayAndFasteners + totalMaterialsByRows;
-
-  if (apsProjectData) {
-    if (apsProjectData.equipmentCost > 0) equipmentCost = apsProjectData.equipmentCost;
-    if (apsProjectData.materialCost > 0) {
-      materialCost = apsProjectData.materialCost;
-      cableMaterials = materialCost * 0.55;
-      trayAndFasteners = materialCost * 0.2;
-      totalMaterialsByRows = Math.max(materialCost - cableMaterials - trayAndFasteners, 0);
-    }
-  }
-
-  const materialsBase = equipmentCost + materialCost;
-  const regionCoef = toNumber(base.trace?.regionCoef, 1);
-  const execution = calcCharges(executionBaseRaw, budget, regionCoef);
-  const design = calcCharges(designBaseRaw, budget, regionCoef);
-
-  const workTotal = execution.total;
-  const designTotal = design.total;
-  const directCost = materialsBase + workTotal + designTotal;
-  const profit = directCost * (toNumber(budget.profitabilityPercent) / 100);
-  const subtotal = directCost + profit;
-  const vat = budget.taxMode === "osno" ? subtotal * (toNumber(budget.vatPercent) / 100) : 0;
-  const total = subtotal + vat;
-
-  const equipment = rules.equipmentMix.map((item) => {
-    const matchingRow = resourceRows.find((row) => row.key === item.key);
+function buildFallbackBom(systemType, resourceRows, equipmentCost) {
+  if (!resourceRows.length) return [];
+  const qtySum = sum(resourceRows, (item) => Math.max(toNumber(item.qty, 0), 0));
+  return resourceRows.map((row, index) => {
+    const qty = Math.max(toNumber(row.qty, 0), 1);
+    const weight = qtySum > 0 ? qty / qtySum : 1 / resourceRows.length;
+    const total = equipmentCost * weight;
     return {
-      key: item.key,
-      label: item.label,
-      cost: matchingRow ? (matchingRow.priceShare || item.share) * equipmentCost : equipmentCost * item.share,
+      code: `${systemType.toUpperCase()}-${index + 1}`,
+      name: row.label,
+      qty,
+      unitPrice: total / qty,
+      total,
     };
   });
+}
 
-  const smrWeight = toNumber(rules.laborSplit.smr, 0.6);
-  const pnrWeight = toNumber(rules.laborSplit.pnr, 0.25);
-  const splitSum = Math.max(smrWeight + pnrWeight, 0.001);
-  const works = {
-    smr: execution.base * (smrWeight / splitSum),
-    pnr: execution.base * (pnrWeight / splitSum),
-    design: design.base,
-  };
+function buildResourceRowsWithLabor(resourceRows, quantities, cableModel) {
+  const rows = (resourceRows || []).map((row) => ({ ...row }));
+  const totalQty = Math.max(sum(rows, (item) => Math.max(toNumber(item.qty, 0), 0)), 1);
+  const totalCable = Math.max(toNumber(cableModel?.cableLengthM, 0), 0);
 
-  const unitWorkMarker = buildSystemMarker(system.type, resourceRows, workTotal, totalUnits);
-  const defaultDesignTimeline = calcDesignDurationMonths(totalDesignHours, totalUnits);
-  const designTimeline = {
-    months: Math.max(defaultDesignTimeline.months, toNumber(apsProjectData?.timeline?.designMonths, 0)),
-    teamSize: Math.max(defaultDesignTimeline.teamSize, toNumber(apsProjectData?.timeline?.designTeamSize, 0)),
-  };
-  const executionTimeline = calcExecutionDuration(
-    totalExecutionHours,
-    totalUnits,
-    apsProjectData?.timeline?.crewSize,
-    apsProjectData?.timeline?.executionMonths
-  );
+  return rows.map((row) => {
+    const qty = Math.max(toNumber(row.qty, 0), 0);
+    const share = qty / totalQty;
+    const cable = totalCable * share;
+    const mountHours = qty * 0.28;
+    const connectHours = qty * 0.14;
+    const setupHours = qty * 0.1;
+    const pnrHours = qty * 0.08;
+    const designHours = qty * 0.04;
+    return {
+      ...row,
+      qty,
+      cable,
+      materials: cable * 42,
+      mountHours,
+      connectHours,
+      setupHours,
+      pnrHours,
+      designHours,
+    };
+  });
+}
 
-  const explanation = [
-    apsProjectData
-      ? `Система АПС рассчитана по загруженному проекту PDF (${apsProjectData.fileName}).`
-      : `Система рассчитана по внутренней модели по зонам и плотностям ресурсов.`,
-    `Объем: ${Math.round(totalUnits)} единиц и ${Math.round(totalCable)} м кабеля.`,
-    `Проектирование: ${totalDesignHours.toFixed(1)} ч, команда ~${designTimeline.teamSize} чел., срок ${designTimeline.months} мес.`,
-    `Выполнение работ: ${totalExecutionHours.toFixed(1)} ч, бригада ~${executionTimeline.crewSize} чел., срок ${executionTimeline.executionDays} дн.`,
-    `${unitWorkMarker.label}: ${unitWorkMarker.costPerUnit.toFixed(0)} ₽/ед.`,
-    `Формула работ: база × коэффициенты условий + ФОТ + утилизация + СИЗ + АХР, далее применяется региональный коэффициент.`,
-  ];
-
-  const formulaRows = [
-    {
-      key: "vendorFactor",
-      label: "Коэфф. вендора",
-      value: base.trace?.vendorFactor ?? 1,
-      useCase: "Учитывает ценовой и технологический профиль выбранного производителя.",
-    },
-    {
-      key: "marketSnapshotFactor",
-      label: "Коэфф. рынка (производитель + Tinko)",
-      value: base.trace?.marketSnapshotFactor ?? 1,
-      useCase: "Показывает влияние средней рыночной цены по результатам опроса источников.",
-    },
-    {
-      key: "regionCoef",
-      label: "Региональный коэфф.",
-      value: base.trace?.regionCoef ?? 1,
-      useCase: "Учитывает географию выполнения работ: логистику, климат и доступность ресурсов.",
-    },
-    {
-      key: "cableCoef",
-      label: "Коэфф. кабельных работ",
-      value: base.trace?.cableCoef ?? 1,
-      useCase: "Применяется при усложненной трассировке и повышенном резерве линий.",
-    },
-    {
-      key: "laborCoef",
-      label: "Коэфф. трудозатрат",
-      value: base.trace?.laborCoef ?? 1,
-      useCase: "Корректирует трудоемкость монтажа, ПНР и интеграции.",
-    },
-    {
-      key: "complexityCoef",
-      label: "Коэфф. сложности",
-      value: base.trace?.complexityCoef ?? 1,
-      useCase: "Учитывает интеграционную сложность и специальные требования проекта.",
-    },
-    {
-      key: "conditionLaborFactor",
-      label: "Сводный коэфф. условий",
-      value: base.trace?.conditionLaborFactor ?? 1,
-      useCase: "Высота, стесненность, ночные смены и работы на действующем объекте.",
-    },
-    {
-      key: "designComplexityFactor",
-      label: "Коэфф. сложности проектирования",
-      value: designComplexityFactor,
-      useCase: "Учитывает этажность, тип объекта и сложность выбранной системы.",
-    },
-  ];
-
-  if (apsProjectData) {
-    formulaRows.push({
-      key: "projectPdfMode",
-      label: "Режим: расчет по проекту PDF",
-      value: 1,
-      useCase: "Стоимость и объемы оборудования взяты из распознанной спецификации проекта.",
-    });
+function resolveApsProjectOverrides(projectSnapshot, quantities, cableModel, knsModel) {
+  if (!projectSnapshot?.active) {
+    return {
+      quantities,
+      cableModel,
+      knsModel,
+      laborOverride: {},
+      equipmentOverride: {},
+      projectMode: false,
+    };
   }
 
-  const coefficientInsights = formulaRows.map((row) => ({
-    ...row,
-    recommended: pickOptimalCoefficient({ key: row.key, value: toNumber(row.value, 1), objectData, zones }),
+  const metrics = projectSnapshot.metrics || {};
+  const labor = projectSnapshot.labor || {};
+  const detectorQty = Math.max(toNumber(metrics.detectorsQty, quantities.primaryUnits), 0);
+  const panelQty = Math.max(toNumber(metrics.panelQty, 0) + toNumber(metrics.powerQty, 0), 0);
+  const notificationQty = Math.max(toNumber(metrics.notificationQty, 0), 0);
+  const cableLengthM = Math.max(toNumber(metrics.cableLengthM, cableModel.cableLengthM), 0);
+  const integrationPoints = Math.max(toNumber(quantities.integrationPoints, 1), 1);
+
+  const overriddenQuantities = {
+    ...quantities,
+    primaryUnits: detectorQty,
+    markerUnits: detectorQty,
+    controllerUnits: panelQty,
+    activeElements: detectorQty + panelQty + notificationQty,
+    integrationPoints,
+    designHoursBase: Math.max(toNumber(labor.designHoursBase, quantities.designHoursBase), quantities.designHoursBase),
+    resourceRows: [
+      { key: "detector", label: "Пожарные извещатели", qty: detectorQty, priceShare: 0.46 },
+      { key: "module", label: "ППКП и модули", qty: Math.max(panelQty, 1), priceShare: 0.28 },
+      { key: "notification", label: "Оповещатели и табло", qty: Math.max(notificationQty, 1), priceShare: 0.16 },
+      { key: "power", label: "Питание и АКБ", qty: Math.max(toNumber(metrics.powerQty, 1), 1), priceShare: 0.1 },
+    ],
+    secondary: {
+      ...(quantities.secondary || {}),
+      panels: panelQty,
+      notification: notificationQty,
+    },
+  };
+
+  const overriddenCable = {
+    ...cableModel,
+    cableLengthM,
+    localCableM: cableLengthM * 0.62,
+    trunkCableM: cableLengthM * 0.24,
+    riserCableM: cableLengthM * 0.14,
+    reserveFactor: 1,
+  };
+
+  const overriddenKns = {
+    ...knsModel,
+    knsLengthM: Math.max(cableLengthM * 0.72, knsModel.knsLengthM),
+    knsWorkUnits: Math.max(cableLengthM * 0.66, knsModel.knsWorkUnits),
+  };
+
+  return {
+    quantities: overriddenQuantities,
+    cableModel: overriddenCable,
+    knsModel: overriddenKns,
+    laborOverride: {
+      workBaseOverride: toNumber(labor.baseExecutionCost, null),
+      executionHoursOverride: toNumber(labor.executionHoursBase, null),
+      designHoursOverride: toNumber(labor.designHoursBase, null),
+      crewSizeOverride: toNumber(labor.crewSize, null),
+      executionDaysOverride: toNumber(labor.executionDays, null),
+      executionMonthsOverride: toNumber(labor.executionMonths, null),
+      designTeamSizeOverride: toNumber(labor.designTeamSize, null),
+      designMonthsOverride: toNumber(labor.designMonths, null),
+    },
+    equipmentOverride: {
+      equipmentCost: Math.max(toNumber(projectSnapshot.totals?.equipment, 0), 0),
+      materialsCost: Math.max(toNumber(projectSnapshot.totals?.materials, 0), 0),
+      keyEquipment: projectSnapshot.keyEquipment || [],
+      details: projectSnapshot.items || [],
+      marketEntries: projectSnapshot.priceEntries || [],
+      fileName: projectSnapshot.fileName || "",
+    },
+    projectMode: true,
+  };
+}
+
+function applyScheduleOverrides(laborModel, override) {
+  return {
+    ...laborModel,
+    crewSize: toNumber(override.crewSizeOverride, laborModel.crewSize),
+    executionDays: toNumber(override.executionDaysOverride, laborModel.executionDays),
+    executionMonths: toNumber(override.executionMonthsOverride, laborModel.executionMonths),
+    teamSize: toNumber(override.designTeamSizeOverride, laborModel.teamSize),
+    designMonths: toNumber(override.designMonthsOverride, laborModel.designMonths),
+  };
+}
+
+export function calculateSystemWithBreakdown(
+  system,
+  zones,
+  budget,
+  objectData = {},
+  marketSnapshot = null,
+  projectSnapshot = null,
+  allSystems = []
+) {
+  const normalizedInput = normalizeEstimateInput({
+    system,
+    zones,
+    budget,
+    objectData,
+    allSystems: allSystems.length ? allSystems : [system],
+  });
+
+  if (!normalizedInput.isValid) {
+    return buildInvalidResult(system, objectData, normalizedInput.errors, normalizedInput.warnings);
+  }
+
+  const objectClassification = classifyObject(normalizedInput.objectData, normalizedInput.activeSystemTypes);
+  const zoneContexts = classifyZonesForSystem({
+    objectType: normalizedInput.objectData.objectType,
+    zones: normalizedInput.zones,
+    systemType: system.type,
+  });
+
+  let quantities = estimateSystemQuantities({
+    systemType: system.type,
+    zoneContexts,
+    objectClassification,
+    activeSystemTypes: normalizedInput.activeSystemTypes,
+  });
+
+  let cableModel = estimateCableBySystem({
+    systemType: system.type,
+    zoneContexts,
+    objectClassification,
+    primaryUnitsByZone: quantities.zonePrimaryUnits,
+    controllerUnits: quantities.controllerUnits,
+  });
+
+  let knsModel = estimateKnsBySystem({
+    cableModel,
+    routeComplexity: quantities.routeComplexityAverage,
+  });
+
+  let projectOverrides = {
+    laborOverride: {},
+    equipmentOverride: {},
+    projectMode: false,
+  };
+
+  if (system.type === "aps") {
+    projectOverrides = resolveApsProjectOverrides(projectSnapshot, quantities, cableModel, knsModel);
+    quantities = projectOverrides.quantities;
+    cableModel = projectOverrides.cableModel;
+    knsModel = projectOverrides.knsModel;
+  }
+
+  const coefficients = buildCoefficientLayer({
+    budget: normalizedInput.budget,
+    buildingStatus: normalizedInput.objectData.buildingStatus,
+    regionSubject: normalizedInput.objectData.regionSubject,
+    regionCoef: normalizedInput.objectData.regionCoef,
+  });
+
+  let laborModel = calculateLaborCost({
+    systemType: system.type,
+    quantities,
+    cableModel,
+    knsModel,
+    budget: normalizedInput.budget,
+    coefficientLayer: coefficients,
+    designHours: quantities.designHoursBase + cableModel.cableLengthM * 0.0038,
+    designComplexityFactor: objectClassification.designComplexityIndex,
+    ...projectOverrides.laborOverride,
+  });
+
+  laborModel = applyScheduleOverrides(laborModel, projectOverrides.laborOverride);
+
+  const equipmentBase = calculateSystem(system, zones, budget, objectData, marketSnapshot);
+  const regionalCoef = coefficients.regionalCoefficient;
+  const equipmentCost =
+    projectOverrides.equipmentOverride.equipmentCost > 0
+      ? projectOverrides.equipmentOverride.equipmentCost
+      : Math.max(toNumber(equipmentBase.equipmentCost, 0), 0);
+
+  const cableMaterials = cableModel.cableLengthM * 92;
+  const trayAndFasteners = knsModel.knsMaterialsCost;
+  const resourceMaterials = quantities.primaryUnits * 28 + quantities.controllerUnits * 130;
+  const computedMaterialsCost = cableMaterials + trayAndFasteners + resourceMaterials;
+  const materialCost =
+    projectOverrides.equipmentOverride.materialsCost > 0
+      ? projectOverrides.equipmentOverride.materialsCost
+      : computedMaterialsCost;
+
+  const materialsBase = equipmentCost + materialCost;
+  const laborBase = laborModel.workAfterConditions * regionalCoef;
+  const workTotal = laborModel.workTotal;
+  const workCharges = Math.max(workTotal - laborBase, 0);
+  const designBase = laborModel.designAfterConditions * regionalCoef;
+  const designTotal = laborModel.designTotal;
+  const designCharges = Math.max(designTotal - designBase, 0);
+
+  const directCost = materialsBase + workTotal + designTotal;
+  const profit = directCost * (toNumber(normalizedInput.budget.profitabilityPercent, 0) / 100);
+  const subtotal = directCost + profit;
+  const vat = normalizedInput.budget.taxMode === "osno" ? subtotal * (toNumber(normalizedInput.budget.vatPercent, 0) / 100) : 0;
+  const total = subtotal + vat;
+
+  const rules = getSystemRules(system.type);
+  const smrWeight = toNumber(rules?.laborSplit?.smr, 0.6);
+  const pnrWeight = toNumber(rules?.laborSplit?.pnr, 0.25);
+  const splitTotal = Math.max(smrWeight + pnrWeight, 0.001);
+  const works = {
+    smr: laborBase * (smrWeight / splitTotal),
+    pnr: laborBase * (pnrWeight / splitTotal),
+    design: designBase,
+    integration: quantities.integrationPoints * 0.45 * laborModel.markerCostPerUnit,
+    kns: knsModel.knsWorkUnits * 0.12 * laborModel.markerCostPerUnit,
+  };
+
+  const equipmentBreakdown = buildEquipmentBreakdown(system.type, equipmentCost);
+  const breakdownResources = buildResourceRowsWithLabor(quantities.resourceRows, quantities, cableModel);
+
+  const defaultBom = equipmentBase.equipmentData?.details?.map((item, index) => ({
+    code: item.code || `${system.type.toUpperCase()}-DET-${index + 1}`,
+    name: item.name,
+    qty: Math.max(toNumber(item.qty, 0), 0),
+    unitPrice: toNumber(item.unitPrice, 0),
+    total: toNumber(item.total, 0),
   }));
 
-  const bom = apsProjectData
-    ? (apsProjectData.bomItems || []).map((item, index) => ({
+  const bom = projectOverrides.projectMode
+    ? (projectOverrides.equipmentOverride.details || []).map((item, index) => ({
         code: `APS-PDF-${index + 1}`,
         name: item.model ? `${item.name} (${item.model})` : item.name,
         qty: Math.max(toNumber(item.qty, 0), 0),
         unitPrice: toNumber(item.unitPrice, 0),
         total: toNumber(item.total, 0),
       }))
-    : equipment.map((item) => ({
-        code: `${system.type.toUpperCase()}-${item.key}`,
-        name: item.label,
-        qty: Math.max(Math.round(totalUnits * (item.cost / (equipmentCost || 1))), 1),
-        unitPrice: item.cost / Math.max(Math.round(totalUnits * (item.cost / (equipmentCost || 1))), 1),
-        total: item.cost,
-      }));
+    : defaultBom?.length
+      ? defaultBom
+      : buildFallbackBom(system.type, quantities.resourceRows, equipmentCost);
 
-  const equipmentData = apsProjectData
-    ? {
-        ...base.equipmentData,
-        selectionKey: "aps_pdf_project",
-        sourceMode: "project_pdf",
-        unitPrice: equipmentCost / Math.max(totalUnits, 1),
-        keyEquipment: apsProjectData.keyEquipment,
-        details: apsProjectData.bomItems,
-        marketEntries: apsProjectData.marketEntries,
-      }
-    : {
-        ...base.equipmentData,
-        sourceMode: "model",
-      };
+  const keyEquipment =
+    projectOverrides.projectMode && projectOverrides.equipmentOverride.keyEquipment?.length
+      ? projectOverrides.equipmentOverride.keyEquipment
+      : equipmentBase.equipmentData?.keyEquipment || [];
 
-  return {
-    ...base,
-    estimateMode: apsProjectData ? "project_pdf" : "model",
-    projectSpecFileName: apsProjectData?.fileName || "",
-    cable: totalCable,
-    units: totalUnits,
-    equipmentCost,
+  const equipmentData = {
+    ...equipmentBase.equipmentData,
+    sourceMode: projectOverrides.projectMode ? "project_pdf" : equipmentBase.equipmentData?.sourceMode || "model",
+    selectionKey:
+      equipmentBase.equipmentData?.selectionKey ||
+      (keyEquipment || [])
+        .map((item) => item.code)
+        .filter(Boolean)
+        .join("+") ||
+      "auto",
+    unitPrice: equipmentCost / Math.max(quantities.markerUnits, 1),
+    details: projectOverrides.projectMode ? projectOverrides.equipmentOverride.details : equipmentBase.equipmentData?.details || [],
+    keyEquipment,
+    marketEntries:
+      projectOverrides.projectMode && projectOverrides.equipmentOverride.marketEntries?.length
+        ? projectOverrides.equipmentOverride.marketEntries
+        : equipmentBase.equipmentData?.marketEntries || [],
+  };
+
+  const systemResult = {
+    systemType: system.type,
+    systemName: getSystemName(system.type),
+    vendor: system.vendor,
+    estimateMode: projectOverrides.projectMode ? "project_pdf" : "model",
+    projectSpecFileName: projectOverrides.equipmentOverride.fileName || "",
+    cable: cableModel.cableLengthM,
+    units: quantities.primaryUnits,
     equipCost: equipmentCost,
+    equipmentCost,
     cableMaterials,
     trayAndFasteners,
     materialCost,
     materialsBase,
-    laborBase: execution.base,
-    workBase: executionBaseRaw,
-    workCharges: execution.charges,
+    laborBase,
+    workBase: laborModel.workBase,
+    workCharges,
     workTotal,
-    executionHours: totalExecutionHours,
-    executionTeamSize: executionTimeline.crewSize,
-    executionDurationDays: apsProjectData?.timeline?.executionDays || executionTimeline.executionDays,
-    executionDurationMonths: executionTimeline.executionMonths,
-    designHours: totalDesignHours,
-    designBase: design.base,
-    designCharges: design.charges,
+    executionHours: laborModel.executionHours,
+    executionTeamSize: laborModel.crewSize,
+    executionDurationDays: laborModel.executionDays,
+    executionDurationMonths: laborModel.executionMonths,
+    designHours: laborModel.designHours,
+    designBase,
+    designCharges,
     designTotal,
-    designDurationMonths: designTimeline.months,
-    designTeamSize: designTimeline.teamSize,
-    unitWorkMarker,
-    overhead: execution.overhead,
-    ppe: execution.ppe,
-    payrollTaxes: execution.payrollTaxes,
-    utilization: execution.utilization,
-    admin: execution.admin,
-    designOverhead: design.overhead,
-    designPpe: design.ppe,
-    designPayrollTaxes: design.payrollTaxes,
-    designUtilization: design.utilization,
-    designAdmin: design.admin,
+    designDurationMonths: laborModel.designMonths,
+    designTeamSize: laborModel.teamSize,
+    unitWorkMarker: {
+      key: quantities.primaryUnitKey,
+      label: quantities.markerLabel || "Стоимость 1 единицы",
+      qty: quantities.markerUnits,
+      costPerUnit: laborModel.markerCostPerUnit,
+    },
+    overhead: laborModel.workChargesBeforeRegion.overhead * regionalCoef,
+    ppe: laborModel.workChargesBeforeRegion.ppe * regionalCoef,
+    payrollTaxes: laborModel.workChargesBeforeRegion.payrollTaxes * regionalCoef,
+    utilization: laborModel.workChargesBeforeRegion.utilization * regionalCoef,
+    admin: laborModel.workChargesBeforeRegion.admin * regionalCoef,
+    designOverhead: laborModel.designChargesBeforeRegion.overhead * regionalCoef,
+    designPpe: laborModel.designChargesBeforeRegion.ppe * regionalCoef,
+    designPayrollTaxes: laborModel.designChargesBeforeRegion.payrollTaxes * regionalCoef,
+    designUtilization: laborModel.designChargesBeforeRegion.utilization * regionalCoef,
+    designAdmin: laborModel.designChargesBeforeRegion.admin * regionalCoef,
     profit,
     vat,
     total,
     equipmentData,
     bom,
-    formulaRows,
-    coefficientInsights,
     breakdown: {
-      equipment,
+      equipment: equipmentBreakdown,
       works,
       materials: {
         cable: cableMaterials,
         trayAndFasteners,
-        resourceMaterials: totalMaterialsByRows,
+        resourceMaterials,
       },
-      resources: resourceRows,
+      resources: breakdownResources,
     },
-    explanation,
+    trace: {
+      ...(equipmentBase.trace || {}),
+      systemType: system.type,
+      regionalCoefficient: coefficients.regionalCoefficient,
+      exploitedBuildingCoefficient: coefficients.exploitedBuildingCoefficient,
+      conditionLaborFactor: coefficients.conditionLaborFactor,
+      conditionLaborFactorRaw: coefficients.conditionLaborFactorRaw,
+      conditionDampening: coefficients.conditionDampening,
+      cableLengthM: cableModel.cableLengthM,
+      knsLengthM: knsModel.knsLengthM,
+      validationErrors: normalizedInput.errors,
+      validationWarnings: normalizedInput.warnings,
+      autoQuantities: {
+        primaryUnits: quantities.primaryUnits,
+        controllerUnits: quantities.controllerUnits,
+        activeElements: quantities.activeElements,
+        integrationPoints: quantities.integrationPoints,
+      },
+    },
+  };
+
+  const explainability = buildSystemExplainability({
+    systemResult,
+    input: normalizedInput,
+    objectClassification,
+    coefficients,
+    quantities,
+    cableModel,
+    knsModel,
+  });
+
+  // Дополняем explainability данными поставщика/рынка.
+  const vendorFactor = toNumber(equipmentBase.trace?.vendorFactor, 1);
+  const marketSnapshotFactor = toNumber(equipmentBase.trace?.marketSnapshotFactor, 1);
+  const vendorRows = [
+    {
+      key: "vendorFactor",
+      label: "Коэфф. вендора",
+      value: vendorFactor,
+      useCase: "Ценовой и технологический профиль выбранного производителя.",
+    },
+    {
+      key: "marketSnapshotFactor",
+      label: "Коэфф. рынка (производитель + Tinko)",
+      value: marketSnapshotFactor,
+      useCase: "Средняя рыночная цена по результатам опроса источников.",
+    },
+  ];
+
+  return {
+    ...systemResult,
+    formulaRows: [...vendorRows, ...explainability.formulaRows],
+    coefficientInsights: [
+      ...vendorRows.map((item) => ({
+        ...item,
+        recommended:
+          item.value > 1.12
+            ? "Повышенный коэффициент оправдан для сложных и интеграционно насыщенных объектов."
+            : "Коэффициент в базовом диапазоне.",
+      })),
+      ...explainability.coefficientInsights,
+    ],
+    explanation: explainability.explanation,
   };
 }

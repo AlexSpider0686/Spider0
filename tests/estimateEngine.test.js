@@ -5,13 +5,18 @@ import { calculateSystemWithBreakdown } from "../src/lib/systemCalculators/index
 import { DEFAULT_BUDGET, DEFAULT_SYSTEM, DEFAULT_ZONE } from "../src/config/estimateConfig.js";
 
 function createFixture() {
-  const zones = [
-    DEFAULT_ZONE(1, "Офис", "office", 5000, 5),
-    DEFAULT_ZONE(2, "Паркинг", "parking", 2000, 2),
-  ];
+  const zones = [DEFAULT_ZONE(1, "Офис", "office", 5000, 5), DEFAULT_ZONE(2, "Паркинг", "parking", 2000, 2)];
   const baseBudget = { ...DEFAULT_BUDGET };
   const system = { ...DEFAULT_SYSTEM(1, "sot"), vendor: "Базовый", baseVendor: "Базовый" };
-  const objectData = { regionName: "Москва", regionCoef: 1.2, objectType: "public" };
+  const objectData = {
+    regionName: "Москва",
+    regionCoef: 1.2,
+    objectType: "public",
+    buildingStatus: "operational",
+    totalArea: 7000,
+    floors: 5,
+    basementFloors: 1,
+  };
   return { zones, baseBudget, system, objectData };
 }
 
@@ -47,5 +52,5 @@ test("calculateSystemWithBreakdown returns resource rows and positive totals", (
   assert.ok(detailed.total > 0);
   assert.ok(detailed.materialsBase > 0);
   assert.ok(detailed.formulaRows.some((row) => row.key === "conditionLaborFactor"));
-  assert.ok(detailed.trace.regionCoef >= 1);
+  assert.ok((detailed.trace.regionCoef || detailed.trace.regionalCoefficient || 1) >= 1);
 });

@@ -9,7 +9,8 @@ export function calculateEstimateEngine(systems, zones, budget, objectData, vend
       budget,
       objectData,
       vendorPriceSnapshots?.[system.id] || null,
-      projectSpecSnapshots?.[system.id] || null
+      projectSpecSnapshots?.[system.id] || null,
+      systems
     )
   );
   const totals = calculateTotals(systemsDetailed);

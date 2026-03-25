@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Plus, Trash2, Lock, Unlock, Search } from "lucide-react";
 import { OBJECT_TYPES } from "../config/estimateConfig";
+import { BUILDING_STATUS_OPTIONS } from "../config/costModelConfig";
 import { searchRegions } from "../config/regionsConfig";
 import { ZONE_PRESETS, ZONE_TYPES } from "../config/zonesConfig";
 import { getZonePercentSum, normalizeZoneAreas } from "../lib/zoneEngine";
@@ -55,6 +56,7 @@ export default function ObjectStep({
   setZonePreset,
   lockedZoneIds,
   zoneDistribution,
+  inputValidation,
   updateObject,
   addZone,
   updateZone,
@@ -177,6 +179,27 @@ export default function ObjectStep({
             value={objectData.basementFloors}
             onChange={(event) => updateObject("basementFloors", toNumber(event.target.value))}
           />
+        </div>
+        <div className="input-card">
+          <label>Статус здания</label>
+          <select value={objectData.buildingStatus || "operational"} onChange={(event) => updateObject("buildingStatus", event.target.value)}>
+            {BUILDING_STATUS_OPTIONS.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+          <small className="hint-inline">
+            Коэффициент работ в эксплуатируемых зданиях:{" "}
+            <strong>
+              x
+              {num(
+                BUILDING_STATUS_OPTIONS.find((item) => item.value === (objectData.buildingStatus || "operational"))
+                  ?.exploitedBuildingCoefficient || 1,
+                2
+              )}
+            </strong>
+          </small>
         </div>
 
         <div className="input-card full">
@@ -304,6 +327,16 @@ export default function ObjectStep({
             {!zoneDistribution.isValid ? <span className="warn-inline"> Проверь распределение (должно быть 100%).</span> : null}
           </div>
         </div>
+        {inputValidation?.errors?.length ? (
+          <div className="warn-inline" style={{ display: "block", marginTop: 12 }}>
+            {inputValidation.errors.join(" ")}
+          </div>
+        ) : null}
+        {inputValidation?.warnings?.length ? (
+          <div className="hint-inline" style={{ display: "block", marginTop: 6 }}>
+            {inputValidation.warnings.join(" ")}
+          </div>
+        ) : null}
       </div>
     </section>
   );

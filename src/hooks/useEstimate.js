@@ -6,6 +6,7 @@ import { buildZonesFromPreset, rebalanceZoneAreasWithLocks, validateZoneDistribu
 import { fetchPricesByRequests, fetchVendorPrices } from "../lib/priceCollector";
 import { VENDOR_EQUIPMENT } from "../config/vendorConfig";
 import { DEFAULT_REGION_NAME, getRegionCoef } from "../config/regionsConfig";
+import { validateEstimateInput } from "../lib/input-normalization";
 
 function removeById(mapObject, id) {
   if (!(id in mapObject)) return mapObject;
@@ -22,6 +23,7 @@ export default function useEstimate() {
     totalArea: 15000,
     floors: 5,
     basementFloors: 1,
+    buildingStatus: "operational",
     ceilingHeight: 3.2,
     regionName: DEFAULT_REGION_NAME,
     regionCoef: getRegionCoef(DEFAULT_REGION_NAME),
@@ -48,6 +50,17 @@ export default function useEstimate() {
     [systems, zones, budget, objectData, vendorPriceSnapshots, apsProjectSnapshots]
   );
   const zoneDistribution = useMemo(() => validateZoneDistribution(zones, objectData.totalArea), [zones, objectData.totalArea]);
+  const inputValidation = useMemo(
+    () =>
+      validateEstimateInput({
+        system: systems[0],
+        zones,
+        budget,
+        objectData: { ...objectData, protectedAreaM2: recalculatedArea },
+        allSystems: systems,
+      }),
+    [systems, zones, budget, objectData, recalculatedArea]
+  );
 
   const updateObject = (key, value) => {
     if (key === "regionName") {
@@ -297,6 +310,7 @@ export default function useEstimate() {
     systemResults,
     totals,
     zoneDistribution,
+    inputValidation,
     VENDOR_EQUIPMENT,
     updateObject,
     updateZone,
