@@ -1,9 +1,9 @@
 import { Camera, Shield, Lock, Cpu, Bell, Siren } from "lucide-react";
 import vendors, { getVendorNames } from "./vendorsConfig";
 import { getDefaultEquipmentProfiles } from "./equipmentCatalog";
+import { SYSTEM_BUILD_NUMBER } from "./buildInfo";
 
-export const BUILD_NUMBER =
-  typeof __APP_BUILD_NUMBER__ !== "undefined" ? __APP_BUILD_NUMBER__ : `local.${new Date().toISOString().slice(0, 19)}`;
+export const BUILD_NUMBER = SYSTEM_BUILD_NUMBER;
 
 export const SYSTEM_TYPES = [
   { code: "sot", shortName: "СОТ", name: "Система охранного телевидения (СОТ)", icon: Camera },

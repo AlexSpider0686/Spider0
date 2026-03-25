@@ -62,9 +62,11 @@ export default function SystemsStep({
               .reduce((sum, item) => sum + (item.sourceCount || 0), 0) || 0;
           const checkedSourceCount =
             snapshot?.entries?.reduce((sum, item) => sum + (item.checkedSources || item.sourceUrls?.length || 0), 0) || 0;
-          const sourcePreview = (snapshot?.entries || [])
+          const usedSourcePreview = (snapshot?.entries || [])
             .flatMap((item) => item.usedSources || [])
-            .slice(0, 4);
+            .slice(0, 6);
+          const checkedSourceHosts = [...new Set((snapshot?.entries || []).flatMap((item) => item.checkedSourceHosts || []))].slice(0, 10);
+          const usedSourceHosts = [...new Set((snapshot?.entries || []).flatMap((item) => item.usedSourceHosts || []))].slice(0, 10);
 
           return (
             <div className="system-card" key={system.id}>
@@ -136,10 +138,27 @@ export default function SystemsStep({
                   Актуализация цен: {snapshot.fetchedAt ? new Date(snapshot.fetchedAt).toLocaleString("ru-RU") : "—"}. Источников с ценой:{" "}
                   {pricedSourceCount} из {checkedSourceCount}.
                   {snapshot.error ? <span className="warn-inline"> Ошибка API: {snapshot.error}</span> : null}
-                  {sourcePreview.length ? (
+                  {checkedSourceHosts.length ? (
                     <div className="pricing-source-list">
-                      {sourcePreview.map((url) => (
-                        <span key={`${system.id}-${url}`}>{url}</span>
+                      <strong>Проверены источники:</strong>
+                      {checkedSourceHosts.map((host) => (
+                        <span key={`${system.id}-checked-${host}`}>{host}</span>
+                      ))}
+                    </div>
+                  ) : null}
+                  {usedSourceHosts.length ? (
+                    <div className="pricing-source-list">
+                      <strong>Дали цену:</strong>
+                      {usedSourceHosts.map((host) => (
+                        <span key={`${system.id}-used-host-${host}`}>{host}</span>
+                      ))}
+                    </div>
+                  ) : null}
+                  {usedSourcePreview.length ? (
+                    <div className="pricing-source-list">
+                      <strong>Ссылки с ценой:</strong>
+                      {usedSourcePreview.map((url) => (
+                        <span key={`${system.id}-used-${url}`}>{url}</span>
                       ))}
                     </div>
                   ) : null}

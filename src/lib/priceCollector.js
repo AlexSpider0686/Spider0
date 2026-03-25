@@ -5,6 +5,89 @@ function buildTinkoSearchUrl(query) {
   return `https://www.tinko.ru/search/?q=${encodeURIComponent(query)}`;
 }
 
+function buildLuisSearchUrl(query) {
+  return `https://luis.ru/search/?q=${encodeURIComponent(query)}`;
+}
+
+function buildGarantSearchUrl(query) {
+  return `https://garantgroup.com/search/?q=${encodeURIComponent(query)}`;
+}
+
+function buildGanimedSearchUrl(query) {
+  return `https://ganimedsb.ru/rezultatyi-poiska.html?query=${encodeURIComponent(query)}`;
+}
+
+function buildLuisApiRequest(query) {
+  return {
+    url: "https://luis.ru/luisapi/catalog/search",
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json, text/plain, */*",
+      origin: "https://luis.ru",
+      referer: "https://luis.ru/",
+    },
+    body: {
+      query,
+      pagination: { page: 1, perPage: 12 },
+    },
+    sourceName: "luis_api",
+  };
+}
+
+function normalizeSearchText(value) {
+  return String(value || "")
+    .replace(/[«»"'`]/g, " ")
+    .replace(/[(){}\[\],;:]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function shortenSearchText(value, max = 96) {
+  return normalizeSearchText(value).slice(0, max).trim();
+}
+
+function dedupeStrings(values = []) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function dedupeSourceTargets(targets = []) {
+  const seen = new Set();
+  const result = [];
+
+  for (const target of targets) {
+    if (!target) continue;
+    const key =
+      typeof target === "string"
+        ? `GET:${target}`
+        : `${String(target.method || "GET").toUpperCase()}:${String(target.url || "")}:${JSON.stringify(target.body || {})}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(target);
+  }
+
+  return result;
+}
+
+function buildSearchQueries(vendorName, item) {
+  const vendor = shortenSearchText(vendorName, 48);
+  const term = shortenSearchText(item?.searchTerm || "", 88);
+  const label = shortenSearchText(item?.label || "", 72);
+  const modelHint = shortenSearchText(
+    (item?.searchTerm || item?.label || "").match(/[A-Za-zА-Яа-яЁё0-9]+(?:[-/.][A-Za-zА-Яа-яЁё0-9]+)+/u)?.[0] || "",
+    72
+  );
+
+  return dedupeStrings([
+    `${vendor} ${term}`.trim(),
+    `${vendor} ${label}`.trim(),
+    `${term}`.trim(),
+    `${label}`.trim(),
+    `${modelHint}`.trim(),
+    `${vendor} ${modelHint}`.trim(),
+  ]).slice(0, 4);
+}
+
 function trimSlash(url) {
   return String(url || "").replace(/\/+$/, "");
 }
@@ -24,14 +107,52 @@ function buildManufacturerUrl(source, item, searchQuery) {
   return `${website}/search?q=${encodeURIComponent(searchQuery)}`;
 }
 
+function buildSourceTargets(source, item, queries, manufacturerUrl) {
+  const targets = [];
+  if (manufacturerUrl) targets.push(manufacturerUrl);
+
+  for (const query of dedupeStrings(queries).slice(0, 3)) {
+    targets.push(buildTinkoSearchUrl(query));
+    targets.push(buildLuisSearchUrl(query));
+    targets.push(buildGarantSearchUrl(query));
+    targets.push(buildGanimedSearchUrl(query));
+    if (query.length >= 3) {
+      targets.push(buildLuisApiRequest(query));
+    }
+  }
+
+  if (source?.website && item?.sourcePath) {
+    targets.push(`${trimSlash(source.website)}${item.sourcePath}`);
+  }
+
+  return dedupeSourceTargets(targets).slice(0, 14);
+}
+
+function extractSourceUrl(target) {
+  if (!target) return "";
+  if (typeof target === "string") return target;
+  if (typeof target === "object") return String(target.url || "");
+  return "";
+}
+
+function toSourceHost(url) {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return host.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
 export function buildPriceRequests(systemType, vendorName) {
   const source = getManufacturerSource(systemType, vendorName);
   const equipment = getCriticalEquipment(systemType);
 
   return equipment.map((item) => {
-    const searchQuery = `${vendorName} ${item.searchTerm || item.label}`.trim();
+    const searchQueries = buildSearchQueries(vendorName, item);
+    const searchQuery = searchQueries[0] || `${vendorName} ${item.searchTerm || item.label}`.trim();
     const manufacturerUrl = buildManufacturerUrl(source, item, searchQuery);
-    const sourceUrls = [manufacturerUrl, buildTinkoSearchUrl(searchQuery)].filter(Boolean);
+    const sourceUrls = buildSourceTargets(source, item, searchQueries, manufacturerUrl);
 
     return {
       key: `${systemType}:${vendorName}:${item.key}`,
@@ -169,6 +290,9 @@ export async function fetchPricesByRequests(requests = []) {
     entries: requests.map((request) => {
       const result = resultsByKey.get(request.key) || {};
       const sanitized = sanitizePrice(request, result);
+      const checkedSourceUrls = (request.sourceUrls || []).map(extractSourceUrl).filter(Boolean);
+      const checkedSourceHosts = [...new Set(checkedSourceUrls.map(toSourceHost).filter(Boolean))];
+      const usedSourceHosts = [...new Set((result.usedSources || []).map(toSourceHost).filter(Boolean))];
       return {
         ...request,
         price: sanitized.price,
@@ -176,7 +300,10 @@ export async function fetchPricesByRequests(requests = []) {
         reason: sanitized.reason,
         sourceCount: sanitized.sourceCount,
         checkedSources: result.checkedSources || request.sourceUrls?.length || 0,
+        checkedSourceUrls,
+        checkedSourceHosts,
         usedSources: result.usedSources || [],
+        usedSourceHosts,
       };
     }),
   };

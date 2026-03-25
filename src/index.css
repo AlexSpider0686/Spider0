@@ -425,6 +425,87 @@ select {
   line-height: 1.1;
 }
 
+.primary-btn,
+.ghost-btn,
+.danger-btn,
+.step-chip,
+.lock-btn,
+.region-option,
+.file-upload-btn,
+.object-photo-card {
+  position: relative;
+  overflow: hidden;
+  transition:
+    transform 0.22s ease,
+    box-shadow 0.22s ease,
+    border-color 0.22s ease,
+    filter 0.22s ease,
+    background 0.22s ease;
+  animation: btn-breathe 4.2s ease-in-out infinite;
+}
+
+.primary-btn::after,
+.ghost-btn::after,
+.danger-btn::after,
+.step-chip::after,
+.lock-btn::after,
+.region-option::after,
+.file-upload-btn::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -140%;
+  width: 42%;
+  height: 100%;
+  transform: skewX(-20deg);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.42), transparent);
+  pointer-events: none;
+  opacity: 0;
+}
+
+.primary-btn:hover::after,
+.ghost-btn:hover::after,
+.danger-btn:hover::after,
+.step-chip:hover::after,
+.lock-btn:hover::after,
+.region-option:hover::after,
+.file-upload-btn:hover::after {
+  opacity: 1;
+  animation: btn-sheen 0.72s ease;
+}
+
+.primary-btn:hover,
+.ghost-btn:hover,
+.danger-btn:hover,
+.step-chip:hover,
+.lock-btn:hover,
+.region-option:hover,
+.file-upload-btn:hover,
+.object-photo-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(37, 74, 123, 0.2);
+}
+
+.primary-btn:active,
+.ghost-btn:active,
+.danger-btn:active,
+.step-chip:active,
+.lock-btn:active,
+.region-option:active,
+.file-upload-btn:active,
+.object-photo-card:active {
+  transform: translateY(0) scale(0.985);
+}
+
+.primary-btn:disabled,
+.ghost-btn:disabled,
+.danger-btn:disabled,
+.step-chip:disabled,
+.lock-btn:disabled,
+.region-option:disabled {
+  animation: none;
+}
+
 .primary-btn {
   color: #ffffff;
   background: linear-gradient(135deg, var(--accent), var(--accent2));
@@ -920,6 +1001,11 @@ select {
   gap: 4px;
 }
 
+.pricing-source-list strong {
+  font-size: 10px;
+  color: #274f76;
+}
+
 .pricing-source-list span {
   font-size: 10px;
   color: #3d5a78;
@@ -1223,6 +1309,25 @@ tbody tr:hover {
   background: rgba(59, 130, 246, 0.05);
 }
 
+@keyframes btn-sheen {
+  0% {
+    left: -140%;
+  }
+  100% {
+    left: 140%;
+  }
+}
+
+@keyframes btn-breathe {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.04);
+  }
+}
+
 @media (max-width: 1180px) {
   .zone-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1307,5 +1412,18 @@ tbody tr:hover {
 
   .object-type-tooltip {
     width: calc(100vw - 56px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .primary-btn,
+  .ghost-btn,
+  .danger-btn,
+  .step-chip,
+  .lock-btn,
+  .region-option,
+  .file-upload-btn,
+  .object-photo-card {
+    animation: none !important;
   }
 }

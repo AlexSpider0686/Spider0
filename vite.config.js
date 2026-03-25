@@ -7,7 +7,9 @@ import { issueOtpChallenge, verifyOtpChallenge } from "./api/auth-otp-core.js";
 
 const packageJson = JSON.parse(fs.readFileSync(new URL("./package.json", import.meta.url), "utf8"));
 const buildTimestamp = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
-const buildNumber = `${packageJson.version}.${buildTimestamp}`;
+const buildNumberBase = `${packageJson.version}.${buildTimestamp}`;
+const systemBuildNumber = `${buildNumberBase}.system`;
+const siteBuildNumber = `${buildNumberBase}.site`;
 
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
@@ -89,7 +91,9 @@ function localVendorPriceApiPlugin() {
 export default defineConfig({
   plugins: [react(), localVendorPriceApiPlugin()],
   define: {
-    __APP_BUILD_NUMBER__: JSON.stringify(buildNumber),
+    __APP_BUILD_NUMBER__: JSON.stringify(systemBuildNumber),
+    __SYSTEM_BUILD_NUMBER__: JSON.stringify(systemBuildNumber),
+    __SITE_BUILD_NUMBER__: JSON.stringify(siteBuildNumber),
   },
   resolve: {
     alias: {
