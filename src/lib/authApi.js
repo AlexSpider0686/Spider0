@@ -18,11 +18,24 @@ function buildAuthApiBase() {
 async function postJson(path, payload) {
   const base = buildAuthApiBase();
   const endpoint = `${base}${path}`;
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload || {}),
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  let response;
+  try {
+    response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload || {}),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error("Request timeout");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data?.ok === false) {
     throw new Error(data?.error || `HTTP ${response.status}`);

@@ -1,29 +1,39 @@
 import { GlobalWorkerOptions, getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { toNumber } from "./estimate";
 
-const CYR_UPPER = "АБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ";
-const CYR_LOWER = "абвгдежзийклмнопрстуфхцчшщъыьэюя";
+const CYR_UPPER = "\u0410\u0411\u0412\u0413\u0414\u0415\u0416\u0417\u0418\u0419\u041a\u041b\u041c\u041d\u041e\u041f\u0420\u0421\u0422\u0423\u0424\u0425\u0426\u0427\u0428\u0429\u042a\u042b\u042c\u042d\u042e\u042f";
+const CYR_LOWER = "\u0430\u0431\u0432\u0433\u0434\u0435\u0436\u0437\u0438\u0439\u043a\u043b\u043c\u043d\u043e\u043f\u0440\u0441\u0442\u0443\u0444\u0445\u0446\u0447\u0448\u0449\u044a\u044b\u044c\u044d\u044e\u044f";
 const EXTRA_CHAR_MAP = {
-  "\u0244": "Ё",
-  "\u0245": "Ё",
-  "\u0261": "а",
-  "\u0262": "х",
-  "\u0266": "м",
-  "\u0267": "н",
-  "\u0268": "о",
-  "\u0269": "й",
-  "\u026b": "с",
-  "\u026c": "т",
-  "\u026d": "л",
+  "\u0244": "\u0401",
+  "\u0245": "\u0401",
+  "\u0261": "\u0430",
+  "\u0262": "\u0445",
+  "\u0266": "\u043c",
+  "\u0267": "\u043d",
+  "\u0268": "\u043e",
+  "\u0269": "\u0439",
+  "\u026b": "\u0441",
+  "\u026c": "\u0442",
+  "\u026d": "\u043b",
 };
 
 const POSITION_REGEX = /^\d+(?:\.\d+){1,3}\.?$/u;
-const SPEC_HEADER_REGEX = /(спецификац|ведомост|наименован|количеств|ед\.?\s*изм|позици|лист|стадия|проект|примечани)/iu;
-const SECTION_ROW_REGEX = /^(оборудование|материалы|документация|изделия|комплектующие)$/iu;
-const MODEL_REGEX = /[A-ZА-ЯЁ0-9]{2,}(?:[-/.][A-ZА-ЯЁ0-9]{1,})+/gu;
-const SOFT_MODEL_REGEX = /[A-ZА-ЯЁ]{1,6}\s?\d{1,5}[A-ZА-ЯЁ0-9-]*/gu;
 const NUMBER_REGEX = /\d+(?:[.,]\d+)?/gu;
-const KNOWN_UNITS = new Set(["шт", "компл", "м", "м2", "кг", "л", "уп", "лист"]);
+const MODEL_REGEX = /[A-Z\u0410-\u042f\u04010-9]{2,}(?:[-/.][A-Z\u0410-\u042f\u04010-9]{1,})+/gu;
+const SOFT_MODEL_REGEX = /[A-Z\u0410-\u042f\u0401]{1,8}\s?\d{1,8}[A-Z\u0410-\u042f\u04010-9-]*/gu;
+
+const UNIT = {
+  piece: "\u0448\u0442",
+  set: "\u043a\u043e\u043c\u043f\u043b",
+  meter: "\u043c",
+  meter2: "\u043c2",
+  kg: "\u043a\u0433",
+  liter: "\u043b",
+  pack: "\u0443\u043f",
+  sheet: "\u043b\u0438\u0441\u0442",
+};
+
+const KNOWN_UNITS = new Set(Object.values(UNIT));
 
 const COLUMN = {
   positionEnd: 110,
@@ -34,23 +44,62 @@ const COLUMN = {
 };
 
 const CATEGORY_KEYWORDS = {
-  detector: /(извещ|датчик|дым|тепл|плам|ипр|ип\s*\d)/iu,
-  panel: /(ппк|приемно|контрольн|панел|шкаф|модул|прибор|блок управления|устройство)/iu,
-  notification: /(оповещ|сирен|табло|выход|светозвук|громкоговор|соуэ)/iu,
-  power: /(блок\s*питан|акб|аккум|батаре|ибп|резервн)/iu,
-  material: /(кабел|провод|гофр|лоток|труб|короб|крепеж|метиз|монтажн|канал|хомут|дюбел|саморез|пена)/iu,
+  detector: /(\u0438\u0437\u0432\u0435\u0449|\u0434\u0430\u0442\u0447\u0438\u043a|\u0434\u044b\u043c|\u0442\u0435\u043f\u043b|\u043f\u043b\u0430\u043c|\u0438\u043f\u0440|(?:^|[^a-z\u0430-\u044f\u0451])\u0438\u043f\s*\d|detector)/iu,
+  panel: /(\u043f\u043f\u043a|\u043f\u0440\u0438\u0435\u043c\u043d\u043e|\u043a\u043e\u043d\u0442\u0440\u043e\u043b\u044c\u043d|\u043f\u0430\u043d\u0435\u043b|\u0448\u043a\u0430\u0444|\u043c\u043e\u0434\u0443\u043b|\u043f\u0440\u0438\u0431\u043e\u0440|\u0431\u043b\u043e\u043a \u0443\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u044f|controller|panel)/iu,
+  notification: /(\u043e\u043f\u043e\u0432\u0435\u0449|\u0441\u0438\u0440\u0435\u043d|\u0442\u0430\u0431\u043b\u043e|\u0432\u044b\u0445\u043e\u0434|\u0441\u0432\u0435\u0442\u043e\u0437\u0432\u0443\u043a|\u0433\u0440\u043e\u043c\u043a\u043e\u0433\u043e\u0432\u043e\u0440|siren|speaker)/iu,
+  power: /(\u0431\u043b\u043e\u043a\s*\u043f\u0438\u0442\u0430\u043d|\u0430\u043a\u0431|\u0430\u043a\u043a\u0443\u043c|\u0431\u0430\u0442\u0430\u0440\u0435|\u0438\u0431\u043f|\u0440\u0435\u0437\u0435\u0440\u0432\u043d|battery|power)/iu,
+  material: /(\u043a\u0430\u0431\u0435\u043b|\u043f\u0440\u043e\u0432\u043e\u0434|\u0433\u043e\u0444\u0440|\u043b\u043e\u0442\u043e\u043a|\u0442\u0440\u0443\u0431|\u043a\u043e\u0440\u043e\u0431|\u043a\u0440\u0435\u043f\u0435\u0436|\u043c\u0435\u0442\u0438\u0437|\u043c\u043e\u043d\u0442\u0430\u0436\u043d|\u043a\u0430\u043d\u0430\u043b|\u0445\u043e\u043c\u0443\u0442|\u0434\u044e\u0431\u0435\u043b|\u0441\u0430\u043c\u043e\u0440\u0435\u0437|\u043f\u0435\u043d\u0430|cable|wire|pipe|tray)/iu,
 };
 
+const MODEL_ALIGNMENT_HINTS = [
+  {
+    pattern: /(?:\u0441\u0438\u0440\u0438\u0443\u0441|sirius)/iu,
+    familyToken: "\u0441\u0438\u0440\u0438\u0443\u0441",
+    category: "panel",
+    canonicalName: "\u041f\u0440\u0438\u0431\u043e\u0440 \u043f\u0440\u0438\u0435\u043c\u043d\u043e-\u043a\u043e\u043d\u0442\u0440\u043e\u043b\u044c\u043d\u044b\u0439",
+  },
+  {
+    pattern: /(?:\u0441?2000\s*\u043a\u0434\u043b|c2000\s*kdl)/iu,
+    familyToken: "\u043a\u0434\u043b",
+    category: "panel",
+    canonicalName: "\u041a\u043e\u043d\u0442\u0440\u043e\u043b\u043b\u0435\u0440 \u0430\u0434\u0440\u0435\u0441\u043d\u043e\u0439 \u043b\u0438\u043d\u0438\u0438",
+  },
+  {
+    pattern: /(?:\u0441?2000\s*\u0431\u043a\u0438|c2000\s*bki)/iu,
+    familyToken: "\u0431\u043a\u0438",
+    category: "panel",
+    canonicalName: "\u0411\u043b\u043e\u043a \u0438\u043d\u0434\u0438\u043a\u0430\u0446\u0438\u0438 \u0441 \u043a\u043b\u0430\u0432\u0438\u0430\u0442\u0443\u0440\u043e\u0439",
+  },
+  {
+    pattern: /(?:\u043c\u0438\u043f|mip|\u0440\u0438\u043f|rip|akb|\u0430\u043a\u0431)/iu,
+    familyToken: "\u043c\u0438\u043f",
+    category: "power",
+    canonicalName: "\u041c\u043e\u0434\u0443\u043b\u044c \u0438\u0441\u0442\u043e\u0447\u043d\u0438\u043a\u0430 \u043f\u0438\u0442\u0430\u043d\u0438\u044f",
+  },
+  {
+    pattern: /(?:\u0434\u0438\u043f|dip|\u0438\u043f\u0440|ipr)/iu,
+    familyToken: "\u0438\u043f\u0440",
+    category: "detector",
+    canonicalName: "\u0418\u0437\u0432\u0435\u0449\u0430\u0442\u0435\u043b\u044c \u043f\u043e\u0436\u0430\u0440\u043d\u044b\u0439",
+  },
+  {
+    pattern: /(?:\u043c\u043e\u043b\u043d\u0438\u044f|molniya|\u0442\u0430\u0431\u043b\u043e)/iu,
+    familyToken: "\u043c\u043e\u043b\u043d\u0438\u044f",
+    category: "notification",
+    canonicalName: "\u041e\u043f\u043e\u0432\u0435\u0449\u0430\u0442\u0435\u043b\u044c \u0441\u0432\u0435\u0442\u043e\u0432\u043e\u0439",
+  },
+];
+
 const BRAND_DICTIONARY = [
-  { label: "Болид", variants: ["болид", "bolid"] },
-  { label: "Рубеж", variants: ["рубеж", "rubezh"] },
-  { label: "Аргус-Спектр", variants: ["аргус", "argus", "аргус-спектр"] },
+  { label: "\u0411\u043e\u043b\u0438\u0434", variants: ["\u0431\u043e\u043b\u0438\u0434", "bolid"] },
+  { label: "\u0420\u0443\u0431\u0435\u0436", variants: ["\u0440\u0443\u0431\u0435\u0436", "rubezh"] },
+  { label: "\u0410\u0440\u0433\u0443\u0441-\u0421\u043f\u0435\u043a\u0442\u0440", variants: ["\u0430\u0440\u0433\u0443\u0441", "argus", "\u0430\u0440\u0433\u0443\u0441-\u0441\u043f\u0435\u043a\u0442\u0440"] },
   { label: "System Sensor", variants: ["system sensor"] },
   { label: "Siemens", variants: ["siemens"] },
   { label: "Esser", variants: ["esser"] },
   { label: "Apollo", variants: ["apollo"] },
-  { label: "Риэлта", variants: ["риэлта", "rielta"] },
-  { label: "Promrukav", variants: ["промрукав", "promrukav"] },
+  { label: "\u0420\u0438\u044d\u043b\u0442\u0430", variants: ["\u0440\u0438\u044d\u043b\u0442\u0430", "rielta"] },
+  { label: "Promrukav", variants: ["\u043f\u0440\u043e\u043c\u0440\u0443\u043a\u0430\u0432", "promrukav"] },
 ];
 
 let workerReady = false;
@@ -59,7 +108,6 @@ async function ensurePdfWorker() {
   if (workerReady) return;
   workerReady = true;
   if (typeof window === "undefined") return;
-
   const workerModule = await import("pdfjs-dist/legacy/build/pdf.worker.min.mjs?url");
   GlobalWorkerOptions.workerSrc = workerModule.default;
 }
@@ -78,7 +126,7 @@ function decodePseudoCyrillic(text) {
 function normalizeText(value) {
   return decodePseudoCyrillic(String(value || ""))
     .replace(/\u00a0/g, " ")
-    .replace(/[‐‑–—]/g, "-")
+    .replace(/[‐‑‒–—]/g, "-")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -101,15 +149,15 @@ function normalizeUnit(raw) {
     .replace(/\s/g, "")
     .replace(/\./g, "");
 
-  if (["шт", "штук", "ед", "единица", "единиц"].includes(normalized)) return "шт";
-  if (["компл", "комплект"].includes(normalized)) return "компл";
-  if (["м", "мп", "пм"].includes(normalized)) return "м";
-  if (["м2", "м²", "мв"].includes(normalized)) return "м2";
-  if (["кг"].includes(normalized)) return "кг";
-  if (["л"].includes(normalized)) return "л";
-  if (["уп", "упак", "упаковка"].includes(normalized)) return "уп";
-  if (["лист", "листа", "листов"].includes(normalized)) return "лист";
-  return normalized || "шт";
+  if (["\u0448\u0442", "\u0448\u0442\u0443\u043a", "\u0435\u0434", "\u0435\u0434\u0438\u043d\u0438\u0446\u0430", "\u0435\u0434\u0438\u043d\u0438\u0446"].includes(normalized)) return UNIT.piece;
+  if (["\u043a\u043e\u043c\u043f\u043b", "\u043a\u043e\u043c\u043f\u043b\u0435\u043a\u0442"].includes(normalized)) return UNIT.set;
+  if (["\u043c", "\u043c\u043f", "\u043f\u043c", "m"].includes(normalized)) return UNIT.meter;
+  if (["\u043c2", "\u043c\u00b2", "m2"].includes(normalized)) return UNIT.meter2;
+  if (["\u043a\u0433", "kg"].includes(normalized)) return UNIT.kg;
+  if (["\u043b", "l"].includes(normalized)) return UNIT.liter;
+  if (["\u0443\u043f", "\u0443\u043f\u0430\u043a", "\u0443\u043f\u0430\u043a\u043e\u0432\u043a\u0430", "pack"].includes(normalized)) return UNIT.pack;
+  if (["\u043b\u0438\u0441\u0442", "\u043b\u0438\u0441\u0442\u0430", "\u043b\u0438\u0441\u0442\u043e\u0432", "sheet"].includes(normalized)) return UNIT.sheet;
+  return normalized || UNIT.piece;
 }
 
 function isKnownUnit(unit) {
@@ -118,19 +166,22 @@ function isKnownUnit(unit) {
 
 function inferUnitFromContext(name, model, sectionMajor = 0, category = "") {
   const text = `${normalizeText(name)} ${normalizeText(model)}`.toLowerCase();
-  if (/(кабел|провод|труб|гофр|лоток|короб)/iu.test(text)) return "м";
-  if (/(дюбел|саморез|скоб|хомут|пена|извещ|оповещ|блок|модул|панел|аккум|акб)/iu.test(text)) return "шт";
-  if (category === "material" && (sectionMajor === 2 || sectionMajor === 3)) return "м";
-  if (category === "equipment") return "шт";
+  if (/(?:\u043a\u0430\u0431\u0435\u043b|\u043f\u0440\u043e\u0432\u043e\u0434|\u0442\u0440\u0443\u0431|\u0433\u043e\u0444\u0440|\u043b\u043e\u0442\u043e\u043a|\u043a\u043e\u0440\u043e\u0431|cable|wire|pipe|tray)/iu.test(text))
+    return UNIT.meter;
+  if (/(?:\u0434\u044e\u0431\u0435\u043b|\u0441\u0430\u043c\u043e\u0440\u0435\u0437|\u0441\u043a\u043e\u0431|\u0445\u043e\u043c\u0443\u0442|\u043f\u0435\u043d\u0430|\u0438\u0437\u0432\u0435\u0449|\u043e\u043f\u043e\u0432\u0435\u0449|\u0431\u043b\u043e\u043a|\u043c\u043e\u0434\u0443\u043b|\u043f\u0430\u043d\u0435\u043b|\u0430\u043a\u043a\u0443\u043c|\u0430\u043a\u0431)/iu.test(text))
+    return UNIT.piece;
+  if (category === "material" && (sectionMajor === 2 || sectionMajor === 3)) return UNIT.meter;
+  if (category === "equipment") return UNIT.piece;
   return "";
 }
 
 function detectCategory(text) {
-  if (CATEGORY_KEYWORDS.detector.test(text)) return "detector";
-  if (CATEGORY_KEYWORDS.notification.test(text)) return "notification";
-  if (CATEGORY_KEYWORDS.power.test(text)) return "power";
-  if (CATEGORY_KEYWORDS.panel.test(text)) return "panel";
-  if (CATEGORY_KEYWORDS.material.test(text)) return "material";
+  const normalized = normalizeText(text).toLowerCase();
+  if (CATEGORY_KEYWORDS.material.test(normalized)) return "material";
+  if (CATEGORY_KEYWORDS.notification.test(normalized)) return "notification";
+  if (CATEGORY_KEYWORDS.power.test(normalized)) return "power";
+  if (CATEGORY_KEYWORDS.panel.test(normalized)) return "panel";
+  if (CATEGORY_KEYWORDS.detector.test(normalized)) return "detector";
   return "equipment";
 }
 
@@ -147,7 +198,6 @@ function detectModel(text) {
   const strict = normalized.match(MODEL_REGEX) || [];
   const strong = strict.find((item) => /\d/u.test(item) && item.length >= 4);
   if (strong) return strong;
-
   const soft = normalized.match(SOFT_MODEL_REGEX) || [];
   const candidate = soft.find((item) => /\d/u.test(item));
   return candidate ? tidyText(candidate) : "";
@@ -173,16 +223,7 @@ function parsePosition(text) {
 }
 
 function isMeaningfulChunk(text) {
-  return /[A-Za-zА-Яа-яЁё0-9]/u.test(normalizeText(text));
-}
-
-function isSectionOrHeaderRow(text) {
-  const normalized = normalizeText(text);
-  if (!normalized) return true;
-  if (SPEC_HEADER_REGEX.test(normalized)) return true;
-  if (SECTION_ROW_REGEX.test(normalized)) return true;
-  if (/^\d(?:\s+\d){4,}$/u.test(normalized)) return true;
-  return false;
+  return /[A-Za-z\u0410-\u042f\u0430-\u044f\u0401\u04510-9]/u.test(normalizeText(text));
 }
 
 function assignColumn(x) {
@@ -215,6 +256,10 @@ function splitBuckets(row) {
   return buckets;
 }
 
+function joinParts(parts) {
+  return tidyText(parts.join(" "));
+}
+
 function getSectionMajor(position) {
   const major = Number(String(position || "").split(".")[0]);
   return Number.isFinite(major) ? major : 0;
@@ -227,26 +272,20 @@ function isReasonableQty(position, qty, unit, category) {
   const major = getSectionMajor(position);
   const equipmentLike = major === 1 || major === 4 || category !== "material";
   if (equipmentLike && qty > 15_000) return false;
-  if (unit === "компл" && qty > 1000) return false;
-  if (unit === "шт" && equipmentLike && qty > 5000) return false;
-
+  if (unit === UNIT.set && qty > 1000) return false;
+  if (unit === UNIT.piece && equipmentLike && qty > 5000) return false;
   return true;
 }
 
 function isLikelySpecRow(buckets) {
   const position = parsePosition(joinParts(buckets.position));
   if (!position) return false;
-
   const name = joinParts(buckets.name);
   if (!isMeaningfulChunk(name)) return false;
-
   const qty = parseQuantity(joinParts(buckets.qty));
   if (qty <= 0) return false;
-
   const unit = normalizeUnit(joinParts(buckets.unit));
-  if (!isKnownUnit(unit)) return false;
-
-  return true;
+  return isKnownUnit(unit);
 }
 
 function pickSpecPages(rows) {
@@ -256,38 +295,16 @@ function pickSpecPages(rows) {
     byPage.get(row.pageNum).push(row);
   }
 
-  const candidates = new Set();
+  const pages = new Set();
   for (const [pageNum, pageRows] of byPage.entries()) {
-    let strongRows = 0;
-    let headerRows = 0;
-    for (const row of pageRows) {
-      const buckets = splitBuckets(row);
-      const plain = joinParts([
-        ...buckets.position,
-        ...buckets.name,
-        ...buckets.model,
-        ...buckets.brand,
-        ...buckets.unit,
-        ...buckets.qty,
-      ]);
-      if (SPEC_HEADER_REGEX.test(plain)) headerRows += 1;
-      if (isLikelySpecRow(buckets)) strongRows += 1;
-    }
-
-    if (strongRows >= 4 || (strongRows >= 2 && headerRows >= 1)) {
-      candidates.add(pageNum);
-    }
+    const count = pageRows.reduce((sum, row) => sum + (isLikelySpecRow(splitBuckets(row)) ? 1 : 0), 0);
+    if (count >= 3) pages.add(pageNum);
   }
 
-  if (!candidates.size) {
-    for (const pageNum of byPage.keys()) candidates.add(pageNum);
+  if (!pages.size) {
+    for (const pageNum of byPage.keys()) pages.add(pageNum);
   }
-
-  return candidates;
-}
-
-function joinParts(parts) {
-  return tidyText(parts.join(" "));
+  return pages;
 }
 
 function appendChunks(draft, buckets) {
@@ -303,8 +320,7 @@ function appendChunks(draft, buckets) {
   const unitText = joinParts(buckets.unit);
   if (unitText) draft.unitCandidates.push({ value: normalizeUnit(unitText), y: buckets.y, order: draft.order++ });
 
-  const qtyText = joinParts(buckets.qty);
-  const qty = parseQuantity(qtyText);
+  const qty = parseQuantity(joinParts(buckets.qty));
   if (qty > 0) draft.qtyCandidates.push({ value: qty, y: buckets.y, order: draft.order++ });
 }
 
@@ -322,10 +338,11 @@ function pickLastCandidate(candidates = [], defaultValue) {
 
 function isContinuationCandidate(buckets) {
   const plain = [joinParts(buckets.name), joinParts(buckets.model), joinParts(buckets.brand)].join(" ").trim();
-  if (!plain || isSectionOrHeaderRow(plain)) return false;
+  if (!plain) return false;
   if (parsePosition(joinParts(buckets.position))) return false;
   if (parseQuantity(joinParts(buckets.qty)) > 0) return false;
-  return true;
+  const hasUnit = isKnownUnit(normalizeUnit(joinParts(buckets.unit)));
+  return !hasUnit;
 }
 
 function isPureNamePrelude(buckets) {
@@ -354,8 +371,47 @@ function makeDraft(position, buckets, pageNum, rowY, index) {
   return draft;
 }
 
+function trimLeadingNameFragment(name) {
+  const normalized = tidyText(name);
+  if (!normalized) return "";
+  if (!/^\p{Ll}/u.test(normalized)) return normalized;
+
+  const splitIndex = normalized.search(/\s\p{Lu}[\p{L}\d-]{2,}/u);
+  if (splitIndex > 8) {
+    const candidate = tidyText(normalized.slice(splitIndex + 1));
+    if (candidate.split(/\s+/u).length >= 2) return candidate;
+  }
+  return normalized;
+}
+
+function getModelAlignmentHint(name, model) {
+  const sample = `${normalizeText(model)} ${normalizeText(name)}`.toLowerCase();
+  return MODEL_ALIGNMENT_HINTS.find((entry) => entry.pattern.test(sample)) || null;
+}
+
+function alignNameAndCategory(name, model, category, isMaterialPosition) {
+  const cleanedName = trimLeadingNameFragment(name);
+  const hint = getModelAlignmentHint(cleanedName, model);
+  if (!hint || isMaterialPosition) {
+    return {
+      name: cleanedName || model || "",
+      category,
+    };
+  }
+
+  const nameCategory = detectCategory(cleanedName || "");
+  const hasFamilyInName = hint.familyToken ? cleanedName.toLowerCase().includes(hint.familyToken) : false;
+  const categoryMismatch = nameCategory && nameCategory !== "equipment" && nameCategory !== hint.category;
+  const shouldReplaceName = !cleanedName || categoryMismatch || !hasFamilyInName;
+
+  return {
+    name: shouldReplaceName ? hint.canonicalName : cleanedName,
+    category: hint.category || category,
+  };
+}
+
 function finalizeDraft(draft) {
-  const name = tidyText(sortChunks(draft.nameChunks));
+  let name = tidyText(sortChunks(draft.nameChunks));
   const modelColumn = tidyText(sortChunks(draft.modelChunks));
   const brandColumn = tidyText(sortChunks(draft.brandChunks));
   const model = modelColumn || detectModel(name);
@@ -366,20 +422,26 @@ function finalizeDraft(draft) {
   if (qty <= 0) return null;
   if (!name && !model) return null;
 
-  const summaryText = `${name} ${model} ${brand}`.trim();
-  let category = detectCategory(summaryText);
   const major = getSectionMajor(draft.position);
   const isMaterialPosition = major === 2 || major === 3;
+  let category = detectCategory(`${name} ${model} ${brand}`);
+
+  const aligned = alignNameAndCategory(name, model, category, isMaterialPosition);
+  name = aligned.name || name || model;
+  category = aligned.category || category;
+
   if (isMaterialPosition && category === "equipment") {
     category = "material";
   }
   if ((major === 1 || major === 4) && category === "material") {
     category = "equipment";
   }
+
   if (!isKnownUnit(unit)) {
-    unit = inferUnitFromContext(name, model, major, category) || "шт";
+    unit = inferUnitFromContext(name, model, major, category) || UNIT.piece;
   }
-  const isMaterialUnit = ["м", "м2", "кг", "л", "уп", "лист"].includes(unit);
+
+  const isMaterialUnit = [UNIT.meter, UNIT.meter2, UNIT.kg, UNIT.liter, UNIT.pack, UNIT.sheet].includes(unit);
   const kind = category === "material" || isMaterialUnit || isMaterialPosition ? "material" : "equipment";
   if (!isReasonableQty(draft.position, qty, unit, category)) return null;
 
@@ -394,7 +456,7 @@ function finalizeDraft(draft) {
     kind,
     qty,
     unit,
-    rawLine: summaryText,
+    rawLine: `${name} ${model} ${brand}`.trim(),
   };
 }
 
@@ -431,22 +493,14 @@ function mergeItems(items) {
 
 function buildMetrics(items) {
   const sumBy = (predicate) => items.reduce((sum, item) => (predicate(item) ? sum + toNumber(item.qty, 0) : sum), 0);
-  const detectorsQty = sumBy((item) => item.category === "detector");
-  const notificationQty = sumBy((item) => item.category === "notification");
-  const panelQty = sumBy((item) => item.category === "panel");
-  const powerQty = sumBy((item) => item.category === "power");
-  const cableLengthM = sumBy((item) => item.kind === "material" && item.unit === "м");
-  const materialLines = items.filter((item) => item.kind === "material").length;
-  const devicesQty = sumBy((item) => item.kind === "equipment");
-
   return {
-    detectorsQty,
-    notificationQty,
-    panelQty,
-    powerQty,
-    cableLengthM,
-    materialLines,
-    devicesQty,
+    detectorsQty: sumBy((item) => item.category === "detector"),
+    notificationQty: sumBy((item) => item.category === "notification"),
+    panelQty: sumBy((item) => item.category === "panel"),
+    powerQty: sumBy((item) => item.category === "power"),
+    cableLengthM: sumBy((item) => item.kind === "material" && item.unit === UNIT.meter),
+    materialLines: items.filter((item) => item.kind === "material").length,
+    devicesQty: sumBy((item) => item.kind === "equipment"),
   };
 }
 
@@ -505,8 +559,7 @@ function parseRowsToItems(rows) {
       ...buckets.unit,
       ...buckets.qty,
     ]);
-
-    if (!plainRow || isSectionOrHeaderRow(plainRow)) continue;
+    if (!plainRow) continue;
 
     const position = parsePosition(joinParts(buckets.position));
     if (position) {
@@ -518,7 +571,11 @@ function parseRowsToItems(rows) {
       current = makeDraft(position, buckets, row.pageNum, row.y, draftIndex++);
 
       const rowNameWordCount = rowName.split(/\s+/u).filter(Boolean).length;
-      const needPrelude = rowNameWordCount < 3;
+      const hasModelInRow = isMeaningfulChunk(rowModel);
+      const hasQtyInRow = parseQuantity(joinParts(buckets.qty)) > 0;
+      const hasUnitInRow = isKnownUnit(normalizeUnit(joinParts(buckets.unit)));
+      const needPrelude = rowNameWordCount < 3 && !hasModelInRow && (!hasQtyInRow || !hasUnitInRow);
+
       const attachPrelude = prelude
         .filter((candidate) => candidate.pageNum === row.pageNum && candidate.y >= row.y && candidate.y - row.y <= 14)
         .filter((candidate) => isPureNamePrelude(candidate))
@@ -533,21 +590,27 @@ function parseRowsToItems(rows) {
       continue;
     }
 
-    if (current && row.pageNum === current.pageNum && Math.abs(current.rowY - row.y) <= 22 && !SPEC_HEADER_REGEX.test(plainRow)) {
+    if (current && row.pageNum === current.pageNum && Math.abs(current.rowY - row.y) <= 22) {
       const incomingQty = parseQuantity(joinParts(buckets.qty));
+      const incomingUnit = normalizeUnit(joinParts(buckets.unit));
       const incomingName = joinParts(buckets.name);
       const incomingModel = joinParts(buckets.model);
-      const currentHasQty = current.qtyCandidates.length > 0;
+      const incomingLooksLikeContinuation = incomingQty <= 0 && !isKnownUnit(incomingUnit);
       const incomingLooksLikeNewRow = incomingQty > 0 || (isMeaningfulChunk(incomingName) && isMeaningfulChunk(incomingModel));
+      const currentHasQty = current.qtyCandidates.length > 0;
 
       if (currentHasQty && incomingLooksLikeNewRow) {
-        prelude.push(buckets);
-        if (prelude.length > 3) prelude = prelude.slice(-3);
+        if (isPureNamePrelude(buckets)) {
+          prelude.push(buckets);
+          if (prelude.length > 3) prelude = prelude.slice(-3);
+        }
         continue;
       }
 
-      appendChunks(current, buckets);
-      prelude = [];
+      if (incomingLooksLikeContinuation) {
+        appendChunks(current, buckets);
+        prelude = [];
+      }
       continue;
     }
 
@@ -574,18 +637,15 @@ export async function parseApsProjectPdf(file) {
 
   const pdf = await loadingTask.promise;
   const allRows = [];
-
   for (let pageNum = 1; pageNum <= pdf.numPages; pageNum += 1) {
     const page = await pdf.getPage(pageNum);
     const rows = await extractPageRows(page, pageNum);
     allRows.push(...rows);
   }
-
   await loadingTask.destroy();
 
   const parsedRows = parseRowsToItems(allRows);
   const items = mergeItems(parsedRows);
-
   if (!items.length) {
     throw new Error("Не удалось распознать строки спецификации в PDF. Проверьте, что документ содержит табличную спецификацию.");
   }

@@ -1,6 +1,7 @@
 const PRICE_FIELD_REGEX = /"price"\s*:\s*"?([\d\s.,]+)"?/gi;
 const META_PRICE_REGEX = /itemprop=["']price["'][^>]*content=["']([\d\s.,]+)["']/gi;
-const MONEY_REGEX = /(?:₽|руб\.?|RUB|USD|EUR)\s*([\d\s.,]{1,})|([\d\s.,]{1,})\s*(?:₽|руб\.?|RUB|USD|EUR)/giu;
+const MONEY_REGEX =
+  /(?:\u20BD|\u0440\u0443\u0431\.?|RUB|USD|EUR)\s*([\d\s.,]{1,})|([\d\s.,]{1,})\s*(?:\u20BD|\u0440\u0443\u0431\.?|RUB|USD|EUR)/giu;
 const TINKO_PRODUCT_LINK_REGEX = /\/catalog\/product\/\d+\//gi;
 
 function normalizePrice(raw) {
@@ -21,8 +22,37 @@ function median(values) {
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
-function extractPrices(html) {
-  const text = String(html || "");
+function average(values) {
+  if (!values.length) return null;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function unique(items) {
+  return [...new Set(items)];
+}
+
+function extractPricesFromJsonLike(value, collector) {
+  if (value === null || value === undefined) return;
+  if (Array.isArray(value)) {
+    value.forEach((item) => extractPricesFromJsonLike(item, collector));
+    return;
+  }
+  if (typeof value === "object") {
+    for (const [key, nested] of Object.entries(value)) {
+      if (/(price|cost|amount|sum)/i.test(key)) {
+        const candidate = normalizePrice(nested);
+        if (candidate) collector.push(candidate);
+      }
+      extractPricesFromJsonLike(nested, collector);
+    }
+    return;
+  }
+  const candidate = normalizePrice(value);
+  if (candidate) collector.push(candidate);
+}
+
+function extractPricesFromText(htmlOrText) {
+  const text = String(htmlOrText || "");
   const prices = [];
 
   for (const match of text.matchAll(PRICE_FIELD_REGEX)) {
@@ -40,45 +70,75 @@ function extractPrices(html) {
     if (value) prices.push(value);
   }
 
-  return [...new Set(prices)];
+  return unique(prices);
 }
 
-function pickPrice(html, fallbackPrice = null) {
-  const prices = extractPrices(html);
-  if (!prices.length) return null;
-
-  const sensible = prices.filter((value) => value >= 1 && value <= 5_000_000);
+function selectBestPrice(prices, fallbackPrice = null) {
+  const sensible = prices.filter((value) => Number.isFinite(value) && value >= 1 && value <= 5_000_000);
   if (!sensible.length) return null;
 
   const fallback = Number(fallbackPrice);
-  if (Number.isFinite(fallback) && fallback > 0) {
-    const candidates = sensible.filter((value) => value >= fallback * 0.03 && value <= fallback * 30);
-    const source = candidates.length ? candidates : sensible;
-    return source.sort((a, b) => Math.abs(Math.log(a / fallback)) - Math.abs(Math.log(b / fallback)))[0];
+  if (!Number.isFinite(fallback) || fallback <= 0) {
+    const filtered = sensible.filter((value) => value >= 10);
+    return median(filtered.length ? filtered : sensible);
   }
 
-  const filtered = sensible.filter((value) => value >= 10);
-  return median(filtered.length ? filtered : sensible);
+  const corridor = sensible.filter((value) => value >= fallback * 0.06 && value <= fallback * 16);
+  const source = corridor.length ? corridor : sensible;
+  if (source.length === 1) return source[0];
+
+  const minValue = Math.min(...source);
+  const maxValue = Math.max(...source);
+  const spread = maxValue / Math.max(minValue, 1);
+
+  if (spread >= 2.5) {
+    return [...source].sort((a, b) => Math.abs(Math.log(a / fallback)) - Math.abs(Math.log(b / fallback)))[0];
+  }
+
+  return median(source);
 }
 
-async function fetchHtml(url, timeoutMs = 20000) {
+function selectAveragedPrice(prices, fallbackPrice = null) {
+  const sensible = prices.filter((value) => Number.isFinite(value) && value >= 1 && value <= 5_000_000);
+  if (!sensible.length) return null;
+
+  const fallback = Number(fallbackPrice);
+  const corridor =
+    Number.isFinite(fallback) && fallback > 0
+      ? sensible.filter((value) => value >= fallback * 0.06 && value <= fallback * 16)
+      : sensible;
+
+  const source = corridor.length ? corridor : sensible;
+  if (!source.length) return null;
+  if (source.length === 1) return source[0];
+
+  const sorted = [...source].sort((a, b) => a - b);
+  const min = sorted[0];
+  const max = sorted[sorted.length - 1];
+  const spread = max / Math.max(min, 1);
+  const filtered = spread >= 4 && sorted.length > 3 ? sorted.slice(1, -1) : sorted;
+  return Number((average(filtered) || average(sorted) || 0).toFixed(2));
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 20000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
-
   try {
     const response = await fetch(url, {
+      ...options,
       signal: controller.signal,
       redirect: "follow",
       headers: {
         "user-agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        accept: "text/html,application/xhtml+xml",
         "accept-language": "ru-RU,ru;q=0.9,en;q=0.8",
+        ...(options.headers || {}),
       },
     });
-
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return await response.text();
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    return response;
   } finally {
     clearTimeout(timer);
   }
@@ -97,67 +157,231 @@ function extractTinkoProductUrls(searchHtml) {
     if (seen.has(url)) continue;
     seen.add(url);
     urls.push(url);
-    if (urls.length >= 4) break;
+    if (urls.length >= 5) break;
   }
 
   return urls;
 }
 
-async function fetchPriceFromTinkoSearch(searchUrl, fallbackPrice) {
-  const searchHtml = await fetchHtml(searchUrl, 18000);
-  const productUrls = extractTinkoProductUrls(searchHtml);
-
-  if (!productUrls.length) {
-    const price = pickPrice(searchHtml, fallbackPrice);
-    return price ? { prices: [price], usedSources: [searchUrl] } : { prices: [], usedSources: [] };
+function normalizeSourceTarget(target) {
+  if (!target) return null;
+  if (typeof target === "string") {
+    return {
+      url: target,
+      method: "GET",
+      headers: {},
+      body: null,
+      sourceName: "",
+    };
   }
 
-  const settled = await Promise.allSettled(productUrls.slice(0, 3).map((url) => fetchHtml(url, 18000)));
-  const candidates = [];
-
-  settled.forEach((result, index) => {
-    if (result.status !== "fulfilled") return;
-    const price = pickPrice(result.value, fallbackPrice);
-    if (!price) return;
-    candidates.push({ price, url: productUrls[index] });
-  });
-
-  if (!candidates.length) {
-    return { prices: [], usedSources: [] };
-  }
-
-  const fallback = Number(fallbackPrice);
-  if (Number.isFinite(fallback) && fallback > 0) {
-    candidates.sort((a, b) => Math.abs(Math.log(a.price / fallback)) - Math.abs(Math.log(b.price / fallback)));
-    return { prices: [candidates[0].price], usedSources: [candidates[0].url] };
-  }
-
-  const medianPrice = median(candidates.map((item) => item.price));
+  if (typeof target !== "object" || !target.url) return null;
   return {
-    prices: medianPrice ? [medianPrice] : [candidates[0].price],
-    usedSources: [candidates[0].url],
+    url: String(target.url),
+    method: String(target.method || "GET").toUpperCase(),
+    headers: target.headers && typeof target.headers === "object" ? target.headers : {},
+    body: target.body ?? null,
+    sourceName: String(target.sourceName || ""),
   };
 }
 
-async function fetchPriceForUrl(url, fallbackPrice) {
-  if (!url) return { prices: [], usedSources: [] };
+function normalizeSearchQuery(value) {
+  return String(value || "")
+    .replace(/[«»"'`]/g, " ")
+    .replace(/[(){}\[\],;:]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
 
-  if (url.includes("tinko.ru/search/")) {
-    return fetchPriceFromTinkoSearch(url, fallbackPrice);
+function buildQueryTokens(value) {
+  return normalizeSearchQuery(value)
+    .split(/\s+/u)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3)
+    .slice(0, 10);
+}
+
+function scoreLuisItem(item, queryTokens = []) {
+  const text = normalizeSearchQuery(
+    `${item?.prefix || ""} ${item?.model || ""} ${item?.article || ""} ${item?.annex || ""} ${item?.description || ""}`
+  );
+  if (!text) return 0;
+
+  let score = 0;
+  for (const token of queryTokens) {
+    if (token.length >= 5 && String(item?.article || "").toLowerCase().includes(token)) score += 7;
+    if (String(item?.model || "").toLowerCase().includes(token)) score += 4;
+    if (text.includes(token)) score += 1.2;
+  }
+  return score;
+}
+
+async function fetchLuisApiPrice(source, fallbackPrice) {
+  const query = String(source?.body?.query || "").trim();
+  if (!query) return { prices: [], usedSources: [] };
+
+  const payload = {
+    query,
+    pagination: source?.body?.pagination || { page: 1, perPage: 12 },
+  };
+
+  const response = await fetchWithTimeout(
+    source.url,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/plain, */*",
+        origin: "https://luis.ru",
+        referer: "https://luis.ru/",
+        ...source.headers,
+      },
+      body: JSON.stringify(payload),
+    },
+    20000
+  );
+
+  const json = await response.json().catch(() => ({}));
+  const items = Array.isArray(json?.items) ? json.items : [];
+  if (!items.length) return { prices: [], usedSources: [] };
+
+  const queryTokens = buildQueryTokens(query);
+  const candidates = items
+    .map((item) => ({
+      score: scoreLuisItem(item, queryTokens),
+      price: normalizePrice(item?.price),
+      article: item?.article || "",
+      model: item?.model || "",
+    }))
+    .filter((item) => item.price);
+
+  if (!candidates.length) return { prices: [], usedSources: [] };
+
+  candidates.sort((a, b) => b.score - a.score || b.price - a.price);
+  const topByScore = candidates.filter((item) => item.score >= Math.max(candidates[0].score - 2, 0));
+  const selectedRaw = topByScore.map((item) => item.price);
+  const selected = selectBestPrice(selectedRaw, fallbackPrice);
+  if (!selected) return { prices: [], usedSources: [] };
+
+  const winner = topByScore.find((item) => item.price === selected) || topByScore[0];
+  const hint = winner?.article || winner?.model || query;
+  return {
+    prices: [selected],
+    usedSources: [`${source.url}#${hint}`],
+  };
+}
+
+async function fetchPriceFromTinkoSearch(searchUrl, fallbackPrice) {
+  const searchResponse = await fetchWithTimeout(
+    searchUrl,
+    {
+      method: "GET",
+      headers: {
+        accept: "text/html,application/xhtml+xml",
+      },
+    },
+    18000
+  );
+  const searchHtml = await searchResponse.text();
+  const productUrls = extractTinkoProductUrls(searchHtml);
+
+  if (!productUrls.length) {
+    const price = selectBestPrice(extractPricesFromText(searchHtml), fallbackPrice);
+    return price ? { prices: [price], usedSources: [searchUrl] } : { prices: [], usedSources: [] };
   }
 
-  const html = await fetchHtml(url, 12000);
-  const price = pickPrice(html, fallbackPrice);
-  return price ? { prices: [price], usedSources: [url] } : { prices: [], usedSources: [] };
+  const settled = await Promise.allSettled(
+    productUrls.slice(0, 4).map((url) =>
+      fetchWithTimeout(
+        url,
+        {
+          method: "GET",
+          headers: {
+            accept: "text/html,application/xhtml+xml",
+          },
+        },
+        16000
+      ).then((response) => response.text())
+    )
+  );
+
+  const prices = [];
+  const usedSources = [];
+  settled.forEach((result, index) => {
+    if (result.status !== "fulfilled") return;
+    const price = selectBestPrice(extractPricesFromText(result.value), fallbackPrice);
+    if (!price) return;
+    prices.push(price);
+    usedSources.push(productUrls[index]);
+  });
+
+  const finalPrice = selectBestPrice(prices, fallbackPrice);
+  if (!finalPrice) return { prices: [], usedSources: [] };
+  return {
+    prices: [finalPrice],
+    usedSources: usedSources.length ? [usedSources[0]] : [searchUrl],
+  };
 }
 
-function average(values) {
-  if (!values.length) return null;
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
+async function fetchPriceFromGenericSource(source, fallbackPrice) {
+  const method = source.method || "GET";
+  const headers = { ...source.headers };
+  let body = source.body;
+
+  if (body && typeof body === "object" && !(body instanceof ArrayBuffer)) {
+    if (!headers["content-type"] && !headers["Content-Type"]) {
+      headers["content-type"] = "application/json";
+    }
+    const contentType = String(headers["content-type"] || headers["Content-Type"] || "").toLowerCase();
+    body = contentType.includes("application/json") ? JSON.stringify(body) : body;
+  }
+
+  const response = await fetchWithTimeout(
+    source.url,
+    {
+      method,
+      headers: {
+        accept: "text/html,application/xhtml+xml,application/json,text/plain,*/*",
+        ...headers,
+      },
+      body: method === "GET" ? undefined : body,
+    },
+    15000
+  );
+
+  const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+  if (contentType.includes("application/json")) {
+    const json = await response.json().catch(() => ({}));
+    const prices = [];
+    extractPricesFromJsonLike(json, prices);
+    const price = selectBestPrice(prices, fallbackPrice);
+    return price ? { prices: [price], usedSources: [source.url] } : { prices: [], usedSources: [] };
+  }
+
+  const text = await response.text();
+  const price = selectBestPrice(extractPricesFromText(text), fallbackPrice);
+  return price ? { prices: [price], usedSources: [source.url] } : { prices: [], usedSources: [] };
 }
 
-function unique(items) {
-  return [...new Set(items)];
+async function fetchPriceForTarget(target, fallbackPrice) {
+  const source = normalizeSourceTarget(target);
+  if (!source?.url) return { prices: [], usedSources: [] };
+
+  if (source.url.includes("luis.ru/luisapi/catalog/search")) {
+    return fetchLuisApiPrice(source, fallbackPrice);
+  }
+  if (source.url.includes("tinko.ru/search/")) {
+    return fetchPriceFromTinkoSearch(source.url, fallbackPrice);
+  }
+  return fetchPriceFromGenericSource(source, fallbackPrice);
+}
+
+function selectFinalPrice(prices, fallbackPrice) {
+  const selected = selectAveragedPrice(prices, fallbackPrice) || selectBestPrice(prices, fallbackPrice);
+  if (selected) return selected;
+  const fallback = Number(fallbackPrice);
+  return Number.isFinite(fallback) && fallback > 0 ? fallback : null;
 }
 
 export async function resolveVendorPrices(requests = []) {
@@ -168,9 +392,9 @@ export async function resolveVendorPrices(requests = []) {
   return Promise.all(
     requests.map(async (entry) => {
       const { key, sourceUrls, sourceUrl, fallbackPrice } = entry || {};
-      const urls = Array.isArray(sourceUrls) ? sourceUrls.filter(Boolean).slice(0, 6) : sourceUrl ? [sourceUrl] : [];
+      const targets = Array.isArray(sourceUrls) ? sourceUrls.filter(Boolean).slice(0, 16) : sourceUrl ? [sourceUrl] : [];
 
-      if (!urls.length) {
+      if (!targets.length) {
         return {
           key,
           price: fallbackPrice ?? null,
@@ -182,7 +406,7 @@ export async function resolveVendorPrices(requests = []) {
         };
       }
 
-      const settled = await Promise.allSettled(urls.map((url) => fetchPriceForUrl(url, fallbackPrice)));
+      const settled = await Promise.allSettled(targets.map((target) => fetchPriceForTarget(target, fallbackPrice)));
       const prices = [];
       const usedSources = [];
 
@@ -192,15 +416,15 @@ export async function resolveVendorPrices(requests = []) {
         usedSources.push(...(result.value.usedSources || []));
       });
 
-      const avgPrice = average(prices);
+      const selectedPrice = selectFinalPrice(prices, fallbackPrice);
       const uniqueSources = unique(usedSources);
-      if (avgPrice) {
+      if (selectedPrice && prices.length > 0) {
         return {
           key,
-          price: avgPrice,
-          status: prices.length > 1 ? "fetched_avg" : "fetched",
+          price: selectedPrice,
+          status: prices.length > 1 ? "fetched_multi" : "fetched",
           sourceCount: uniqueSources.length,
-          checkedSources: urls.length,
+          checkedSources: targets.length,
           usedSources: uniqueSources,
         };
       }
@@ -211,7 +435,7 @@ export async function resolveVendorPrices(requests = []) {
         status: "fallback",
         reason: "price_not_found",
         sourceCount: 0,
-        checkedSources: urls.length,
+        checkedSources: targets.length,
         usedSources: [],
       };
     })

@@ -4,6 +4,17 @@ import { toNumber } from "./estimate";
 const LABOR_RATE_PER_HOUR = 1850;
 const DESIGN_RATE_PER_HOUR = 2100;
 
+const UNIT = {
+  piece: "\u0448\u0442",
+  set: "\u043a\u043e\u043c\u043f\u043b",
+  meter: "\u043c",
+  meter2: "\u043c2",
+  kg: "\u043a\u0433",
+  liter: "\u043b",
+  pack: "\u0443\u043f",
+  sheet: "\u043b\u0438\u0441\u0442",
+};
+
 const FALLBACK_PRICE_BY_CATEGORY = {
   detector: 2800,
   panel: 152000,
@@ -39,25 +50,25 @@ const DESIGN_HOURS_BY_CATEGORY = {
 };
 
 const EXECUTION_HOURS_BY_MATERIAL_UNIT = {
-  м: 0.028,
-  м2: 0.02,
-  кг: 0.015,
-  л: 0.02,
-  уп: 0.2,
-  лист: 0.35,
-  шт: 0.08,
-  компл: 0.45,
+  [UNIT.meter]: 0.028,
+  [UNIT.meter2]: 0.02,
+  [UNIT.kg]: 0.015,
+  [UNIT.liter]: 0.02,
+  [UNIT.pack]: 0.2,
+  [UNIT.sheet]: 0.35,
+  [UNIT.piece]: 0.08,
+  [UNIT.set]: 0.45,
 };
 
 const DESIGN_HOURS_BY_MATERIAL_UNIT = {
-  м: 0.004,
-  м2: 0.003,
-  кг: 0.002,
-  л: 0.003,
-  уп: 0.02,
-  лист: 0.03,
-  шт: 0.015,
-  компл: 0.06,
+  [UNIT.meter]: 0.004,
+  [UNIT.meter2]: 0.003,
+  [UNIT.kg]: 0.002,
+  [UNIT.liter]: 0.003,
+  [UNIT.pack]: 0.02,
+  [UNIT.sheet]: 0.03,
+  [UNIT.piece]: 0.015,
+  [UNIT.set]: 0.06,
 };
 
 function trimSlash(url) {
@@ -66,6 +77,36 @@ function trimSlash(url) {
 
 function buildTinkoSearchUrl(query) {
   return `https://www.tinko.ru/search/?q=${encodeURIComponent(query)}`;
+}
+
+function buildLuisSearchUrl(query) {
+  return `https://luis.ru/search/?q=${encodeURIComponent(query)}`;
+}
+
+function buildGarantSearchUrl(query) {
+  return `https://garantgroup.com/search/?q=${encodeURIComponent(query)}`;
+}
+
+function buildGanimedSearchUrl(query) {
+  return `https://ganimedsb.ru/rezultatyi-poiska.html?query=${encodeURIComponent(query)}`;
+}
+
+function buildLuisApiRequest(query) {
+  return {
+    url: "https://luis.ru/luisapi/catalog/search",
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json, text/plain, */*",
+      origin: "https://luis.ru",
+      referer: "https://luis.ru/",
+    },
+    body: {
+      query,
+      pagination: { page: 1, perPage: 12 },
+    },
+    sourceName: "luis_api",
+  };
 }
 
 function toSafeQty(value) {
@@ -88,20 +129,41 @@ function dedupe(values) {
   return [...new Set(values.filter(Boolean))];
 }
 
+function dedupeSourceRequests(entries = []) {
+  const seen = new Set();
+  const result = [];
+  for (const entry of entries) {
+    if (!entry) continue;
+    const key =
+      typeof entry === "string"
+        ? `GET:${entry}`
+        : `${String(entry.method || "GET").toUpperCase()}:${String(entry.url || "")}:${JSON.stringify(entry.body || {})}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(entry);
+  }
+  return result;
+}
+
 function fallbackPriceForItem(item) {
   const title = normalizeSearchText(`${item.name || ""} ${item.model || ""} ${item.mark || item.brand || ""}`).toLowerCase();
 
   if (item.kind === "material") {
-    if (item.unit === "м") {
-      if (/(кабел|utp|cat\d|ввг|кпс|провод)/iu.test(title)) return 95;
-      if (/(труб|гофр)/iu.test(title)) return 70;
-      if (/(короб|лоток)/iu.test(title)) return 180;
+    if (item.unit === UNIT.meter) {
+      if (/(?:\u043a\u0430\u0431\u0435\u043b|utp|cat\d|\u0432\u0432\u0433|\u043a\u043f\u0441|\u043f\u0440\u043e\u0432\u043e\u0434)/iu.test(title)) return 95;
+      if (/(?:\u0442\u0440\u0443\u0431|\u0433\u043e\u0444\u0440)/iu.test(title)) return 70;
+      if (/(?:\u043a\u043e\u0440\u043e\u0431|\u043b\u043e\u0442\u043e\u043a)/iu.test(title)) return 180;
       return 120;
     }
-    if (item.unit === "шт") {
-      if (/(дюбел|саморез|хомут|скоб)/iu.test(title)) return 8;
-      if (/(коробка огнестойк|огнестойк[а-я]* короб)/iu.test(title)) return 4500;
-      if (/(пен[аы])/iu.test(title)) return 1200;
+    if (item.unit === UNIT.piece) {
+      if (/(?:\u0434\u044e\u0431\u0435\u043b|\u0441\u0430\u043c\u043e\u0440\u0435\u0437|\u0445\u043e\u043c\u0443\u0442|\u0441\u043a\u043e\u0431)/iu.test(title)) return 8;
+      if (
+        /(?:\u043a\u043e\u0440\u043e\u0431\u043a\u0430 \u043e\u0433\u043d\u0435\u0441\u0442\u043e\u0439\u043a|\u043e\u0433\u043d\u0435\u0441\u0442\u043e\u0439\u043a[\u0430-\u044f]* \u043a\u043e\u0440\u043e\u0431)/iu.test(
+          title
+        )
+      )
+        return 4500;
+      if (/(?:\u043f\u0435\u043d[\u0430\u044b])/iu.test(title)) return 1200;
       return 220;
     }
   }
@@ -113,32 +175,53 @@ function buildSearchQueries(item, defaultVendor) {
   const vendor = shortenSearchText(item.mark || item.brand || defaultVendor || "", 48);
   const model = shortenSearchText(item.model || "", 72);
   const name = shortenSearchText(item.name || "", 96);
-  const nameStart = shortenSearchText(name.split(/\s+/).slice(0, 10).join(" "), 72);
+  const nameStart = shortenSearchText(name.split(/\s+/u).slice(0, 10).join(" "), 72);
+  const article = shortenSearchText(
+    (item.model || "").match(/[A-Za-z\u0410-\u042f\u0430-\u044f\u0401\u04510-9]+(?:[-/.][A-Za-z\u0410-\u042f\u0430-\u044f\u0401\u04510-9]+)+/u)?.[0] || "",
+    64
+  );
 
   return dedupe([
+    article,
     model,
     `${vendor} ${model}`.trim(),
+    `${vendor} ${article}`.trim(),
     `${nameStart} ${model}`.trim(),
     `${vendor} ${nameStart}`.trim(),
     nameStart,
-  ]).slice(0, 5);
+  ]).slice(0, 6);
 }
 
-function buildSourceUrls(source, queries) {
+function buildSourceUrls(source, queries, item) {
   const base = trimSlash(source?.website || "");
-  const urls = [];
+  const urlTargets = [];
+  const apiRequests = [];
+  const queryPool = dedupe(queries).slice(0, 4);
 
-  for (const query of queries) {
-    urls.push(buildTinkoSearchUrl(query));
-  }
-
-  if (base) {
-    for (const query of queries.slice(0, 2)) {
-      urls.push(`${base}/search?q=${encodeURIComponent(query)}`);
+  for (const query of queryPool) {
+    urlTargets.push(buildTinkoSearchUrl(query));
+    urlTargets.push(buildLuisSearchUrl(query));
+    urlTargets.push(buildGarantSearchUrl(query));
+    urlTargets.push(buildGanimedSearchUrl(query));
+    if (query && query.length >= 3) {
+      apiRequests.push(buildLuisApiRequest(query));
     }
   }
 
-  return dedupe(urls).slice(0, 6);
+  if (base) {
+    for (const query of queryPool.slice(0, 2)) {
+      urlTargets.push(`${base}/search?q=${encodeURIComponent(query)}`);
+    }
+  }
+
+  if (item?.model) {
+    const modelOnly = shortenSearchText(item.model, 72);
+    if (modelOnly) {
+      apiRequests.unshift(buildLuisApiRequest(modelOnly));
+    }
+  }
+
+  return dedupeSourceRequests([...apiRequests, ...urlTargets]).slice(0, 16);
 }
 
 function buildRequestKey(index, item) {
@@ -150,20 +233,20 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
-export function buildApsProjectPriceRequests(items = [], defaultVendor = "Базовый") {
+export function buildApsProjectPriceRequests(items = [], defaultVendor = "\u0411\u0430\u0437\u043e\u0432\u044b\u0439") {
   return items.map((item, index) => {
     const queries = buildSearchQueries(item, defaultVendor);
     const searchQuery = queries[0] || shortenSearchText(item.name || item.model || "", 72);
     const manufacturerName = item.mark || item.brand || defaultVendor;
     const source = getManufacturerSource("aps", manufacturerName);
-    const sourceUrls = buildSourceUrls(source, queries);
+    const sourceUrls = buildSourceUrls(source, queries, item);
 
     return {
       key: buildRequestKey(index, item),
       equipmentKey: item.category || item.kind,
       equipmentLabel: item.name,
       sourceUrls,
-      unit: item.unit || "шт",
+      unit: item.unit || UNIT.piece,
       kind: item.kind || "equipment",
       fallbackPrice: fallbackPriceForItem(item),
       influenceWeight: INFLUENCE_WEIGHT_BY_CATEGORY[item.category] || INFLUENCE_WEIGHT_BY_CATEGORY[item.kind] || 0.1,
@@ -282,7 +365,7 @@ function buildKeyEquipment(pricedItems) {
       qty: item.qty,
       unitPrice: item.unitPrice,
       total: item.total,
-      basis: `Наименование ${item.position || "без номера"} загружено из PDF-спецификации (${item.unit}).`,
+      basis: `\u041d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435 ${item.position || "\u0431\u0435\u0437 \u043d\u043e\u043c\u0435\u0440\u0430"} \u0437\u0430\u0433\u0440\u0443\u0436\u0435\u043d\u043e \u0438\u0437 PDF-\u0441\u043f\u0435\u0446\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u0438 (${item.unit}).`,
     }));
 }
 
@@ -292,7 +375,7 @@ export function buildApsProjectSnapshot({
   requests,
   priceSnapshot,
   objectData,
-  vendorName = "Базовый",
+  vendorName = "\u0411\u0430\u0437\u043e\u0432\u044b\u0439",
 }) {
   const pricedItems = mapPricesToItems(parsedProject.items, requests, priceSnapshot);
   const totals = splitTotals(pricedItems);
@@ -307,7 +390,7 @@ export function buildApsProjectSnapshot({
     vendorName,
     fileName,
     parsedAt: parsedProject.parsedAt,
-    gostStandard: parsedProject.gostStandard || "ГОСТ 21.110-2013",
+    gostStandard: parsedProject.gostStandard || "\u0413\u041e\u0421\u0422 21.110-2013",
     linesScanned: parsedProject.linesScanned,
     pages: parsedProject.pages,
     metrics: parsedProject.metrics,

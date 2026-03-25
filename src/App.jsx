@@ -1,135 +1,24 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Building2, Layers, Wallet, Download, PieChart, FileText, Ruler } from "lucide-react";
-import useEstimate from "./hooks/useEstimate";
-import ObjectStep from "./components/ObjectStep";
-import SystemsStep from "./components/SystemsStep";
-import ProjectDesignStep from "./components/ProjectDesignStep";
-import BudgetStep from "./components/BudgetStep";
-import CostBreakdownStep from "./components/CostBreakdownStep";
-import CalculationLogicStep from "./components/CalculationLogicStep";
-import Summary from "./components/Summary";
-import AuthGate from "./components/AuthGate";
-import { BUILD_NUMBER } from "./config/estimateConfig";
-import { isStoredAuthTokenValid } from "./lib/authApi";
-
-const BACKGROUND_VIDEO_URLS = [
-  "/assets/background/city-loop.mp4",
-  "https://videos.pexels.com/video-files/3129957/3129957-hd_1920_1080_25fps.mp4",
-  "https://storage.coverr.co/videos/O3x8lq1w7f2wV6xTt1lPmIfQ00j00iW4w5?download=1",
-];
+import { Navigate, Route, Routes } from "react-router-dom";
+import { AppShell } from "./components/AppShell";
+import EstimatorApp from "./components/EstimatorApp";
+import { HomePage } from "./pages/HomePage";
+import { CookiesPage } from "./pages/legal/CookiesPage";
+import { DisclaimerPage } from "./pages/legal/DisclaimerPage";
+import { PersonalDataPage } from "./pages/legal/PersonalDataPage";
+import { PrivacyPage } from "./pages/legal/PrivacyPage";
 
 export default function App() {
-  const vm = useEstimate();
-  const [videoIndex, setVideoIndex] = useState(0);
-  const [videoUnavailable, setVideoUnavailable] = useState(false);
-  const [videoReady, setVideoReady] = useState(false);
-  const [authorized, setAuthorized] = useState(() => {
-    if (typeof window === "undefined") return false;
-    const storedToken = window.localStorage.getItem("smetacore_auth_token");
-    return isStoredAuthTokenValid(storedToken);
-  });
-
-  const steps = [
-    { key: "object", label: "Объект", icon: Building2 },
-    { key: "systems", label: "Системы", icon: Layers },
-    { key: "design", label: "Проектирование", icon: Ruler },
-    { key: "budget", label: "Бюджет", icon: Wallet },
-    { key: "breakdown", label: "Стоимость проекта", icon: PieChart },
-    { key: "logic", label: "Логика расчета", icon: FileText },
-  ];
-
-  const currentVideoUrl = useMemo(() => BACKGROUND_VIDEO_URLS[Math.min(videoIndex, BACKGROUND_VIDEO_URLS.length - 1)], [videoIndex]);
-  const hideSummary = vm.step === 5;
-
-  useEffect(() => {
-    setVideoReady(false);
-  }, [currentVideoUrl]);
-
-  const handleAuthorized = (accessToken) => {
-    if (typeof window !== "undefined" && accessToken) {
-      window.localStorage.setItem("smetacore_auth_token", accessToken);
-    }
-    setAuthorized(true);
-  };
-
   return (
-    <div className="page-shell">
-      <div className="bg-video-layer" aria-hidden>
-        <div className="bg-video-fallback" />
-        {!videoUnavailable ? (
-          <video
-            key={currentVideoUrl}
-            className={videoReady ? "is-ready" : ""}
-            autoPlay
-            loop
-            muted
-            playsInline
-            preload="auto"
-            onLoadedData={() => setVideoReady(true)}
-            onCanPlay={() => setVideoReady(true)}
-            onError={() => {
-              setVideoReady(false);
-              if (videoIndex < BACKGROUND_VIDEO_URLS.length - 1) {
-                setVideoIndex((prev) => prev + 1);
-              } else {
-                setVideoUnavailable(true);
-              }
-            }}
-          >
-            <source src={currentVideoUrl} type="video/mp4" />
-          </video>
-        ) : null}
-      </div>
-
-      <div className="build-badge">Сборка: {BUILD_NUMBER}</div>
-
-      <div className={`app-wrap ${authorized ? "" : "locked"}`} aria-hidden={!authorized}>
-        <header className="hero-card">
-          <div>
-            <div className="hero-kicker">SmetaCore</div>
-            <h1>SmetaCore — предварительный расчет бюджета систем безопасности</h1>
-            <p>С автоматическим формированием сметы и коммерческого предложения</p>
-          </div>
-          <button className="primary-btn" onClick={vm.exportEstimate} type="button">
-            <Download size={16} /> Экспорт ТКП
-          </button>
-        </header>
-
-        <section className="stepper-card">
-          <div className="stepper">
-            {steps.map((item, index) => {
-              const Icon = item.icon;
-              const active = index === vm.step;
-              const done = index < vm.step;
-              return (
-                <button
-                  key={item.key}
-                  className={`step-chip ${active ? "active" : ""} ${done ? "done" : ""}`}
-                  onClick={() => vm.setStep(index)}
-                  type="button"
-                  disabled={!authorized}
-                >
-                  <span className="step-icon">
-                    <Icon size={14} />
-                  </span>
-                  <span>{item.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-
-        {vm.step === 0 ? <ObjectStep {...vm} /> : null}
-        {vm.step === 1 ? <SystemsStep {...vm} /> : null}
-        {vm.step === 2 ? <ProjectDesignStep {...vm} /> : null}
-        {vm.step === 3 ? <BudgetStep {...vm} /> : null}
-        {vm.step === 4 ? <CostBreakdownStep systemResults={vm.systemResults} totals={vm.totals} /> : null}
-        {vm.step === 5 ? <CalculationLogicStep {...vm} /> : null}
-
-        {!hideSummary ? <Summary totals={vm.totals} systemResults={vm.systemResults} objectData={vm.objectData} /> : null}
-      </div>
-
-      {!authorized ? <AuthGate onAuthorized={handleAuthorized} /> : null}
-    </div>
+    <Routes>
+      <Route element={<AppShell />}>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/legal/privacy" element={<PrivacyPage />} />
+        <Route path="/legal/personal-data" element={<PersonalDataPage />} />
+        <Route path="/legal/cookies" element={<CookiesPage />} />
+        <Route path="/legal/disclaimer" element={<DisclaimerPage />} />
+      </Route>
+      <Route path="/system" element={<EstimatorApp />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }

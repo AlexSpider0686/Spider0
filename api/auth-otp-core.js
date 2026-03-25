@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 const OTP_TTL_SECONDS = 10 * 60;
 const ACCESS_TTL_SECONDS = 12 * 60 * 60;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const DEFAULT_TEST_OTP = "123456";
 
 function nowSeconds() {
   return Math.floor(Date.now() / 1000);
@@ -57,7 +58,9 @@ function verifySignedToken(token) {
   }
 
   const expected = signPayload(payloadPart);
-  if (!crypto.timingSafeEqual(Buffer.from(signaturePart), Buffer.from(expected))) {
+  const left = Buffer.from(signaturePart);
+  const right = Buffer.from(expected);
+  if (left.length !== right.length || !crypto.timingSafeEqual(left, right)) {
     throw new Error("Token signature mismatch");
   }
 
@@ -87,6 +90,11 @@ function normalizeOtpCode(code) {
 function generateOtpCode() {
   const value = crypto.randomInt(0, 1_000_000);
   return String(value).padStart(6, "0");
+}
+
+function getStaticOtpCode() {
+  const fromEnv = String(process.env.AUTH_TEST_CODE || "").replace(/[^\d]/g, "").slice(0, 6);
+  return (fromEnv || DEFAULT_TEST_OTP).padStart(6, "0").slice(0, 6);
 }
 
 async function sendCodeViaResend(email, code) {
@@ -123,6 +131,15 @@ async function sendCodeViaResend(email, code) {
 }
 
 async function dispatchOtpCode(email, code) {
+  const forceTestMode = String(process.env.AUTH_FORCE_TEST_MODE ?? "1") === "1";
+  if (forceTestMode) {
+    return {
+      delivery: "debug",
+      debugCode: code,
+      warning: "test_mode_enabled",
+    };
+  }
+
   const strictEmail = String(process.env.AUTH_STRICT_EMAIL || "0") === "1";
   const forceDebug = String(process.env.AUTH_DEBUG_CODE || "0") === "1";
   let resendError = null;
@@ -155,7 +172,8 @@ async function dispatchOtpCode(email, code) {
 export async function issueOtpChallenge(rawEmail) {
   const email = normalizeEmail(rawEmail);
   validateEmail(email);
-  const code = generateOtpCode();
+  const staticMode = String(process.env.AUTH_STATIC_TEST_CODE ?? "1") === "1";
+  const code = staticMode ? getStaticOtpCode() : generateOtpCode();
 
   const challengeToken = createSignedToken(
     {
