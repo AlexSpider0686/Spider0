@@ -1,5 +1,6 @@
 import { GlobalWorkerOptions, getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { toNumber } from "./estimate";
+import { applyApsAiRefinement } from "./apsAiRefiner";
 
 const CYR_UPPER = "\u0410\u0411\u0412\u0413\u0414\u0415\u0416\u0417\u0418\u0419\u041a\u041b\u041c\u041d\u041e\u041f\u0420\u0421\u0422\u0423\u0424\u0425\u0426\u0427\u0428\u0429\u042a\u042b\u042c\u042d\u042e\u042f";
 const CYR_LOWER = "\u0430\u0431\u0432\u0433\u0434\u0435\u0436\u0437\u0438\u0439\u043a\u043b\u043c\u043d\u043e\u043f\u0440\u0441\u0442\u0443\u0444\u0445\u0446\u0447\u0448\u0449\u044a\u044b\u044c\u044d\u044e\u044f";
@@ -23,6 +24,15 @@ const MODEL_REGEX = /[A-Z\u0410-\u042f\u04010-9]{2,}(?:[-/.][A-Z\u0410-\u042f\u0
 const MODEL_TEST_REGEX = /[A-Z\u0410-\u042f\u04010-9]{2,}(?:[-/.][A-Z\u0410-\u042f\u04010-9]{1,})+/u;
 const SOFT_MODEL_REGEX = /[A-Z\u0410-\u042f\u0401]{1,8}\s?\d{1,8}[A-Z\u0410-\u042f\u04010-9-]*/gu;
 const NOTE_SPLIT_REGEX = /(?:^|\b)(?:\u043f\u0440\u0438\u043c(?:\.|\b)|\u043f\u0440\u0438\u043c\u0435\u0447(?:\u0430\u043d\u0438\u0435|\u0430\u043d\u0438\u044f)?|\u0437\u0430\u043c\u0435\u0447(?:\u0430\u043d\u0438\u0435|\u0430\u043d\u0438\u044f)?|note)(?:\b|:)/iu;
+const NOTE_INLINE_START_REGEX =
+  /(?:^|[\s,;:()[\]{}-])(?:\u043d\u0435\s+\u043f\u0440\u0438\u0448\u043b[\u0430-\u044f\u0451]*|\u043f\u0440\u0438\u0448\u043b[\u0430-\u044f\u0451]*|\u043f\u043e\s+\u043c\u0435\u0441\u0442\u0443|\u0432\s+\u043a\u043e\u043c\u043f\u043b\u0435\u043a\u0442\u0435|\u0441\u043c\.?|\u0441\u043c\u043e\u0442\u0440\u0438|\u0437\u0430\u043c\u0435\u043d[\u0430\u044b]?|\u043f\u0440\u0438\u043c(?:\.|\s|$)|\u043f\u0440\u0438\u043c\u0435\u0447(?:\u0430\u043d\u0438\u0435|\u0430\u043d\u0438\u044f)?|note)(?=$|[\s,;:()[\]{}-])/iu;
+const NOTE_TRAILING_REGEX =
+  /(?:^|[\s,;:()[\]{}-])(?:\u043d\u0435\s+\u043f\u0440\u0438\u0448\u043b[\u0430-\u044f\u0451]*|\u043f\u0440\u0438\u0448\u043b[\u0430-\u044f\u0451]*|\u043f\u043e\s+\u043c\u0435\u0441\u0442\u0443|\u0432\s+\u043a\u043e\u043c\u043f\u043b\u0435\u043a\u0442\u0435|\u0441\u043c\.?|\u0441\u043c\u043e\u0442\u0440\u0438|\u0437\u0430\u043c\u0435\u043d[\u0430\u044b]?|\u043f\u0440\u0438\u043c(?:\.|\s|$)|\u043f\u0440\u0438\u043c\u0435\u0447(?:\u0430\u043d\u0438\u0435|\u0430\u043d\u0438\u044f)?|note)\s*.*$/iu;
+const NOTE_QTY_TRAILING_REGEX =
+  /(?:^|[\s,;:()[\]{}-])\d+(?:[.,]\d+)?\s*(?:\u0448\u0442|\u0435\u0434|\u043a\u043e\u043c\u043f\u043b)?\s*(?:\u043d\u0435\s+)?\u043f\u0440\u0438\u0448\u043b[\u0430-\u044f\u0451]*\s*.*$/iu;
+const LEADING_MODEL_NOISE_REGEX = /^\s*\d+\s+(?=[A-Z\u0410-\u042f\u04010-9]{2,}(?:[-/.][A-Z\u0410-\u042f\u04010-9]{1,})+)/u;
+const TRAILING_UNIT_TOKEN_REGEX =
+  /\s+(?:\u0448\u0442(?:\u0443\u043a)?|\u0435\u0434(?:\u0438\u043d\u0438\u0446[\u0430\u044b]?)?|\u043a\u043e\u043c\u043f\u043b(?:\u0435\u043a\u0442)?|\u043c2|\u043c\u00b2|\u043c|\u043a\u0433|\u043b|\u0443\u043f(?:\u0430\u043a)?|\u043b\u0438\u0441\u0442(?:\u043e\u0432|\u0430)?)(?=$|[\s,;:()[\]{}-])/iu;
 
 const UNIT = {
   piece: "\u0448\u0442",
@@ -136,6 +146,7 @@ function decodePseudoCyrillic(text) {
 
 function normalizeText(value) {
   return decodePseudoCyrillic(String(value || ""))
+    .replace(/[\u0000-\u001f\u007f-\u009f]/g, " ")
     .replace(/\u00a0/g, " ")
     .replace(/[‐‑‒–—]/g, "-")
     .replace(/\s+/g, " ")
@@ -240,10 +251,25 @@ function parseQtyFromQtyBucket(parts = []) {
   if (!joined) return 0;
 
   const leftOfNotes = joined.split(NOTE_SPLIT_REGEX)[0] || joined;
+  const hasExplicitUnit = /(?:^|[^A-Za-z\u0410-\u042f\u0430-\u044f\u0401\u04510-9])(?:\u0448\u0442(?:\u0443\u043a)?|\u0435\u0434(?:\u0438\u043d\u0438\u0446[\u0430\u044b]?)?|\u043a\u043e\u043c\u043f\u043b(?:\u0435\u043a\u0442)?|\u043c2|\u043c\u00b2|\u043c|\u043a\u0433|\u043b|\u0443\u043f(?:\u0430\u043a)?|\u043b\u0438\u0441\u0442(?:\u043e\u0432|\u0430)?)(?:$|[^A-Za-z\u0410-\u042f\u0430-\u044f\u0401\u04510-9])/iu.test(
+    leftOfNotes
+  );
+  const isNumericBucket = /^\s*\d+(?:[.,]\d+)?\s*$/u.test(leftOfNotes);
+  const hasLetters = /[A-Za-z\u0410-\u042f\u0430-\u044f\u0401\u0451]/u.test(leftOfNotes);
+  const qtyAndUnit = extractQtyAndUnitFromText(leftOfNotes);
+  if (qtyAndUnit?.qty) return qtyAndUnit.qty;
+  if (!hasExplicitUnit && !isNumericBucket && hasLetters) return 0;
   const firstCandidate = parseQuantity(leftOfNotes, "first");
   if (firstCandidate > 0) return firstCandidate;
 
   return parseQuantity(leftOfNotes, "last");
+}
+
+function parseQtyAndUnitFromBuckets(buckets) {
+  const qtyBucket = joinParts(buckets?.qty || []);
+  const unitBucket = joinParts(buckets?.unit || []);
+  const mixed = joinParts([qtyBucket, unitBucket, joinParts(buckets?.name || []), joinParts(buckets?.model || [])]);
+  return extractQtyAndUnitFromText(mixed);
 }
 
 function parsePosition(text) {
@@ -307,11 +333,33 @@ function rowToPlainText(row) {
 }
 
 function stripNotesTail(text) {
-  const normalized = normalizeText(text);
+  let normalized = normalizeText(text);
   if (!normalized) return "";
+  normalized = normalized.replace(/\s+\d+(?:[.,]\d+)?\s*(?=(?:\u043d\u0435\s+)?\u043f\u0440\u0438\u0448\u043b[\u0430-\u044f\u0451]*)/giu, " ");
   const noteStart = normalized.search(NOTE_SPLIT_REGEX);
-  const left = noteStart >= 0 ? normalized.slice(0, noteStart) : normalized;
-  return tidyText(left);
+  let left = noteStart >= 0 ? normalized.slice(0, noteStart) : normalized;
+  const inlineNoteStart = left.search(NOTE_INLINE_START_REGEX);
+  if (inlineNoteStart >= 0) {
+    left = left.slice(0, inlineNoteStart);
+  }
+  return tidyText(left.replace(NOTE_QTY_TRAILING_REGEX, "").replace(NOTE_TRAILING_REGEX, ""));
+}
+
+function cleanupDescriptorNoise(text) {
+  const normalized = stripNotesTail(text);
+  if (!normalized) return "";
+  return tidyText(
+    normalized
+      .replace(LEADING_MODEL_NOISE_REGEX, "")
+      .replace(/(?:^|[\s,;:()[\]{}-])(?:\u043d\u0435\s+)?\u043f\u0440\u0438\u0448\u043b[\u0430-\u044f\u0451]*\s*.*$/iu, "")
+      .replace(/\s{2,}/g, " ")
+  );
+}
+
+function stripTrailingUnitToken(text) {
+  const normalized = tidyText(text);
+  if (!normalized) return "";
+  return tidyText(normalized.replace(TRAILING_UNIT_TOKEN_REGEX, ""));
 }
 
 function countStampMetaHits(text) {
@@ -347,6 +395,10 @@ function looksLikeAdministrativeLine(text) {
 
   if (/\u0438\u0437\u043c\.?\s*\u043a\u043e\u043b\.?\s*\u0443\u0447/iu.test(lower)) return true;
   if (/\u043f\u043e\u0434\u043f(?:\.|\u0438\u0441\u044c)?\s*\u0438\s*\u0434\u0430\u0442\u0430/iu.test(lower)) return true;
+  if (/^\s*\d+(?:\.\d+){0,2}\s+\u0437\u0430\u043c\b/iu.test(lower)) return true;
+  if (/^\s*\d+(?:\.\d+){0,2}\s+[\w-]*\u0437\u0430\u043c\b/iu.test(lower)) return true;
+  if (/\b(?:\u0441\u043e\u0433\u043b\u0430\u0441\u043e\u0432\u0430\u043d\u043e|\u0443\u0442\u0432\u0435\u0440\u0436\u0434\u0430\u044e|\u043b\u0438\u0441\u0442\s+\d+)\b/iu.test(lower) && !hasQtyUnit) return true;
+  if (normalized.length > 120 && /\d{2}\.\d{2}|\d{2}\.\d{4}|-\d{2}/u.test(normalized) && !hasQtyUnit && !hasSpecHint) return true;
   if (!hasSpecHint && !hasModel && !hasQtyUnit && stampHit) return true;
   if (!hasSpecHint && stampHits >= 2) return true;
   if (!hasSpecHint && !hasModel && normalized.length > 120 && stampHits >= 1) return true;
@@ -365,16 +417,53 @@ function isHeaderRowText(text) {
 function isSectionHeaderText(text) {
   const normalized = normalizeText(text).toLowerCase();
   if (!normalized) return false;
-  const cleaned = normalized.replace(/^[\divxlcdm.\-:\s]+/iu, "").trim();
-  return /^(?:\u043e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u0435|\u043a\u0430\u0431\u0435\u043b\u044c\u043d\u044b\u0435 \u0438\u0437\u0434\u0435\u043b\u0438\u044f|\u043a\u0430\u0431\u0435\u043b\u0435\u043d\u0435\u0441\u0443\u0449|\u043c\u043e\u043d\u0442\u0430\u0436\u043d\u044b\u0435 \u0438\u0437\u0434\u0435\u043b\u0438\u044f|\u0437\u0438\u043f)\b/iu.test(
+  const cleaned = normalized
+    .replace(/^\s*\d+(?:\.\d+){0,3}\s*/u, "")
+    .replace(/^(?:[ivxlcdm]{1,6})(?:[.):-]|\s+)\s*/iu, "")
+    .replace(/^[\d.\-:\s]+/u, "")
+    .trim();
+  return /^(?:\u043e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u0435(?: \u0438 \u043c\u0430\u0442\u0435\u0440\u0438\u0430\u043b\u044b)?|\u043c\u0430\u0442\u0435\u0440\u0438\u0430\u043b(?:\u044b|\u043e\u0432)?|\u0438\u0437\u0434\u0435\u043b\u0438\u044f \u0438 \u043c\u0430\u0442\u0435\u0440\u0438\u0430\u043b\u044b|\u043a\u0430\u0431\u0435\u043b\u044c\u043d\u044b\u0435 \u0438\u0437\u0434\u0435\u043b\u0438\u044f|\u043a\u0430\u0431\u0435\u043b\u0435\u043d\u0435\u0441\u0443\u0449|\u043c\u043e\u043d\u0442\u0430\u0436\u043d\u044b\u0435 \u0438\u0437\u0434\u0435\u043b\u0438\u044f|\u0437\u0438\u043f)\b/iu.test(
     cleaned
   );
+}
+
+function isLikelySectionMarkerLine(text) {
+  const normalized = normalizeText(text).toLowerCase();
+  if (!normalized) return false;
+  if (
+    /^\s*(?:\d+(?:\.\d+){0,3}\s+)?(?:[ivxlcdm]+)\s+/iu.test(normalized) &&
+    /(?:\u043e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d|\u043a\u0430\u0431\u0435\u043b\u0435\u043d\u0435\u0441\u0443\u0449|\u043c\u043e\u043d\u0442\u0430\u0436\u043d|\u0438\u0437\u0434\u0435\u043b\u0438|\u0437\u0438\u043f)/iu.test(normalized) &&
+    !extractQtyAndUnitFromText(normalized)
+  ) {
+    return true;
+  }
+  const cleaned = normalized
+    .replace(/^\s*\d+(?:\.\d+){0,3}\s*/u, "")
+    .replace(/^(?:[ivxlcdm]{1,6})(?:[.):-]|\s+)\s*/iu, "")
+    .replace(/^[\d.\-:\s]+/u, "")
+    .trim();
+  if (!cleaned) return false;
+  const words = cleaned.split(/\s+/u).filter(Boolean);
+  if (words.length > 10) return false;
+  return /(?:\u043e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d|\u043a\u0430\u0431\u0435\u043b|\u043c\u043e\u043d\u0442\u0430\u0436\u043d|\u0437\u0438\u043f|\u0438\u0437\u0434\u0435\u043b\u0438)/iu.test(cleaned);
 }
 
 function removePositionPrefix(text) {
   const normalized = normalizeText(text);
   const match = normalized.match(/^\s*\d+(?:\.\d+){1,3}\.?\s*/u);
   return tidyText(match ? normalized.slice(match[0].length) : normalized);
+}
+
+function isEmbeddedTokenMatch(source, start, end) {
+  const before = source[start - 1] || "";
+  const beforeIsToken = /[A-Za-z\u0410-\u042f\u0430-\u044f\u0401\u04510-9/-]/u.test(before);
+  if (beforeIsToken) return true;
+  const token = String(source.slice(start, end) || "");
+  if (token.length <= 2) {
+    const after = source[end] || "";
+    if (/[A-Za-z\u0410-\u042f\u0430-\u044f\u0401\u04510-9]/u.test(after)) return true;
+  }
+  return false;
 }
 
 function extractQtyAndUnitFromText(text) {
@@ -388,11 +477,13 @@ function extractQtyAndUnitFromText(text) {
   while ((match = qtyUnitRegex.exec(source)) !== null) {
     const qty = parseNumericToken(match[1]);
     if (!qty) continue;
+    const start = match.index;
+    const end = qtyUnitRegex.lastIndex;
     last = {
       qty,
       unit: normalizeUnit(match[2]),
-      start: match.index,
-      end: qtyUnitRegex.lastIndex,
+      start,
+      end,
     };
   }
   if (last) return last;
@@ -402,11 +493,13 @@ function extractQtyAndUnitFromText(text) {
   while ((match = unitQtyRegex.exec(source)) !== null) {
     const qty = parseNumericToken(match[2]);
     if (!qty) continue;
+    const start = match.index;
+    const end = unitQtyRegex.lastIndex;
     last = {
       qty,
       unit: normalizeUnit(match[1]),
-      start: match.index,
-      end: unitQtyRegex.lastIndex,
+      start,
+      end,
     };
   }
   if (last) return last;
@@ -417,14 +510,25 @@ function extractQtyAndUnitFromText(text) {
   const qty = parseNumericToken(lastNumber[0]);
   if (!qty) return null;
   const index = lastNumber.index || 0;
+  const numStart = index;
+  const numEnd = index + String(lastNumber[0]).length;
+  if (isEmbeddedTokenMatch(source, numStart, numEnd)) return null;
   const around = source.slice(Math.max(0, index - 12), Math.min(source.length, index + lastNumber[0].length + 12));
-  const unitCandidate = around.match(
-    /(\u0448\u0442(?:\u0443\u043a)?|\u0435\u0434(?:\u0438\u043d\u0438\u0446[\u0430\u044b]?)?|\u043a\u043e\u043c\u043f\u043b(?:\u0435\u043a\u0442)?|\u043c2|\u043c\u00b2|\u043c|\u043a\u0433|\u043b|\u0443\u043f(?:\u0430\u043a)?|\u043b\u0438\u0441\u0442(?:\u043e\u0432|\u0430)?)/iu
-  );
+  const aroundStart = Math.max(0, index - 12);
+  const unitRegex = /(\u0448\u0442(?:\u0443\u043a)?|\u0435\u0434(?:\u0438\u043d\u0438\u0446[\u0430\u044b]?)?|\u043a\u043e\u043c\u043f\u043b(?:\u0435\u043a\u0442)?|\u043c2|\u043c\u00b2|\u043c|\u043a\u0433|\u043b|\u0443\u043f(?:\u0430\u043a)?|\u043b\u0438\u0441\u0442(?:\u043e\u0432|\u0430)?)/giu;
+  let unitCandidate = null;
+  let unitMatch = null;
+  while ((unitMatch = unitRegex.exec(around)) !== null) {
+    const unitStart = aroundStart + unitMatch.index;
+    const unitEnd = unitStart + String(unitMatch[0]).length;
+    if (isEmbeddedTokenMatch(source, unitStart, unitEnd)) continue;
+    unitCandidate = unitMatch[1];
+    break;
+  }
   if (!unitCandidate) return null;
   return {
     qty,
-    unit: normalizeUnit(unitCandidate[1]),
+    unit: normalizeUnit(unitCandidate),
     start: index,
     end: index + String(lastNumber[0]).length,
   };
@@ -508,6 +612,14 @@ function appendChunks(draft, buckets) {
 
   const qty = parseQtyFromQtyBucket(buckets.qty);
   if (qty > 0) draft.qtyCandidates.push({ value: qty, y: buckets.y, order: draft.order++ });
+  const mixedQtyUnit = parseQtyAndUnitFromBuckets(buckets);
+  if (mixedQtyUnit?.qty && qty <= 0) {
+    draft.qtyCandidates.push({ value: mixedQtyUnit.qty, y: buckets.y, order: draft.order++ });
+  }
+  if (mixedQtyUnit?.unit && !isKnownUnit(normalizeUnit(unitText))) {
+    draft.unitCandidates.push({ value: mixedQtyUnit.unit, y: buckets.y, order: draft.order++ });
+  }
+  draft.lastRowY = buckets.y;
 }
 
 function sortChunks(chunks = []) {
@@ -546,6 +658,7 @@ function makeDraft(position, buckets, pageNum, rowY, index) {
     position,
     pageNum,
     rowY,
+    lastRowY: rowY,
     order: 0,
     nameChunks: [],
     modelChunks: [],
@@ -603,8 +716,9 @@ function normalizeSpecItem({ id, position, name, model = "", brand = "", qty = 0
   const numericQty = toNumber(qty, 0);
   if (numericQty <= 0) return null;
 
-  let normalizedName = tidyText(name || "");
-  const normalizedModel = tidyText(model || "") || detectModel(normalizedName);
+  let normalizedName = cleanupDescriptorNoise(name || "");
+  normalizedName = stripTrailingUnitToken(normalizedName);
+  const normalizedModel = cleanupDescriptorNoise(model || "") || detectModel(normalizedName);
   const normalizedBrand = tidyText(brand || "") || detectBrand(`${normalizedName} ${normalizedModel}`);
 
   if (!normalizedName && !normalizedModel) return null;
@@ -656,7 +770,42 @@ function normalizeSpecItem({ id, position, name, model = "", brand = "", qty = 0
     kind,
     qty: numericQty,
     unit: normalizedUnit,
-    rawLine: tidyText(rawLine || `${normalizedName} ${normalizedModel} ${normalizedBrand}`),
+    rawLine: cleanupDescriptorNoise(rawLine || `${normalizedName} ${normalizedModel} ${normalizedBrand}`),
+  };
+}
+
+function buildEstimatedItemWithoutQty({ id, position, descriptor }) {
+  const normalizedDescriptor = cleanupDescriptorNoise(descriptor || "");
+  if (!normalizedDescriptor) return null;
+  if (normalizedDescriptor.length > 180) return null;
+  if (looksLikeAdministrativeLine(normalizedDescriptor) || isSectionHeaderText(normalizedDescriptor) || isLikelySectionMarkerLine(normalizedDescriptor)) {
+    return null;
+  }
+
+  const model = detectModel(normalizedDescriptor);
+  const brand = detectBrand(`${normalizedDescriptor} ${model}`);
+  const category = detectCategory(`${normalizedDescriptor} ${model} ${brand}`);
+  const hasSignal = Boolean(model) || Boolean(brand) || SPEC_EQUIPMENT_HINT_REGEX.test(normalizedDescriptor.toLowerCase());
+  if (!hasSignal) return null;
+  if (category === "material") return null;
+
+  const fallbackItem = normalizeSpecItem({
+    id,
+    position,
+    name: normalizedDescriptor,
+    model,
+    brand,
+    qty: 1,
+    unit: UNIT.piece,
+    rawLine: normalizedDescriptor,
+  });
+  if (!fallbackItem) return null;
+
+  return {
+    ...fallbackItem,
+    reviewRequired: true,
+    reviewReason: "qty_inferred_default_1",
+    isEstimatedFallback: true,
   };
 }
 
@@ -703,6 +852,7 @@ function mergeItems(items) {
     if (item.model) score += 3;
     if (item.brand || item.mark) score += 2;
     if (SPEC_EQUIPMENT_HINT_REGEX.test(String(item.name || "").toLowerCase())) score += 2;
+    if (item.isEstimatedFallback) score -= 8;
     if (/[\u0000-\u001f]/u.test(raw)) score -= 3;
     if (looksLikeAdministrativeLine(`${item.name} ${item.model} ${raw}`)) score -= 5;
     return score;
@@ -832,6 +982,7 @@ function parseRowsToItems(rows) {
   const parsed = [];
   const unresolvedRows = [];
   let candidateRows = 0;
+  const candidatePositions = new Set();
   let current = null;
   let draftIndex = 0;
   let prelude = [];
@@ -844,6 +995,16 @@ function parseRowsToItems(rows) {
     } else {
       const rawLine = tidyText(`${sortChunks(current.nameChunks)} ${sortChunks(current.modelChunks)} ${sortChunks(current.brandChunks)}`);
       if (looksLikeAdministrativeLine(rawLine) || isHeaderRowText(rawLine) || isSectionHeaderText(rawLine)) {
+        current = null;
+        return;
+      }
+      const estimated = buildEstimatedItemWithoutQty({
+        id: `${current.id}-estimated`,
+        position: current.position,
+        descriptor: rawLine,
+      });
+      if (estimated) {
+        parsed.push(estimated);
         current = null;
         return;
       }
@@ -881,6 +1042,7 @@ function parseRowsToItems(rows) {
       flushCurrent();
       current = makeDraft(position, buckets, row.pageNum, row.y, draftIndex++);
       candidateRows += 1;
+      candidatePositions.add(position);
 
       const rowNameWordCount = rowName.split(/\s+/u).filter(Boolean).length;
       const hasModelInRow = isMeaningfulChunk(rowModel);
@@ -902,14 +1064,37 @@ function parseRowsToItems(rows) {
       continue;
     }
 
-    if (current && row.pageNum === current.pageNum && Math.abs(current.rowY - row.y) <= 22) {
+    if (current && row.pageNum === current.pageNum && Math.abs((current.lastRowY || current.rowY) - row.y) <= 26) {
+      const hasOwnPosition = Boolean(parsePosition(joinParts(buckets.position)));
       const incomingQty = parseQtyFromQtyBucket(buckets.qty);
       const incomingUnit = normalizeUnit(joinParts(buckets.unit));
       const incomingName = joinParts(buckets.name);
       const incomingModel = joinParts(buckets.model);
+      const incomingMixedQtyUnit = parseQtyAndUnitFromBuckets(buckets);
       const incomingLooksLikeContinuation = incomingQty <= 0 && !isKnownUnit(incomingUnit);
       const incomingLooksLikeNewRow = incomingQty > 0 || (isMeaningfulChunk(incomingName) && isMeaningfulChunk(incomingModel));
       const currentHasQty = current.qtyCandidates.length > 0;
+      const currentNeedsQty = !currentHasQty;
+
+      if (!hasOwnPosition && currentNeedsQty && (incomingQty > 0 || incomingMixedQtyUnit?.qty || isKnownUnit(incomingUnit))) {
+        appendChunks(current, buckets);
+        prelude = [];
+        continue;
+      }
+
+      const incomingIsQtyOnlyRow =
+        incomingQty > 0 && !isMeaningfulChunk(incomingName) && !isMeaningfulChunk(incomingModel) && !isKnownUnit(incomingUnit);
+      if (!hasOwnPosition && incomingIsQtyOnlyRow && currentHasQty) {
+        const currentQty = pickLastCandidate(current.qtyCandidates, 0);
+        const shouldOverrideSuspiciousQty =
+          (currentQty > 200 && incomingQty <= 50) || !isReasonableQty(current.position, currentQty, pickLastCandidate(current.unitCandidates, ""), "equipment");
+        if (shouldOverrideSuspiciousQty) {
+          current.qtyCandidates.push({ value: incomingQty, y: buckets.y, order: current.order++ });
+          current.lastRowY = buckets.y;
+          prelude = [];
+          continue;
+        }
+      }
 
       if (currentHasQty && incomingLooksLikeNewRow) {
         if (isPureNamePrelude(buckets)) {
@@ -936,12 +1121,19 @@ function parseRowsToItems(rows) {
   return {
     items: parsed,
     candidateRows,
+    candidatePositions: candidatePositions.size,
     unrecognizedRows: cleanupUnrecognizedRows(unresolvedRows),
   };
 }
 
 function buildFallbackItemFromLine(line, index) {
-  const sourceText = stripNotesTail(line?.text || "");
+  const sourceText = cleanupDescriptorNoise(line?.text || "");
+  if (isSectionHeaderText(sourceText) || isLikelySectionMarkerLine(sourceText)) {
+    return { item: null, unresolved: null };
+  }
+  if (!extractQtyAndUnitFromText(sourceText) && /(?:\u0441\u043e\u0433\u043b\u0430\u0441\u043e\u0432|\u0443\u0442\u0432\u0435\u0440\u0436\u0434|\u043f\u043e\u0434\u043f|\u0437\u0430\u043c\b)/iu.test(sourceText)) {
+    return { item: null, unresolved: null };
+  }
   const position = parseLeadingPosition(sourceText || line?.position || "");
   if (!position) {
     return {
@@ -955,7 +1147,7 @@ function buildFallbackItemFromLine(line, index) {
     };
   }
 
-  const descriptor = removePositionPrefix(sourceText);
+  const descriptor = cleanupDescriptorNoise(removePositionPrefix(sourceText));
   if (!descriptor) {
     return {
       item: null,
@@ -970,6 +1162,14 @@ function buildFallbackItemFromLine(line, index) {
 
   const qtyAndUnit = extractQtyAndUnitFromText(descriptor);
   if (!qtyAndUnit?.qty) {
+    const estimated = buildEstimatedItemWithoutQty({
+      id: `aps-fallback-est-${index + 1}`,
+      position,
+      descriptor,
+    });
+    if (estimated) {
+      return { item: estimated, unresolved: null };
+    }
     return {
       item: null,
       unresolved: {
@@ -1012,17 +1212,33 @@ function buildFallbackItemFromLine(line, index) {
 
 function cleanupUnrecognizedRows(rows = [], knownPositions = new Set()) {
   const seen = new Set();
+  const seenPositions = new Set();
   const normalized = [];
 
   for (const row of rows) {
     const rawLine = tidyText(row?.rawLine || "");
     if (!rawLine) continue;
     if (!/\p{L}/u.test(rawLine)) continue;
-    if (looksLikeAdministrativeLine(rawLine) || isSectionHeaderText(rawLine) || isHeaderRowText(rawLine)) continue;
-    if (knownPositions.has(String(row?.position || "")) && row?.reason === "validation_failed") continue;
+    if (/^\s*\d+(?:\.\d+){0,3}\s+.*\u043c\u0430\u0442\u0435\u0440\u0438/u.test(rawLine) && !extractQtyAndUnitFromText(rawLine)) continue;
+    if (/^(?:\u043c\u0430\u0442\u0435\u0440\u0438\u0430\u043b(?:\u044b|\u043e\u0432)?|\u043e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u0435(?: \u0438 \u043c\u0430\u0442\u0435\u0440\u0438\u0430\u043b\u044b)?|\u0438\u0437\u0434\u0435\u043b\u0438\u044f \u0438 \u043c\u0430\u0442\u0435\u0440\u0438\u0430\u043b\u044b)$/iu.test(rawLine)) continue;
+    if (
+      /(?:^|\s)\d+(?:\.\d+){0,3}\s+\u043c\u0430\u0442\u0435\u0440\u0438\u0430\u043b(?:\u044b|\u043e\u0432)?\b.*(?:\u0441\u043e\u0433\u043b\u0430\u0441\u043e\u0432\u0430\u043d\u043e|\u0443\u0442\u0432\u0435\u0440\u0436\u0434\u0430\u044e|\u043b\u0438\u0441\u0442)\b/iu.test(
+        rawLine
+      )
+    )
+      continue;
+    if (/^\s*\d+(?:\.\d+){0,3}\s*[zз3][aа@][mм]\b/iu.test(rawLine)) continue;
+    if (/^\s*\d+(?:\.\d+){0,3}\s+(?:изм|кол|лист|подп)\b/iu.test(rawLine)) continue;
+    if (/(?:многофункциональн|монолитн|интегральн|диапазоне частот|обеспечение современных)/iu.test(rawLine)) continue;
+    if (/^\d+(?:\.\d+){0,3}\s*[IVXLC]+\s+\p{L}+/iu.test(rawLine) && isSectionHeaderText(rawLine)) continue;
+    if (looksLikeAdministrativeLine(rawLine) || isSectionHeaderText(rawLine) || isLikelySectionMarkerLine(rawLine) || isHeaderRowText(rawLine)) continue;
+    if (knownPositions.has(String(row?.position || ""))) continue;
+    const positionKey = String(row?.position || "").trim();
+    if (positionKey && seenPositions.has(positionKey)) continue;
     const key = `${row?.position || ""}|${rawLine}|${row?.reason || ""}`.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
+    if (positionKey) seenPositions.add(positionKey);
     normalized.push({
       id: row?.id || `aps-unresolved-${normalized.length + 1}`,
       position: row?.position || "",
@@ -1034,6 +1250,133 @@ function cleanupUnrecognizedRows(rows = [], knownPositions = new Set()) {
   return normalized.slice(0, 120);
 }
 
+function recoverItemsFromUnrecognizedRows(rows = [], knownPositions = new Set()) {
+  const recoveredItems = [];
+  const remainingRows = [];
+
+  for (const row of rows) {
+    const rawLine = tidyText(row?.rawLine || "");
+    const fallbackPositionToken = String(row?.position || "").match(/\d+(?:\.\d+){0,3}/u)?.[0] || "";
+    const rowPosition =
+      parsePosition(row?.position || "") ||
+      parsePosition(fallbackPositionToken) ||
+      fallbackPositionToken ||
+      parseLeadingPosition(rawLine);
+    if (!rawLine || !rowPosition || knownPositions.has(rowPosition)) {
+      remainingRows.push(row);
+      continue;
+    }
+
+    if (looksLikeAdministrativeLine(rawLine) || isHeaderRowText(rawLine) || isSectionHeaderText(rawLine) || isLikelySectionMarkerLine(rawLine)) {
+      remainingRows.push(row);
+      continue;
+    }
+
+    if (!["validation_failed", "qty_or_unit_not_found", "descriptor_missing", "not_parsed", "position_not_found"].includes(String(row?.reason || ""))) {
+      remainingRows.push(row);
+      continue;
+    }
+
+    const descriptor = cleanupDescriptorNoise(removePositionPrefix(rawLine));
+    const qtyAndUnit = extractQtyAndUnitFromText(descriptor);
+    let recovered = null;
+
+    if (qtyAndUnit?.qty) {
+      const body = cutSlice(descriptor, qtyAndUnit.start, qtyAndUnit.end);
+      const model = detectModel(body);
+      const brand = detectBrand(`${body} ${model}`);
+      recovered = normalizeSpecItem({
+        id: row?.id ? `${row.id}-recovered` : `aps-recovered-${rowPosition}`,
+        position: rowPosition,
+        name: body || descriptor,
+        model,
+        brand,
+        qty: qtyAndUnit.qty,
+        unit: qtyAndUnit.unit,
+        rawLine,
+      });
+    } else {
+      recovered = buildEstimatedItemWithoutQty({
+        id: row?.id ? `${row.id}-estimated` : `aps-estimated-${rowPosition}`,
+        position: rowPosition,
+        descriptor,
+      });
+    }
+
+    if (!recovered) {
+      const model = detectModel(descriptor);
+      const brand = detectBrand(`${descriptor} ${model}`);
+      const hasSpecSignal = SPEC_EQUIPMENT_HINT_REGEX.test(descriptor.toLowerCase()) || Boolean(model) || Boolean(brand);
+      if (hasSpecSignal) {
+        recovered = normalizeSpecItem({
+          id: row?.id ? `${row.id}-forced` : `aps-forced-${rowPosition}`,
+          position: rowPosition,
+          name: descriptor,
+          model,
+          brand,
+          qty: 1,
+          unit: UNIT.piece,
+          rawLine,
+        });
+      }
+    }
+
+    if (!recovered) {
+      const model = detectModel(descriptor);
+      const brand = detectBrand(`${descriptor} ${model}`);
+      const category = detectCategory(`${descriptor} ${model} ${brand}`);
+      const hasSpecSignal = SPEC_EQUIPMENT_HINT_REGEX.test(descriptor.toLowerCase()) || Boolean(model) || Boolean(brand);
+      if (hasSpecSignal && !looksLikeAdministrativeLine(descriptor) && !isSectionHeaderText(descriptor) && !isHeaderRowText(descriptor)) {
+        const normalizedPosition = parsePosition(rowPosition);
+        if (normalizedPosition) {
+          const major = getSectionMajor(normalizedPosition);
+          const inferredUnit = inferUnitFromContext(descriptor, model, major, category) || UNIT.piece;
+          const normalizedUnit = isKnownUnit(normalizeUnit(inferredUnit)) ? normalizeUnit(inferredUnit) : UNIT.piece;
+          const normalizedCategory = major === 2 || major === 3 ? "material" : category || "equipment";
+          const kind =
+            normalizedCategory === "material" ||
+            [UNIT.meter, UNIT.meter2, UNIT.kg, UNIT.liter, UNIT.pack, UNIT.sheet].includes(normalizedUnit) ||
+            major === 2 ||
+            major === 3
+              ? "material"
+              : "equipment";
+
+          recovered = {
+            id: row?.id ? `${row.id}-forced-hard` : `aps-forced-hard-${normalizedPosition}`,
+            position: normalizedPosition,
+            name: trimLeadingNameFragment(descriptor) || model || descriptor,
+            model: model || "",
+            mark: brand || "",
+            brand: brand || "",
+            category: normalizedCategory,
+            kind,
+            qty: 1,
+            unit: normalizedUnit,
+            rawLine,
+            reviewRequired: true,
+            reviewReason: "hard_fallback_qty_default_1",
+            isEstimatedFallback: true,
+          };
+        }
+      }
+    }
+
+    if (!recovered) {
+      remainingRows.push(row);
+      continue;
+    }
+
+    recoveredItems.push({
+      ...recovered,
+      reviewRequired: true,
+      reviewReason: recovered.reviewReason || row?.reason || "recovered_from_unrecognized",
+    });
+    knownPositions.add(rowPosition);
+  }
+
+  return { recoveredItems, remainingRows };
+}
+
 function parseRowsFallback(rows) {
   const specPages = pickSpecPages(rows);
   const pageRows = rows
@@ -1041,6 +1384,7 @@ function parseRowsFallback(rows) {
     .sort((a, b) => a.pageNum - b.pageNum || b.y - a.y);
 
   const candidates = [];
+  const candidatePositions = new Set();
   let current = null;
 
   const flushCurrent = () => {
@@ -1051,7 +1395,7 @@ function parseRowsFallback(rows) {
 
   for (const row of pageRows) {
     const plainText = rowToPlainText(row);
-    const rowText = stripNotesTail(plainText);
+    const rowText = cleanupDescriptorNoise(plainText);
     if (!rowText || isHeaderRowText(rowText)) continue;
     if (looksLikeAdministrativeLine(rowText)) continue;
 
@@ -1064,6 +1408,7 @@ function parseRowsFallback(rows) {
         pageNum: row.pageNum,
         y: row.y,
       };
+      candidatePositions.add(rowPosition);
       continue;
     }
 
@@ -1075,9 +1420,11 @@ function parseRowsFallback(rows) {
     const isCloseRow = Math.abs(current.y - row.y) <= 24;
     const hasOwnQtyAndUnit = Boolean(extractQtyAndUnitFromText(rowText));
     const hasOwnPosition = Boolean(parseLeadingPosition(rowText));
+    const currentHasQtyAndUnit = Boolean(extractQtyAndUnitFromText(current.text));
 
-    if (isCloseRow && !hasOwnQtyAndUnit && !hasOwnPosition) {
+    if (isCloseRow && !hasOwnPosition && (!hasOwnQtyAndUnit || !currentHasQtyAndUnit)) {
       current.text = tidyText(`${current.text} ${rowText}`);
+      current.y = row.y;
       continue;
     }
   }
@@ -1096,6 +1443,7 @@ function parseRowsFallback(rows) {
   return {
     items,
     candidateRows: candidates.length,
+    candidatePositions: candidatePositions.size,
     unrecognizedRows: cleanupUnrecognizedRows(unresolvedRows),
   };
 }
@@ -1103,7 +1451,10 @@ function parseRowsFallback(rows) {
 function buildParseQuality({ items = [], candidateRows = 0, unrecognizedRows = [] }) {
   const recognizedPositions = items.length;
   const unresolvedPositions = unrecognizedRows.length;
-  const denominator = Math.max(candidateRows, recognizedPositions + unresolvedPositions, 1);
+  const denominator =
+    recognizedPositions + unresolvedPositions > 0
+      ? recognizedPositions + unresolvedPositions
+      : Math.max(candidateRows, 1);
   const recognitionRate = recognizedPositions / denominator;
 
   return {
@@ -1138,16 +1489,35 @@ export async function parseApsProjectPdf(file) {
   const fallbackRows = parseRowsFallback(allRows);
   const items = mergeItems([...(primaryRows.items || []), ...fallbackRows.items]);
   const recognizedPositions = new Set(items.map((item) => String(item.position || "")));
-  const unrecognizedRows = cleanupUnrecognizedRows(
+  const baseUnrecognizedRows = cleanupUnrecognizedRows(
     [...(primaryRows.unrecognizedRows || []), ...(fallbackRows.unrecognizedRows || [])],
     recognizedPositions
   );
+  const recovered = recoverItemsFromUnrecognizedRows(baseUnrecognizedRows, new Set(recognizedPositions));
+  const mergedItems = recovered.recoveredItems.length ? mergeItems([...items, ...recovered.recoveredItems]) : items;
+  const finalRecognizedPositions = new Set(mergedItems.map((item) => String(item.position || "")));
+  const unrecognizedRows = cleanupUnrecognizedRows(recovered.remainingRows, finalRecognizedPositions);
   const parseQuality = buildParseQuality({
-    items,
-    candidateRows: Math.max(primaryRows.candidateRows || 0, fallbackRows.candidateRows || 0, items.length + unrecognizedRows.length),
+    items: mergedItems,
+    candidateRows: Math.max(
+      primaryRows.candidatePositions || 0,
+      fallbackRows.candidatePositions || 0,
+      mergedItems.length + unrecognizedRows.length
+    ),
     unrecognizedRows,
   });
-  if (!items.length) {
+  const aiRefined = applyApsAiRefinement({
+    items: mergedItems,
+    unrecognizedRows,
+    parseQuality,
+  });
+  const finalParseQuality = buildParseQuality({
+    items: aiRefined.items,
+    candidateRows: parseQuality.candidateRows,
+    unrecognizedRows: aiRefined.unrecognizedRows,
+  });
+
+  if (!aiRefined.items.length) {
     throw new Error("Не удалось распознать строки спецификации в PDF. Проверьте, что документ содержит табличную спецификацию.");
   }
 
@@ -1157,9 +1527,10 @@ export async function parseApsProjectPdf(file) {
     gostStandard: "ГОСТ 21.110-2013",
     pages: pdf.numPages,
     linesScanned: allRows.length,
-    items,
-    metrics: buildMetrics(items),
-    unrecognizedRows,
-    parseQuality,
+    items: aiRefined.items,
+    metrics: buildMetrics(aiRefined.items),
+    unrecognizedRows: aiRefined.unrecognizedRows,
+    parseQuality: finalParseQuality,
+    aiQuality: aiRefined.aiQuality,
   };
 }

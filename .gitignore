@@ -4,3 +4,6 @@ dist
 .env
 .env.local
 npm-debug.log*
+install_m365_personal_to_f.ps1
+repair_and_install_m365_f.ps1
+tmp_aps.pdf

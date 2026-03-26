@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Plus, Trash2, Shield, FileUp, RefreshCcw } from "lucide-react";
 import { SYSTEM_TYPES, VENDORS } from "../config/estimateConfig";
 import { getManufacturerSource, getVendorByName } from "../config/vendorsConfig";
@@ -40,6 +40,19 @@ function resolveUnrecognizedReason(reason) {
   return map[reason] || "строка требует ручной проверки";
 }
 
+const APS_MANUAL_UNIT_OPTIONS = ["шт", "компл", "м", "м2", "кг", "л", "уп", "лист"];
+
+function defaultManualDraft() {
+  return {
+    kind: "equipment",
+    name: "",
+    model: "",
+    unit: "шт",
+    qty: 1,
+    unitPrice: 0,
+  };
+}
+
 export default function SystemsStep({
   systems,
   addSystem,
@@ -52,10 +65,29 @@ export default function SystemsStep({
   importApsProjectPdf,
   clearApsProjectPdf,
   updateApsProjectItem,
+  addApsProjectItem,
+  removeApsProjectItemById,
   apsProjectSnapshots,
   apsImportStatuses,
 }) {
   const usedTypeMap = new Map(systems.map((item) => [item.id, item.type]));
+  const [manualDraftBySystem, setManualDraftBySystem] = useState({});
+
+  const getManualDraft = (systemId) => manualDraftBySystem[systemId] || defaultManualDraft();
+
+  const updateManualDraft = (systemId, key, value) => {
+    setManualDraftBySystem((prev) => ({
+      ...prev,
+      [systemId]: {
+        ...(prev[systemId] || defaultManualDraft()),
+        [key]: value,
+      },
+    }));
+  };
+
+  const resetManualDraft = (systemId) => {
+    setManualDraftBySystem((prev) => ({ ...prev, [systemId]: defaultManualDraft() }));
+  };
 
   return (
     <section className="panel">
@@ -80,6 +112,7 @@ export default function SystemsStep({
           const keyEquipment = result?.equipmentData?.keyEquipment || [];
           const apsSnapshot = apsProjectSnapshots?.[system.id];
           const apsStatus = apsImportStatuses?.[system.id];
+          const unitAuditRows = (apsSnapshot?.items || []).filter((item) => (item?.unitAudit?.status || "unknown") !== "match");
           const manufacturerSource = getManufacturerSource(system.type, system.vendor);
           const manufacturerWebsite = manufacturerSource?.website || "";
           const manufacturerHost = toHost(manufacturerWebsite);
@@ -90,9 +123,6 @@ export default function SystemsStep({
               .reduce((sum, item) => sum + (item.sourceCount || 0), 0) || 0;
           const checkedSourceCount =
             snapshot?.entries?.reduce((sum, item) => sum + (item.checkedSources || item.sourceUrls?.length || 0), 0) || 0;
-          const usedSourcePreview = (snapshot?.entries || [])
-            .flatMap((item) => item.usedSources || [])
-            .slice(0, 6);
           const checkedSourceHosts = [...new Set((snapshot?.entries || []).flatMap((item) => item.checkedSourceHosts || []))].slice(0, 10);
           const usedSourceHosts = [...new Set((snapshot?.entries || []).flatMap((item) => item.usedSourceHosts || []))].slice(0, 10);
           const manufacturerChecked = manufacturerHost ? checkedSourceHosts.includes(manufacturerHost) : false;
@@ -158,6 +188,15 @@ export default function SystemsStep({
                   <p>
                     За единицу: <strong>{rub(result?.unitWorkMarker?.costPerUnit || 0)}</strong>
                   </p>
+                  <p>
+                    Оборудование: <strong>{rub(result?.equipmentCost || 0)}</strong>
+                  </p>
+                  <p>
+                    Работы (СМР+ПНР): <strong>{rub(result?.workTotal || 0)}</strong>
+                  </p>
+                  <p>
+                    Материалы: <strong>{rub(result?.materialCost || 0)}</strong>
+                  </p>
                   <p>Ключ выбора: {result?.equipmentData?.selectionKey || "fallback"}</p>
                   <p>Режим расчета: {result?.estimateMode === "project_pdf" ? "по PDF-проекту" : "по внутренней модели"}</p>
                   <button className="ghost-btn" type="button" onClick={() => refreshVendorPricing(system)}>
@@ -171,42 +210,28 @@ export default function SystemsStep({
                   Актуализация цен: {snapshot.fetchedAt ? new Date(snapshot.fetchedAt).toLocaleString("ru-RU") : "—"}. Успешных ценовых ответов:{" "}
                   {pricedSourceCount} из {checkedSourceCount} проверенных источников.
                   {snapshot.error ? <span className="warn-inline"> Ошибка API: {snapshot.error}</span> : null}
+                  <div className="pricing-source-row">
+                    <span className="pricing-source-chip">
+                      <strong>Проверено</strong>: {checkedSourceCount}
+                    </span>
+                    <span className={`pricing-source-chip ${pricedSourceCount > 0 ? "ok" : "warn"}`}>
+                      <strong>Дали цену</strong>: {pricedSourceCount}
+                    </span>
+                    <span className={`pricing-source-chip ${manufacturerSuccess ? "ok" : manufacturerChecked ? "warn" : "muted"}`}>
+                      <strong>Производитель</strong>: {manufacturerHost || "не задан"} ·{" "}
+                      {manufacturerSuccess ? "цены найдены" : manufacturerChecked ? "сайт опрошен, цены не найдены" : "сайт не опрошен"}
+                    </span>
+                  </div>
                   {checkedSourceHosts.length ? (
-                    <div className="pricing-source-list">
-                      <strong>Проверены источники:</strong>
-                      {checkedSourceHosts.map((host) => (
-                        <span key={`${system.id}-checked-${host}`}>{host}</span>
-                      ))}
-                    </div>
-                  ) : null}
-                  {usedSourceHosts.length ? (
-                    <div className="pricing-source-list">
-                      <strong>Дали цену:</strong>
-                      {usedSourceHosts.map((host) => (
-                        <span key={`${system.id}-used-host-${host}`}>{host}</span>
-                      ))}
-                    </div>
-                  ) : null}
-                  {usedSourcePreview.length ? (
-                    <div className="pricing-source-list">
-                      <strong>Ссылки с ценой:</strong>
-                      {usedSourcePreview.map((url) => (
-                        <span key={`${system.id}-used-${url}`}>{url}</span>
-                      ))}
-                    </div>
-                  ) : null}
-                  {manufacturerHost ? (
-                    <div className="pricing-source-list">
-                      <strong>Сайт производителя ({system.vendor}):</strong>
-                      <span>{manufacturerHost}</span>
-                      <span>
-                        {manufacturerSuccess
-                          ? `цены получены (${manufacturerUsedUrls.length})`
-                          : manufacturerChecked
-                            ? "сайт опрошен, цены не найдены"
-                            : "сайт еще не опрашивался"}
+                    <div className="pricing-source-row">
+                      <span className="pricing-source-chip muted">
+                        <strong>Опрос:</strong> {checkedSourceHosts.join(", ")}
                       </span>
-                      {manufacturerSuccess ? <span>{manufacturerUsedUrls[0]}</span> : null}
+                      {usedSourceHosts.length ? (
+                        <span className="pricing-source-chip ok">
+                          <strong>С ценой:</strong> {usedSourceHosts.join(", ")}
+                        </span>
+                      ) : null}
                     </div>
                   ) : null}
                 </div>
@@ -278,6 +303,14 @@ export default function SystemsStep({
                           <strong>{num((apsSnapshot.sourceStats.recognitionRate || 0) * 100, 1)}%</strong>
                         </div>
                         <div className="metric-card">
+                          <span>Исправлено ИИ-сверкой</span>
+                          <strong>{num(apsSnapshot.sourceStats.aiCorrectedItems || 0, 0)}</strong>
+                        </div>
+                        <div className="metric-card">
+                          <span>Низкая уверенность ИИ</span>
+                          <strong>{num(apsSnapshot.sourceStats.aiLowConfidenceItems || 0, 0)}</strong>
+                        </div>
+                        <div className="metric-card">
                           <span>Кабель (из проекта/модели)</span>
                           <strong>{num(apsSnapshot.metrics?.cableLengthM || 0, 1)} м</strong>
                         </div>
@@ -298,6 +331,7 @@ export default function SystemsStep({
                               <th>Цена, ₽</th>
                               <th>Ед. проект/поставщик</th>
                               <th>Сумма</th>
+                              <th />
                             </tr>
                           </thead>
                           <tbody>
@@ -335,10 +369,101 @@ export default function SystemsStep({
                                   </span>
                                 </td>
                                 <td>{rub(item.total)}</td>
+                                <td>
+                                  <button
+                                    className="table-action-btn"
+                                    type="button"
+                                    onClick={() => removeApsProjectItemById(system.id, item.id)}
+                                    title="Удалить позицию"
+                                  >
+                                    Удалить
+                                  </button>
+                                </td>
                               </tr>
                             ))}
                           </tbody>
                         </table>
+                      </div>
+
+                      <div className="calc-explain">
+                        <h4>Добавить позицию вручную</h4>
+                        <div className="manual-item-grid">
+                          <div className="input-card">
+                            <label>Тип</label>
+                            <select
+                              value={getManualDraft(system.id).kind}
+                              onChange={(event) => updateManualDraft(system.id, "kind", event.target.value)}
+                            >
+                              <option value="equipment">Оборудование</option>
+                              <option value="material">Материал</option>
+                            </select>
+                          </div>
+                          <div className="input-card">
+                            <label>Наименование</label>
+                            <input
+                              type="text"
+                              value={getManualDraft(system.id).name}
+                              onChange={(event) => updateManualDraft(system.id, "name", event.target.value)}
+                              placeholder="Введите позицию"
+                            />
+                          </div>
+                          <div className="input-card">
+                            <label>Марка/модель</label>
+                            <input
+                              type="text"
+                              value={getManualDraft(system.id).model}
+                              onChange={(event) => updateManualDraft(system.id, "model", event.target.value)}
+                              placeholder="Модель"
+                            />
+                          </div>
+                          <div className="input-card">
+                            <label>Ед. изм</label>
+                            <select
+                              value={getManualDraft(system.id).unit}
+                              onChange={(event) => updateManualDraft(system.id, "unit", event.target.value)}
+                            >
+                              {APS_MANUAL_UNIT_OPTIONS.map((unitValue) => (
+                                <option key={`${system.id}-manual-unit-${unitValue}`} value={unitValue}>
+                                  {unitValue}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="input-card">
+                            <label>Количество</label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="1"
+                              value={getManualDraft(system.id).qty}
+                              onChange={(event) => updateManualDraft(system.id, "qty", event.target.value)}
+                            />
+                          </div>
+                          <div className="input-card">
+                            <label>Цена, ₽</label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="1"
+                              value={getManualDraft(system.id).unitPrice}
+                              onChange={(event) => updateManualDraft(system.id, "unitPrice", event.target.value)}
+                            />
+                          </div>
+                          <div className="manual-item-actions">
+                            <button
+                              className="primary-btn"
+                              type="button"
+                              onClick={() => {
+                                const draft = getManualDraft(system.id);
+                                if (!String(draft.name || "").trim()) return;
+                                addApsProjectItem(system.id, draft);
+                                resetManualDraft(system.id);
+                              }}
+                            >
+                              Добавить позицию
+                            </button>
+                          </div>
+                        </div>
                       </div>
 
                       {apsSnapshot.itemsWithoutPrice?.length ? (
@@ -391,6 +516,40 @@ export default function SystemsStep({
                                     <td>{row.position || "—"}</td>
                                     <td>{row.rawLine}</td>
                                     <td>{resolveUnrecognizedReason(row.reason)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {unitAuditRows.length ? (
+                        <div className="calc-explain">
+                          <h4>Проверка единиц измерения (проект ↔ поставщик)</h4>
+                          <div className="table-wrap compact">
+                            <table>
+                              <thead>
+                                <tr>
+                                  <th>Поз.</th>
+                                  <th>Наименование</th>
+                                  <th>Ед. проекта</th>
+                                  <th>Ед. поставщика</th>
+                                  <th>Статус</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {unitAuditRows.map((item) => (
+                                  <tr key={`${system.id}-unit-audit-${item.id}`}>
+                                    <td>{item.position || "—"}</td>
+                                    <td>{item.name}</td>
+                                    <td>{item?.unitAudit?.projectUnit || item.unit || "—"}</td>
+                                    <td>{item?.unitAudit?.supplierUnits?.join(", ") || "нет данных"}</td>
+                                    <td>
+                                      <span className={`unit-audit-badge ${item?.unitAudit?.status || "unknown"}`}>
+                                        {item?.unitAudit?.message || "требуется проверка"}
+                                      </span>
+                                    </td>
                                   </tr>
                                 ))}
                               </tbody>

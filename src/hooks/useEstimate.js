@@ -7,7 +7,7 @@ import { fetchPricesByRequests, fetchVendorPrices } from "../lib/priceCollector"
 import { VENDOR_EQUIPMENT } from "../config/vendorConfig";
 import { DEFAULT_REGION_NAME, getRegionCoef } from "../config/regionsConfig";
 import { validateEstimateInput } from "../lib/input-normalization";
-import { recalculateApsProjectSnapshot } from "../lib/apsProjectEstimate";
+import { appendManualApsProjectItem, recalculateApsProjectSnapshot, removeApsProjectItem } from "../lib/apsProjectEstimate";
 
 function removeById(mapObject, id) {
   if (!(id in mapObject)) return mapObject;
@@ -249,6 +249,50 @@ export default function useEstimate() {
     });
   };
 
+  const addApsProjectItem = (systemId, draft = {}) => {
+    setApsProjectSnapshots((prev) => {
+      const current = prev?.[systemId];
+      if (!current) return prev;
+      const next = appendManualApsProjectItem(current, draft, objectData);
+      return { ...prev, [systemId]: next };
+    });
+
+    setApsImportStatuses((prev) => {
+      const currentStatus = prev?.[systemId];
+      if (!currentStatus || currentStatus.state === "loading") return prev;
+      return {
+        ...prev,
+        [systemId]: {
+          ...currentStatus,
+          state: "success",
+          message: "Добавлена ручная позиция. Пересчет выполнен.",
+        },
+      };
+    });
+  };
+
+  const removeApsProjectItemById = (systemId, itemId) => {
+    setApsProjectSnapshots((prev) => {
+      const current = prev?.[systemId];
+      if (!current) return prev;
+      const next = removeApsProjectItem(current, itemId, objectData);
+      return { ...prev, [systemId]: next };
+    });
+
+    setApsImportStatuses((prev) => {
+      const currentStatus = prev?.[systemId];
+      if (!currentStatus || currentStatus.state === "loading") return prev;
+      return {
+        ...prev,
+        [systemId]: {
+          ...currentStatus,
+          state: "success",
+          message: "Позиция удалена. Пересчет выполнен.",
+        },
+      };
+    });
+  };
+
   useEffect(() => {
     const systemIds = new Set(systems.map((item) => String(item.id)));
     setApsProjectSnapshots((prev) => Object.fromEntries(Object.entries(prev).filter(([id]) => systemIds.has(String(id)))));
@@ -371,6 +415,8 @@ export default function useEstimate() {
     importApsProjectPdf,
     clearApsProjectPdf,
     updateApsProjectItem,
+    addApsProjectItem,
+    removeApsProjectItemById,
     exportEstimate,
     exportEstimateCsv,
     setZones,

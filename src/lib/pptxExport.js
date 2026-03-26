@@ -38,6 +38,12 @@ function sanitizeText(value) {
     .trim();
 }
 
+function shortenText(value, max = 96) {
+  const text = sanitizeText(value);
+  if (text.length <= max) return text;
+  return `${text.slice(0, Math.max(max - 1, 1))}…`;
+}
+
 function safeFileName(name) {
   const base = sanitizeText(name || "Объект 1");
   const cleaned = base.replace(/[<>:"/\\|?*]+/g, "_").slice(0, 80);
@@ -205,6 +211,57 @@ function drawTable(slide, options) {
     });
     currentY += rowH;
   });
+}
+
+function buildEquipmentRegistryRows(systemResults = []) {
+  const rows = [];
+
+  for (const system of systemResults) {
+    const systemName = sanitizeText(system?.systemName || system?.systemType || "—");
+    const details = Array.isArray(system?.equipmentData?.details) ? system.equipmentData.details : [];
+    const marketEntries = Array.isArray(system?.equipmentData?.marketEntries) ? system.equipmentData.marketEntries : [];
+    const linkIndex = new Map();
+
+    for (const entry of marketEntries) {
+      const label = sanitizeText(entry?.equipmentLabel || "").toLowerCase();
+      const source = sanitizeText((entry?.usedSources || [])[0] || "");
+      if (!label || !source || linkIndex.has(label)) continue;
+      linkIndex.set(label, source);
+    }
+
+    if (!details.length) {
+      rows.push([systemName, "—", "—", "—", "—", "—"]);
+      continue;
+    }
+
+    for (const item of details) {
+      const itemName = sanitizeText(item?.name || item?.code || "—");
+      const itemModel = sanitizeText(item?.model || "");
+      const fullName = itemModel ? `${itemName} (${itemModel})` : itemName;
+      const qty = safeNum(item?.qty, 0);
+      const unit = sanitizeText(item?.unit || "");
+      const unitPrice = safeNum(item?.unitPrice, 0);
+      const total = safeNum(item?.total, qty * unitPrice);
+
+      let sourceLink = sanitizeText((item?.usedSources || [])[0] || "");
+      if (!sourceLink) {
+        const candidates = [fullName, itemName, itemModel].map((value) => sanitizeText(value).toLowerCase()).filter(Boolean);
+        const found = candidates.find((candidate) => linkIndex.has(candidate));
+        if (found) sourceLink = linkIndex.get(found) || "";
+      }
+
+      rows.push([
+        systemName,
+        shortenText(fullName, 72),
+        `${num(qty, 0)} ${unit}`.trim(),
+        rub(unitPrice),
+        rub(total),
+        shortenText(sourceLink || "нет ссылки", 72),
+      ]);
+    }
+  }
+
+  return rows;
 }
 
 function buildTimeline(systemResults, objectData, totals) {
@@ -549,11 +606,32 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
   const slide5 = pptx.addSlide();
   addSlideFrame(
     slide5,
-    "График реализации проекта",
-    "Ориентировочные сроки проектирования, поставки, СМР, ПНР и интеграции.",
+    "Реестр оборудования и материалов",
+    "Позиции по системам: количество, цена за единицу, сумма и ссылка на источник цены.",
     5
   );
-  addGanttSlide(slide5, safeSystems, safeObject, safeTotals);
+
+  const registryRows = buildEquipmentRegistryRows(safeSystems);
+  drawTable(slide5, {
+    x: 0.55,
+    y: 1.2,
+    w: 12.2,
+    headers: ["Система", "Наименование", "Кол-во", "Цена за ед.", "Сумма", "Ссылка"],
+    widths: [0.16, 0.3, 0.12, 0.12, 0.13, 0.17],
+    rows: registryRows.length ? registryRows : [["—", "Нет данных", "—", "—", "—", "—"]],
+    maxRows: 14,
+    rowH: 0.41,
+    fontSize: 8,
+  });
+
+  const slide6 = pptx.addSlide();
+  addSlideFrame(
+    slide6,
+    "График реализации проекта",
+    "Ориентировочные сроки проектирования, поставки, СМР, ПНР и интеграции.",
+    6
+  );
+  addGanttSlide(slide6, safeSystems, safeObject, safeTotals);
 
   await pptx.writeFile({
     fileName: safeFileName(safeObject.projectName),

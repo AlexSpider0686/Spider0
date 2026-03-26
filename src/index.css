@@ -995,21 +995,47 @@ select {
   color: var(--muted);
 }
 
-.pricing-source-list {
+.pricing-source-row {
   margin-top: 6px;
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
   gap: 4px;
 }
 
-.pricing-source-list strong {
+.pricing-source-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  border: 1px solid rgba(140, 162, 194, 0.35);
+  background: rgba(238, 247, 255, 0.85);
+  color: #315679;
+  padding: 3px 8px;
   font-size: 10px;
-  color: #274f76;
+  line-height: 1.2;
 }
 
-.pricing-source-list span {
+.pricing-source-chip strong {
   font-size: 10px;
-  color: #3d5a78;
-  word-break: break-all;
+  color: #1b3f63;
+}
+
+.pricing-source-chip.ok {
+  background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(34, 197, 94, 0.25);
+  color: #166534;
+}
+
+.pricing-source-chip.warn {
+  background: rgba(245, 158, 11, 0.16);
+  border-color: rgba(180, 83, 9, 0.28);
+  color: #9a3412;
+}
+
+.pricing-source-chip.muted {
+  background: rgba(100, 116, 139, 0.13);
+  border-color: rgba(71, 85, 105, 0.26);
+  color: #334155;
 }
 
 .equipment-config {
@@ -1123,6 +1149,39 @@ select {
   outline: none;
   border-color: rgba(47, 127, 241, 0.8);
   box-shadow: 0 0 0 2px rgba(47, 127, 241, 0.16);
+}
+
+.table-action-btn {
+  border: 1px solid rgba(220, 53, 69, 0.38);
+  background: rgba(220, 53, 69, 0.1);
+  color: #b91c1c;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.table-action-btn:hover {
+  background: rgba(220, 53, 69, 0.16);
+}
+
+.manual-item-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.manual-item-actions {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+}
+
+.manual-item-actions .primary-btn {
+  width: 100%;
+  justify-content: center;
 }
 
 .unit-audit-badge {
@@ -1427,6 +1486,7 @@ tbody tr:hover {
   .system-main-grid,
   .system-subgrid,
   .equipment-config-grid,
+  .manual-item-grid,
   .region-select-grid,
   .logic-grid,
   .logic-system-metrics,

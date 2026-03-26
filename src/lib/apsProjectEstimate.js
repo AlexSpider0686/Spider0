@@ -136,6 +136,46 @@ function toSafeQty(value) {
   return Math.max(toNumber(value, 0), 0);
 }
 
+const KNOWN_UNITS = new Set(Object.values(UNIT));
+
+function normalizeManualItemKind(value) {
+  return String(value || "").toLowerCase() === "material" ? "material" : "equipment";
+}
+
+function sanitizeManualItemDraft(draft = {}, existingItems = []) {
+  const fallbackPosition = `manual-${existingItems.length + 1}`;
+  const name = normalizeSearchText(draft.name || "") || "Ручная позиция";
+  const model = normalizeSearchText(draft.model || "");
+  const mark = normalizeSearchText(draft.mark || draft.brand || "");
+  const position = normalizeSearchText(draft.position || "") || fallbackPosition;
+  const kind = normalizeManualItemKind(draft.kind);
+  const categoryCandidate = normalizeSearchText(draft.category || "").toLowerCase();
+  const category = categoryCandidate || (kind === "material" ? "material" : "equipment");
+  const unitCandidate = normalizeUnitToken(draft.unit || UNIT.piece) || UNIT.piece;
+  const unit = KNOWN_UNITS.has(unitCandidate) ? unitCandidate : UNIT.piece;
+  const qty = Math.max(toNumber(draft.qty, 1), 0);
+  const unitPrice = Math.max(toNumber(draft.unitPrice, 0), 0);
+  const id = `aps-manual-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+
+  return {
+    id,
+    position,
+    name,
+    model,
+    mark,
+    brand: mark,
+    category,
+    kind,
+    qty,
+    unit,
+    rawLine: normalizeSearchText(`${name} ${model}`),
+    reviewRequired: false,
+    reviewReason: "",
+    isManual: true,
+    unitPrice,
+  };
+}
+
 function normalizeSearchText(value) {
   return String(value || "")
     .replace(/[«»"'`]/g, " ")
@@ -300,6 +340,22 @@ function buildSourceUrls(source, queries, item) {
 function buildRequestKey(index, item) {
   const model = (item.model || item.name || "item").slice(0, 40).replace(/\s+/g, "_");
   return `aps_pdf_${item.position || "row"}_${index}_${model}`;
+}
+
+function buildManualRequest(item) {
+  return {
+    key: `aps_manual_${item.id}`,
+    equipmentKey: item.category || item.kind || "equipment",
+    equipmentLabel: item.name,
+    sourceUrls: [],
+    unit: item.unit || UNIT.piece,
+    kind: item.kind || "equipment",
+    fallbackPrice: Math.max(toNumber(item.unitPrice, 0), fallbackPriceForItem(item)),
+    influenceWeight: INFLUENCE_WEIGHT_BY_CATEGORY[item.category] || INFLUENCE_WEIGHT_BY_CATEGORY[item.kind] || 0.1,
+    searchQuery: shortenSearchText(`${item.model || ""} ${item.name || ""}`, 88),
+    itemIndex: -1,
+    itemId: item.id,
+  };
 }
 
 function clamp(value, min, max) {
@@ -526,6 +582,7 @@ function buildSnapshotPayload({
     recognitionRate: pricedItems.length / Math.max(pricedItems.length + unrecognizedRows.length, 1),
   };
   const unitMatch = buildUnitMatchSummary(pricedItems);
+  const aiQuality = parsedProject?.aiQuality || null;
 
   return {
     active: true,
@@ -541,6 +598,7 @@ function buildSnapshotPayload({
     items: pricedItems,
     keyEquipment: buildKeyEquipment(pricedItems),
     parseQuality,
+    aiQuality,
     unrecognizedRows,
     itemsWithoutPrice,
     totals: {
@@ -562,6 +620,8 @@ function buildSnapshotPayload({
       recognizedPositions: parseQuality.recognizedPositions,
       unresolvedPositions: parseQuality.unresolvedPositions,
       recognitionRate: parseQuality.recognitionRate,
+      aiCorrectedItems: toSafeQty(aiQuality?.correctedItems),
+      aiLowConfidenceItems: toSafeQty(aiQuality?.lowConfidenceItems),
     },
     priceEntries: pricedItems.map((item, index) => ({
       key: `aps-pdf-price-${index + 1}`,
@@ -581,6 +641,34 @@ function buildSnapshotPayload({
     originalItems: baseItemsForSnapshot(pricedItems, parsedProject?.items || []),
     itemOverrides,
   };
+}
+
+function buildParsedProjectFromSnapshot(snapshot) {
+  return {
+    parsedAt: snapshot.parsedAt,
+    gostStandard: snapshot.gostStandard,
+    linesScanned: snapshot.linesScanned,
+    pages: snapshot.pages,
+    metrics: snapshot.metrics,
+    unrecognizedRows: snapshot.unrecognizedRows || [],
+    parseQuality: snapshot.parseQuality,
+    aiQuality: snapshot.aiQuality || null,
+  };
+}
+
+function rebuildSnapshotFromState(snapshot, { originalItems, requests, itemOverrides, objectData }) {
+  const pricedItems = mapPricesToItems(originalItems, requests, snapshot.priceSnapshot || {}, itemOverrides);
+
+  return buildSnapshotPayload({
+    pricedItems,
+    fileName: snapshot.fileName,
+    parsedProject: buildParsedProjectFromSnapshot(snapshot),
+    requests,
+    priceSnapshot: snapshot.priceSnapshot || {},
+    objectData,
+    vendorName: snapshot.vendorName,
+    itemOverrides,
+  });
 }
 
 function baseItemsForSnapshot(pricedItems = [], fallbackItems = []) {
@@ -608,24 +696,52 @@ export function recalculateApsProjectSnapshot(snapshot, patch = {}, objectData =
   };
 
   const originalItems = Array.isArray(snapshot.originalItems) && snapshot.originalItems.length ? snapshot.originalItems : snapshot.items;
-  const pricedItems = mapPricesToItems(originalItems, snapshot.requests || [], snapshot.priceSnapshot || {}, nextOverrides);
+  const requests = snapshot.requests || [];
 
-  return buildSnapshotPayload({
-    pricedItems,
-    fileName: snapshot.fileName,
-    parsedProject: {
-      parsedAt: snapshot.parsedAt,
-      gostStandard: snapshot.gostStandard,
-      linesScanned: snapshot.linesScanned,
-      pages: snapshot.pages,
-      metrics: snapshot.metrics,
-      unrecognizedRows: snapshot.unrecognizedRows || [],
-      parseQuality: snapshot.parseQuality,
-    },
-    requests: snapshot.requests || [],
-    priceSnapshot: snapshot.priceSnapshot || {},
-    objectData,
-    vendorName: snapshot.vendorName,
+  return rebuildSnapshotFromState(snapshot, {
+    originalItems,
+    requests,
     itemOverrides: nextOverrides,
+    objectData,
+  });
+}
+
+export function appendManualApsProjectItem(snapshot, draft = {}, objectData = {}) {
+  if (!snapshot || !snapshot.active) return snapshot;
+
+  const currentItems = Array.isArray(snapshot.originalItems) && snapshot.originalItems.length ? snapshot.originalItems : snapshot.items || [];
+  const manualItem = sanitizeManualItemDraft(draft, currentItems);
+  const originalItems = [...currentItems, manualItem];
+  const requests = [...(snapshot.requests || []), buildManualRequest(manualItem)];
+  const itemOverrides = {
+    ...(snapshot.itemOverrides || {}),
+    [manualItem.id]: {
+      qty: manualItem.qty,
+      unitPrice: manualItem.unitPrice,
+    },
+  };
+
+  return rebuildSnapshotFromState(snapshot, {
+    originalItems,
+    requests,
+    itemOverrides,
+    objectData,
+  });
+}
+
+export function removeApsProjectItem(snapshot, itemId, objectData = {}) {
+  if (!snapshot || !snapshot.active || !itemId) return snapshot;
+
+  const currentItems = Array.isArray(snapshot.originalItems) && snapshot.originalItems.length ? snapshot.originalItems : snapshot.items || [];
+  const originalItems = currentItems.filter((item) => item.id !== itemId);
+  const requests = (snapshot.requests || []).filter((request) => request.itemId !== itemId);
+  const nextOverrides = { ...(snapshot.itemOverrides || {}) };
+  delete nextOverrides[itemId];
+
+  return rebuildSnapshotFromState(snapshot, {
+    originalItems,
+    requests,
+    itemOverrides: nextOverrides,
+    objectData,
   });
 }
