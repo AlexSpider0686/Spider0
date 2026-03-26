@@ -2,11 +2,56 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
 import fs from "node:fs";
+import { execSync } from "node:child_process";
 import { resolveVendorPrices } from "./api/vendor-prices.js";
 import { issueOtpChallenge, verifyOtpChallenge } from "./api/auth-otp-core.js";
 
 const packageJson = JSON.parse(fs.readFileSync(new URL("./package.json", import.meta.url), "utf8"));
-const buildTimestamp = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
+function toBuildTimestamp(dateValue) {
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
+}
+
+function parseTimestampCandidate(value) {
+  if (value === undefined || value === null || value === "") return "";
+  const raw = String(value).trim();
+  if (!raw) return "";
+
+  if (/^\d{13}$/u.test(raw)) {
+    return toBuildTimestamp(Number(raw));
+  }
+  if (/^\d{10}$/u.test(raw)) {
+    return toBuildTimestamp(Number(raw) * 1000);
+  }
+  return toBuildTimestamp(raw);
+}
+
+function resolveCommitBuildTimestamp() {
+  const envCandidates = [
+    process.env.VERCEL_GIT_COMMIT_TIMESTAMP,
+    process.env.GIT_COMMIT_TIMESTAMP,
+    process.env.CI_COMMIT_TIMESTAMP,
+    process.env.SOURCE_DATE_EPOCH,
+  ];
+
+  for (const candidate of envCandidates) {
+    const parsed = parseTimestampCandidate(candidate);
+    if (parsed) return parsed;
+  }
+
+  try {
+    const gitTs = execSync("git show -s --format=%ct HEAD", { encoding: "utf8" }).trim();
+    const parsed = parseTimestampCandidate(gitTs);
+    if (parsed) return parsed;
+  } catch {
+    // fallback below
+  }
+
+  return toBuildTimestamp(Date.now());
+}
+
+const buildTimestamp = resolveCommitBuildTimestamp();
 const buildNumberBase = `${packageJson.version}.${buildTimestamp}`;
 const systemBuildNumber = `${buildNumberBase}.system`;
 const siteBuildNumber = `${buildNumberBase}.site`;
