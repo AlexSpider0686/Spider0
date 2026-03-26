@@ -94,6 +94,35 @@ const DESIGN_HOURS_BY_MATERIAL_UNIT = {
   [UNIT.set]: 0.06,
 };
 
+const MODEL_FALLBACK_PRICE_HINTS = [
+  {
+    pattern: /(?:1[-/.]?520[-/.]?887[-/.]?052|сириус)/iu,
+    price: 36160.8,
+  },
+  {
+    pattern: /(?:1[-/.]?471[-/.]?949[-/.]?829|с2000\s*кдл|c2000\s*kdl)/iu,
+    price: 5598.58,
+  },
+  {
+    pattern: /(?:1[-/.]?844[-/.]?634[-/.]?134|с2000\s*бки|c2000\s*bki)/iu,
+    price: 8578.67,
+  },
+  {
+    pattern: /(?:92[-/.]?197[-/.]?010|с2000\s*сп2|c2000\s*sp2)/iu,
+    price: 2115.72,
+  },
+  {
+    pattern: /(?:409[-/.]?248[-/.]?491|с2000\s*пп|c2000\s*pp)/iu,
+    price: 1758.87,
+  },
+  {
+    pattern: /(?:408[-/.]?120[-/.]?194|мпн|mpn)/iu,
+    price: 103.09,
+  },
+];
+
+const ARTICLE_TOKEN_REGEX = /\d{1,4}(?:[-/.]\d{2,4}){2,}/gu;
+
 function trimSlash(url) {
   return String(url || "").replace(/\/+$/, "");
 }
@@ -192,6 +221,30 @@ function dedupe(values) {
   return [...new Set(values.filter(Boolean))];
 }
 
+function normalizeModelToken(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-zа-яё0-9-]/giu, "");
+}
+
+function extractModelLikeTokens(value) {
+  return dedupe(
+    [...String(value || "").matchAll(/[A-Za-zА-Яа-яЁё0-9]+(?:[-/.][A-Za-zА-Яа-яЁё0-9]+)+/gu)]
+      .map((match) => normalizeModelToken(match[0]))
+      .filter((token) => token.length >= 5 && /\d/u.test(token))
+  );
+}
+
+function extractPrimaryArticleToken(value) {
+  const candidates = dedupe(
+    [...String(value || "").matchAll(ARTICLE_TOKEN_REGEX)]
+      .map((match) => normalizeModelToken(match[0]))
+      .filter((token) => token.length >= 7)
+  );
+  if (!candidates.length) return "";
+  return candidates.sort((left, right) => right.length - left.length)[0];
+}
+
 function dedupeSourceRequests(entries = []) {
   const seen = new Set();
   const result = [];
@@ -260,6 +313,11 @@ function computeLiveMetrics(items = [], fallbackMetrics = {}) {
 
 function fallbackPriceForItem(item) {
   const title = normalizeSearchText(`${item.name || ""} ${item.model || ""} ${item.mark || item.brand || ""}`).toLowerCase();
+  const modelTokens = extractModelLikeTokens(`${item.model || ""} ${item.rawLine || ""} ${item.name || ""}`);
+  const modelHint = MODEL_FALLBACK_PRICE_HINTS.find((entry) => entry.pattern.test(`${title} ${modelTokens.join(" ")}`));
+  if (modelHint?.price) {
+    return modelHint.price;
+  }
 
   if (item.kind === "material") {
     if (item.unit === UNIT.meter) {
@@ -289,16 +347,20 @@ function buildSearchQueries(item, defaultVendor) {
   const model = shortenSearchText(item.model || "", 72);
   const name = shortenSearchText(item.name || "", 96);
   const nameStart = shortenSearchText(name.split(/\s+/u).slice(0, 10).join(" "), 72);
-  const article = shortenSearchText(
-    (item.model || "").match(/[A-Za-z\u0410-\u042f\u0430-\u044f\u0401\u04510-9]+(?:[-/.][A-Za-z\u0410-\u042f\u0430-\u044f\u0401\u04510-9]+)+/u)?.[0] || "",
-    64
-  );
+  const articleToken = extractPrimaryArticleToken(`${item.model || ""} ${item.rawLine || ""} ${item.name || ""}`);
+  const article = shortenSearchText(articleToken, 64);
+
+  const modelTokens = extractModelLikeTokens(`${item.model || ""} ${item.rawLine || ""}`);
+  const normalizedModel = articleToken || modelTokens[0] || "";
+  const modelAlias = normalizedModel.startsWith("1-") ? normalizedModel.slice(2) : "";
 
   return dedupe([
     article,
+    `${vendor} ${article}`.trim(),
+    normalizedModel,
+    modelAlias,
     model,
     `${vendor} ${model}`.trim(),
-    `${vendor} ${article}`.trim(),
     `${nameStart} ${model}`.trim(),
     `${vendor} ${nameStart}`.trim(),
     nameStart,
@@ -364,6 +426,9 @@ function clamp(value, min, max) {
 
 export function buildApsProjectPriceRequests(items = [], defaultVendor = "\u0411\u0430\u0437\u043e\u0432\u044b\u0439") {
   return items.map((item, index) => {
+    const primaryArticleToken = extractPrimaryArticleToken(`${item.model || ""} ${item.rawLine || ""} ${item.name || ""}`);
+    const modelTokens = extractModelLikeTokens(`${item.model || ""} ${item.rawLine || ""} ${item.name || ""}`);
+    const modelToken = primaryArticleToken || modelTokens[0] || "";
     const queries = buildSearchQueries(item, defaultVendor);
     const searchQuery = queries[0] || shortenSearchText(item.name || item.model || "", 72);
     const manufacturerName = item.mark || item.brand || defaultVendor;
@@ -375,11 +440,14 @@ export function buildApsProjectPriceRequests(items = [], defaultVendor = "\u0411
       equipmentKey: item.category || item.kind,
       equipmentLabel: item.name,
       sourceUrls,
+      manufacturerWebsite: source?.website || "",
       unit: item.unit || UNIT.piece,
       kind: item.kind || "equipment",
       fallbackPrice: fallbackPriceForItem(item),
       influenceWeight: INFLUENCE_WEIGHT_BY_CATEGORY[item.category] || INFLUENCE_WEIGHT_BY_CATEGORY[item.kind] || 0.1,
       searchQuery,
+      modelToken,
+      primaryArticleToken,
       itemIndex: index,
       itemId: item.id,
     };
@@ -531,7 +599,7 @@ function buildKeyEquipment(pricedItems) {
       qty: item.qty,
       unitPrice: item.unitPrice,
       total: item.total,
-      basis: `\u041d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435 ${item.position || "\u0431\u0435\u0437 \u043d\u043e\u043c\u0435\u0440\u0430"} \u0437\u0430\u0433\u0440\u0443\u0436\u0435\u043d\u043e \u0438\u0437 PDF-\u0441\u043f\u0435\u0446\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u0438 (${item.unit}).`,
+      basis: `\u041f\u0443\u043d\u043a\u0442 \u0441\u043f\u0435\u0446\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u0438 ${item.position || "\u0431\u0435\u0437 \u043d\u043e\u043c\u0435\u0440\u0430"} \u0437\u0430\u0433\u0440\u0443\u0436\u0435\u043d \u0438\u0437 PDF-\u0441\u043f\u0435\u0446\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u0438 (${item.unit}).`,
     }));
 }
 

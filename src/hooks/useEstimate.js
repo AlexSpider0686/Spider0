@@ -146,6 +146,68 @@ export default function useEstimate() {
   const updateBudget = (key, value) => setBudget((prev) => ({ ...prev, [key]: value }));
 
   const refreshVendorPricing = async (system) => {
+    const apsSnapshot = apsProjectSnapshots?.[system?.id];
+    if (system?.type === "aps" && apsSnapshot?.active) {
+      setApsImportStatuses((prev) => ({
+        ...prev,
+        [system.id]: {
+          state: "loading",
+          message: "Идет повторный опрос источников цен по позициям проекта...",
+        },
+      }));
+
+      try {
+        const { buildApsProjectPriceRequests, buildApsProjectSnapshot } = await import("../lib/apsProjectEstimate");
+        const originalItems =
+          Array.isArray(apsSnapshot.originalItems) && apsSnapshot.originalItems.length ? apsSnapshot.originalItems : apsSnapshot.items || [];
+        const parsedProject = {
+          parsedAt: apsSnapshot.parsedAt || new Date().toISOString(),
+          gostStandard: apsSnapshot.gostStandard || "ГОСТ 21.110-2013",
+          linesScanned: apsSnapshot.linesScanned || 0,
+          pages: apsSnapshot.pages || 0,
+          items: originalItems,
+          metrics: apsSnapshot.metrics || {},
+          unrecognizedRows: apsSnapshot.unrecognizedRows || [],
+          parseQuality: apsSnapshot.parseQuality || {},
+          aiQuality: apsSnapshot.aiQuality || null,
+        };
+
+        const requests = buildApsProjectPriceRequests(originalItems, system.vendor);
+        const priceSnapshot = await fetchPricesByRequests(requests);
+        let refreshedSnapshot = buildApsProjectSnapshot({
+          fileName: apsSnapshot.fileName || "aps-project.pdf",
+          parsedProject,
+          requests,
+          priceSnapshot,
+          objectData,
+          vendorName: system.vendor,
+        });
+
+        if (apsSnapshot.itemOverrides && Object.keys(apsSnapshot.itemOverrides).length) {
+          refreshedSnapshot = recalculateApsProjectSnapshot(refreshedSnapshot, apsSnapshot.itemOverrides, objectData);
+        }
+
+        setApsProjectSnapshots((prev) => ({ ...prev, [system.id]: refreshedSnapshot }));
+        setVendorPriceSnapshots((prev) => ({ ...prev, [system.id]: priceSnapshot }));
+        setApsImportStatuses((prev) => ({
+          ...prev,
+          [system.id]: {
+            state: "success",
+            message: `Обновлено: позиций с ценой поставщика ${refreshedSnapshot.sourceStats.itemsWithSupplierPrice}, без цены ${refreshedSnapshot.sourceStats.itemsWithoutPrice}.`,
+          },
+        }));
+      } catch (error) {
+        setApsImportStatuses((prev) => ({
+          ...prev,
+          [system.id]: {
+            state: "error",
+            message: error?.message || "Не удалось обновить цены по позициям проекта.",
+          },
+        }));
+      }
+      return;
+    }
+
     try {
       const snapshot = await fetchVendorPrices(system.type, system.vendor);
       setVendorPriceSnapshots((prev) => ({ ...prev, [system.id]: snapshot }));

@@ -159,6 +159,7 @@ export function buildPriceRequests(systemType, vendorName) {
       equipmentKey: item.key,
       equipmentLabel: item.label,
       sourceUrls,
+      manufacturerWebsite: source?.website || "",
       fallbackPrice: item.fallbackUnitPrice || null,
       influenceWeight: item.influenceWeight,
       searchQuery,
@@ -171,9 +172,10 @@ export function buildPriceRequests(systemType, vendorName) {
 function buildApiEndpoints() {
   const fromEnv =
     typeof import.meta !== "undefined" && import.meta?.env ? import.meta.env.VITE_PRICE_API_URL : undefined;
-  const endpoints = ["/api/vendor-prices", "/vendor-prices", fromEnv];
+  const isBrowser = typeof window !== "undefined";
+  const endpoints = [fromEnv, isBrowser ? "/api/vendor-prices" : "", isBrowser ? "/vendor-prices" : ""];
 
-  if (typeof window !== "undefined" && /localhost|127\.0\.0\.1/i.test(window.location.hostname)) {
+  if (isBrowser && /localhost|127\.0\.0\.1/i.test(window.location.hostname)) {
     endpoints.push("https://spider0.vercel.app/api/vendor-prices");
   }
 
@@ -233,11 +235,43 @@ function normalizeFetchedByUnit(request, fetched, fallback) {
   return best;
 }
 
+function normalizeModelToken(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-zа-яё0-9-]/giu, "");
+}
+
+function extractArticleTokens(value) {
+  return [...String(value || "").matchAll(/\d{1,4}(?:[-/.]\d{2,4}){2,}/gu)].map((match) => normalizeModelToken(match[0]));
+}
+
+function extractModelToken(request) {
+  const explicit = normalizeModelToken(request?.modelToken || request?.primaryArticleToken || "");
+  if (explicit.length >= 7) return explicit;
+
+  const articleTokens = extractArticleTokens(`${request?.searchQuery || ""} ${request?.equipmentLabel || ""}`).filter(
+    (token) => token.length >= 7
+  );
+  if (articleTokens.length) {
+    return articleTokens.sort((left, right) => right.length - left.length)[0];
+  }
+
+  const sample = `${request?.searchQuery || ""} ${request?.equipmentLabel || ""}`;
+  const matches = [...String(sample).matchAll(/[A-Za-zА-Яа-яЁё0-9]+(?:[-/.][A-Za-zА-Яа-яЁё0-9]+)+/gu)]
+    .map((match) => normalizeModelToken(match[0]))
+    .filter((token) => token.length >= 5 && /\d/u.test(token));
+
+  if (!matches.length) return "";
+  return matches.sort((left, right) => right.length - left.length)[0];
+}
+
 export async function fetchPricesByRequests(requests = []) {
   const payload = await requestPriceApi({ requests });
   const resultsByKey = new Map((payload.results || []).map((entry) => [entry.key, entry]));
 
   const sanitizePrice = (request, result) => {
+    const strictModelToken = extractModelToken(request);
+    const isStrictModelPrice = Boolean(strictModelToken);
     const fallback = Number(request?.fallbackPrice);
     const fetchedRaw = Number(result?.price);
     const fetched = normalizeFetchedByUnit(request, fetchedRaw, fallback);
@@ -247,6 +281,25 @@ export async function fetchPricesByRequests(requests = []) {
         status: "fallback",
         reason: result?.reason || "price_not_found",
         sourceCount: 0,
+      };
+    }
+
+    if (isStrictModelPrice) {
+      if (Number.isFinite(fallback) && fallback > 0) {
+        if (fetched > fallback * 4 || fetched < fallback * 0.2) {
+          return {
+            price: fallback,
+            status: "fallback",
+            reason: "strict_model_outlier",
+            sourceCount: result?.sourceCount || 0,
+          };
+        }
+      }
+      return {
+        price: fetched,
+        status: result?.status || "fetched",
+        reason: result?.reason || null,
+        sourceCount: result?.sourceCount || 0,
       };
     }
 
@@ -300,6 +353,10 @@ export async function fetchPricesByRequests(requests = []) {
         status: sanitized.status,
         reason: sanitized.reason,
         sourceCount: sanitized.sourceCount,
+        selectionStrategy: result?.selectionStrategy || "",
+        modelToken: result?.modelToken || extractModelToken(request) || "",
+        recheckRequired: Boolean(result?.recheckRequired),
+        priceConfidence: Number(result?.priceConfidence || 0),
         checkedSources: result.checkedSources || request.sourceUrls?.length || 0,
         checkedSourceUrls,
         checkedSourceHosts,

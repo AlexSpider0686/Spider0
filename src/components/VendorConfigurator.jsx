@@ -9,18 +9,33 @@ function renderOptions(items) {
   ));
 }
 
-export default function VendorConfigurator({ system, onChange }) {
+function withDisabledProps(disabled) {
+  return disabled ? { disabled: true } : {};
+}
+
+export default function VendorConfigurator({ system, onChange, projectBasedMode = false }) {
   const equipment = getVendorEquipment(system.type, system.vendor);
   if (!equipment) return null;
 
   return (
     <div className="equipment-config">
       <div className="equipment-header">
-        <strong>Параметры ключевого оборудования</strong>
+        <div className="label-with-tooltip">
+          <strong>Параметры ключевого оборудования</strong>
+          <span className="label-tooltip-help">?</span>
+          <div className="label-tooltip-popover">
+            <p>Параметры активны, когда система рассчитывается по внутреннему алгоритму.</p>
+            <p>Если загружен проект PDF, используется спецификация проекта, поэтому ручные параметры здесь отключаются.</p>
+          </div>
+        </div>
       </div>
-      {equipment.note ? <p className="hint-inline">{equipment.note}</p> : null}
 
-      <div className="equipment-config-grid">
+      {equipment.note ? <p className="hint-inline">{equipment.note}</p> : null}
+      {projectBasedMode ? (
+        <p className="hint-inline">Загружен проект PDF: параметры ключевого оборудования отключены, расчёт идёт по спецификации проекта.</p>
+      ) : null}
+
+      <div className={`equipment-config-grid ${projectBasedMode ? "is-disabled" : ""}`}>
         {equipment.camera ? (
           <>
             <div className="input-card">
@@ -28,6 +43,7 @@ export default function VendorConfigurator({ system, onChange }) {
               <select
                 value={system.selectedEquipmentParams?.cameraPlacement ?? equipment.camera.placement[0]}
                 onChange={(event) => onChange("cameraPlacement", event.target.value)}
+                {...withDisabledProps(projectBasedMode)}
               >
                 {renderOptions(equipment.camera.placement)}
               </select>
@@ -37,6 +53,7 @@ export default function VendorConfigurator({ system, onChange }) {
               <select
                 value={system.selectedEquipmentParams?.cameraResolution ?? equipment.camera.resolution[1] ?? equipment.camera.resolution[0]}
                 onChange={(event) => onChange("cameraResolution", Number(event.target.value))}
+                {...withDisabledProps(projectBasedMode)}
               >
                 {renderOptions(equipment.camera.resolution)}
               </select>
@@ -50,6 +67,7 @@ export default function VendorConfigurator({ system, onChange }) {
             <select
               value={system.selectedEquipmentParams?.recorderChannels ?? equipment.recorder.channels[2] ?? equipment.recorder.channels[0]}
               onChange={(event) => onChange("recorderChannels", Number(event.target.value))}
+              {...withDisabledProps(projectBasedMode)}
             >
               {renderOptions(equipment.recorder.channels)}
             </select>
@@ -62,6 +80,7 @@ export default function VendorConfigurator({ system, onChange }) {
             <select
               value={system.selectedEquipmentParams?.hddTb ?? equipment.hdd.tb[1] ?? equipment.hdd.tb[0]}
               onChange={(event) => onChange("hddTb", Number(event.target.value))}
+              {...withDisabledProps(projectBasedMode)}
             >
               {renderOptions(equipment.hdd.tb)}
             </select>
@@ -75,6 +94,7 @@ export default function VendorConfigurator({ system, onChange }) {
               <select
                 value={system.selectedEquipmentParams?.switchPorts ?? equipment.switch.ports[2] ?? equipment.switch.ports[0]}
                 onChange={(event) => onChange("switchPorts", Number(event.target.value))}
+                {...withDisabledProps(projectBasedMode)}
               >
                 {renderOptions(equipment.switch.ports)}
               </select>
@@ -84,6 +104,7 @@ export default function VendorConfigurator({ system, onChange }) {
               <select
                 value={String(system.selectedEquipmentParams?.switchPoe ?? true)}
                 onChange={(event) => onChange("switchPoe", event.target.value === "true")}
+                {...withDisabledProps(projectBasedMode)}
               >
                 <option value="true">PoE</option>
                 <option value="false">Без PoE</option>
@@ -98,6 +119,7 @@ export default function VendorConfigurator({ system, onChange }) {
             <select
               value={system.selectedEquipmentParams?.controllerChannels ?? equipment.controller.channels[0]}
               onChange={(event) => onChange("controllerChannels", Number(event.target.value))}
+              {...withDisabledProps(projectBasedMode)}
             >
               {renderOptions(equipment.controller.channels)}
             </select>
@@ -110,6 +132,7 @@ export default function VendorConfigurator({ system, onChange }) {
             <select
               value={system.selectedEquipmentParams?.sensorKind ?? equipment.sensor.kind[0]}
               onChange={(event) => onChange("sensorKind", event.target.value)}
+              {...withDisabledProps(projectBasedMode)}
             >
               {renderOptions(equipment.sensor.kind)}
             </select>
@@ -122,6 +145,7 @@ export default function VendorConfigurator({ system, onChange }) {
             <select
               value={system.selectedEquipmentParams?.detectorKind ?? equipment.detector.kind[0]}
               onChange={(event) => onChange("detectorKind", event.target.value)}
+              {...withDisabledProps(projectBasedMode)}
             >
               {renderOptions(equipment.detector.kind)}
             </select>
@@ -134,6 +158,7 @@ export default function VendorConfigurator({ system, onChange }) {
             <select
               value={system.selectedEquipmentParams?.panelLoops ?? equipment.panel.loops[1] ?? equipment.panel.loops[0]}
               onChange={(event) => onChange("panelLoops", Number(event.target.value))}
+              {...withDisabledProps(projectBasedMode)}
             >
               {renderOptions(equipment.panel.loops)}
             </select>
@@ -146,6 +171,7 @@ export default function VendorConfigurator({ system, onChange }) {
             <select
               value={system.selectedEquipmentParams?.speakerKind ?? equipment.speaker.kind[0]}
               onChange={(event) => onChange("speakerKind", event.target.value)}
+              {...withDisabledProps(projectBasedMode)}
             >
               {renderOptions(equipment.speaker.kind)}
             </select>
@@ -158,6 +184,7 @@ export default function VendorConfigurator({ system, onChange }) {
             <select
               value={system.selectedEquipmentParams?.amplifierChannels ?? equipment.amplifier.channels[1] ?? equipment.amplifier.channels[0]}
               onChange={(event) => onChange("amplifierChannels", Number(event.target.value))}
+              {...withDisabledProps(projectBasedMode)}
             >
               {renderOptions(equipment.amplifier.channels)}
             </select>

@@ -26,6 +26,8 @@ const UNIT_ALIAS_MAP = {
   "листов": "лист",
 };
 
+const ARTICLE_TOKEN_REGEX = /\d{1,4}(?:[-/.]\d{2,4}){2,}/gu;
+
 function normalizePrice(raw) {
   if (!raw) return null;
   const compact = String(raw).replace(/&nbsp;/gi, "").replace(/\s/g, "").replace(",", ".");
@@ -44,6 +46,46 @@ function normalizeUnitHint(raw) {
     .replace(/\s+/g, "")
     .replace(/\./g, "");
   return UNIT_ALIAS_MAP[token] || "";
+}
+
+function normalizeUnitToken(raw) {
+  return normalizeUnitHint(raw);
+}
+
+function normalizeArticleToken(raw) {
+  return String(raw || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-zа-яё0-9]/giu, "");
+}
+
+function extractArticleTokens(value) {
+  return unique(
+    [...String(value || "").matchAll(ARTICLE_TOKEN_REGEX)]
+      .map((match) => String(match[0] || "").trim())
+      .filter(Boolean)
+  );
+}
+
+function articleTokensMatch(left, right) {
+  const l = normalizeArticleToken(left);
+  const r = normalizeArticleToken(right);
+  if (!l || !r) return false;
+  return l === r || l.endsWith(r) || r.endsWith(l);
+}
+
+function isUnitCompatible(requestUnit, unitHints = []) {
+  const expected = normalizeUnitToken(requestUnit);
+  if (!expected) return true;
+  const hints = unique((unitHints || []).map((item) => normalizeUnitToken(item)).filter(Boolean));
+  if (!hints.length) return true;
+  if (hints.includes(expected)) return true;
+
+  const similarGroups = [
+    ["шт", "компл"],
+    ["м", "м2"],
+  ];
+  return similarGroups.some((group) => group.includes(expected) && hints.some((hint) => group.includes(hint)));
 }
 
 function median(values) {
@@ -269,6 +311,84 @@ function buildQueryTokens(value) {
     .slice(0, 10);
 }
 
+function normalizeModelToken(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-zа-яё0-9-]/giu, "");
+}
+
+function scoreModelToken(rawToken) {
+  const token = String(rawToken || "");
+  if (!token) return -1;
+  let score = 0;
+  const digitGroups = token.match(/\d+/g) || [];
+  const separators = (token.match(/[-/.]/g) || []).length;
+  if (digitGroups.length >= 3 && separators >= 2) score += 9;
+  if (/^\d/u.test(token)) score += 5;
+  if (/\d/u.test(token) && /[a-zа-яё]/iu.test(token)) score += 3;
+  if (/^(?:c|с)?2000/iu.test(token)) score += 4;
+  if (/\b(?:кдл|bki|бки|сп2|pp|пп|mpn|мпн|dip|ипр|rip|рип)/iu.test(token)) score += 4;
+  score += Math.min(token.length, 20) * 0.12;
+  return score;
+}
+
+function extractPrimaryModelToken(value) {
+  const articleCandidates = extractArticleTokens(value)
+    .map((token) => normalizeModelToken(token))
+    .filter((token) => token.length >= 7);
+  if (articleCandidates.length) {
+    return articleCandidates.sort((left, right) => scoreModelToken(right) - scoreModelToken(left) || right.length - left.length)[0];
+  }
+
+  const explicit = normalizeModelToken(value);
+  if (explicit.length >= 7 && /\d/u.test(explicit)) return explicit;
+
+  const candidates = [...String(value || "").matchAll(/[A-Za-zА-Яа-яЁё0-9]+(?:[-/.][A-Za-zА-Яа-яЁё0-9]+)+/gu)]
+    .map((match) => normalizeModelToken(match[0]))
+    .filter((token) => token.length >= 5 && /\d/u.test(token))
+    .sort((left, right) => scoreModelToken(right) - scoreModelToken(left) || right.length - left.length);
+  return candidates[0] || "";
+}
+
+function extractPrimaryArticleToken(value) {
+  const candidates = extractArticleTokens(value)
+    .map((token) => normalizeModelToken(token))
+    .filter((token) => token.length >= 7);
+  if (!candidates.length) return "";
+  return candidates.sort((left, right) => right.length - left.length)[0];
+}
+
+function extractModelTokenWithArticleBias(value) {
+  return extractPrimaryArticleToken(value) || extractPrimaryModelToken(value);
+}
+
+function buildArticleCandidates(value) {
+  const articles = extractArticleTokens(value);
+  const models = [...String(value || "").matchAll(/[A-Za-zА-Яа-яЁё0-9]+(?:[-/.][A-Za-zА-Яа-яЁё0-9]+)+/gu)].map((match) => match[0]);
+  return unique([...articles, ...models].map((item) => normalizeModelToken(item)).filter((item) => item.length >= 6));
+}
+
+function hostFromUrl(url) {
+  try {
+    return new URL(String(url || "")).hostname.replace(/^www\./i, "").toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function buildModelTokenFromEntry(entry = {}) {
+  const explicit = extractModelTokenWithArticleBias(entry?.modelToken || entry?.primaryArticleToken || "");
+  if (explicit) return explicit;
+  return extractModelTokenWithArticleBias(entry?.searchQuery || "");
+}
+
+function isModelTokenInText(modelToken, value) {
+  if (!modelToken) return false;
+  const normalized = normalizeModelToken(value);
+  if (!normalized) return false;
+  return normalized.includes(modelToken) || modelToken.includes(normalized);
+}
+
 function scoreLuisItem(item, queryTokens = []) {
   const text = normalizeSearchQuery(
     `${item?.prefix || ""} ${item?.model || ""} ${item?.article || ""} ${item?.annex || ""} ${item?.description || ""}`
@@ -314,25 +434,41 @@ async function fetchLuisApiPrice(source, fallbackPrice) {
   if (!items.length) return { prices: [], usedSources: [], unitHints: [] };
 
   const queryTokens = buildQueryTokens(query);
+  const modelToken = extractModelTokenWithArticleBias(query);
+  const queryArticleCandidates = buildArticleCandidates(query);
   const candidates = items
     .map((item) => ({
       score: scoreLuisItem(item, queryTokens),
       price: normalizePrice(item?.price),
       article: item?.article || "",
       model: item?.model || "",
+      articleMatched: queryArticleCandidates.some((queryArticle) =>
+        [item?.article, item?.model].some((value) => articleTokensMatch(queryArticle, value))
+      ),
     }))
     .filter((item) => item.price);
 
   if (!candidates.length) return { prices: [], usedSources: [], unitHints: [] };
 
-  candidates.sort((a, b) => b.score - a.score || b.price - a.price);
-  const topByScore = candidates.filter((item) => item.score >= Math.max(candidates[0].score - 2, 0));
+  candidates.sort((a, b) => {
+    if (a.articleMatched !== b.articleMatched) return a.articleMatched ? -1 : 1;
+    return b.score - a.score || b.price - a.price;
+  });
+  const articleMatchedPool = candidates.filter((item) => item.articleMatched);
+  const topByScore = articleMatchedPool.length
+    ? articleMatchedPool
+    : candidates.filter((item) => item.score >= Math.max(candidates[0].score - 2, 0));
   const selectedRaw = topByScore.map((item) => item.price);
-  const selected = selectBestPrice(selectedRaw, fallbackPrice);
+  const selected =
+    selectClosestToFallback(selectedRaw, fallbackPrice) ||
+    selectBestPrice(selectedRaw, fallbackPrice) ||
+    selectFinalPrice(selectedRaw, fallbackPrice);
   if (!selected) return { prices: [], usedSources: [], unitHints: [] };
 
   const winner = topByScore.find((item) => item.price === selected) || topByScore[0];
   const hint = winner?.article || winner?.model || query;
+  const winnerTokenSource = normalizeModelToken(`${winner?.article || ""} ${winner?.model || ""}`);
+  const modelTokenMatched = modelToken ? winnerTokenSource.includes(modelToken) : false;
   const unitHints = unique(
     items
       .map((item) => normalizeUnitHint(item?.unit || item?.baseUnit || item?.measure || item?.uom))
@@ -342,10 +478,25 @@ async function fetchLuisApiPrice(source, fallbackPrice) {
     prices: [selected],
     usedSources: [`${source.url}#${hint}`],
     unitHints,
+    selectionMeta: {
+      sourceKind: "luis_api",
+      modelToken,
+      modelTokenMatched,
+      articleMatched: Boolean(winner?.articleMatched),
+      winner: hint,
+    },
   };
 }
 
 async function fetchPriceFromTinkoSearch(searchUrl, fallbackPrice) {
+  let queryModelToken = "";
+  try {
+    const parsed = new URL(searchUrl);
+    queryModelToken = extractModelTokenWithArticleBias(decodeURIComponent(parsed.searchParams.get("q") || ""));
+  } catch {
+    queryModelToken = extractModelTokenWithArticleBias(searchUrl);
+  }
+
   const searchResponse = await fetchWithTimeout(
     searchUrl,
     {
@@ -362,7 +513,18 @@ async function fetchPriceFromTinkoSearch(searchUrl, fallbackPrice) {
   if (!productUrls.length) {
     const price = selectBestPrice(extractPricesFromText(searchHtml), fallbackPrice);
     const unitHints = extractUnitHintsFromText(searchHtml);
-    return price ? { prices: [price], usedSources: [searchUrl], unitHints } : { prices: [], usedSources: [], unitHints };
+    return price
+      ? {
+          prices: [price],
+          usedSources: [searchUrl],
+          unitHints,
+          selectionMeta: {
+            sourceKind: "tinko_search",
+            modelToken: queryModelToken,
+            modelTokenMatched: isModelTokenInText(queryModelToken, searchUrl),
+          },
+        }
+      : { prices: [], usedSources: [], unitHints };
   }
 
   const settled = await Promise.allSettled(
@@ -394,14 +556,21 @@ async function fetchPriceFromTinkoSearch(searchUrl, fallbackPrice) {
 
   const finalPrice = selectBestPrice(prices, fallbackPrice);
   if (!finalPrice) return { prices: [], usedSources: [], unitHints: unique(unitHints) };
+  const winnerUrl = usedSources.length ? usedSources[0] : searchUrl;
   return {
     prices: [finalPrice],
-    usedSources: usedSources.length ? [usedSources[0]] : [searchUrl],
+    usedSources: [winnerUrl],
     unitHints: unique(unitHints),
+    selectionMeta: {
+      sourceKind: "tinko_search",
+      modelToken: queryModelToken,
+      modelTokenMatched: isModelTokenInText(queryModelToken, winnerUrl),
+    },
   };
 }
 
 async function fetchPriceFromGenericSource(source, fallbackPrice) {
+  const queryModelToken = extractModelTokenWithArticleBias(source?.url || "");
   const method = source.method || "GET";
   const headers = { ...source.headers };
   let body = source.body;
@@ -436,14 +605,34 @@ async function fetchPriceFromGenericSource(source, fallbackPrice) {
     extractUnitHintsFromJsonLike(json, unitHints);
     const price = selectBestPrice(prices, fallbackPrice);
     return price
-      ? { prices: [price], usedSources: [source.url], unitHints: unique(unitHints) }
+      ? {
+          prices: [price],
+          usedSources: [source.url],
+          unitHints: unique(unitHints),
+          selectionMeta: {
+            sourceKind: "generic",
+            modelToken: queryModelToken,
+            modelTokenMatched: isModelTokenInText(queryModelToken, source.url),
+          },
+        }
       : { prices: [], usedSources: [], unitHints: unique(unitHints) };
   }
 
   const text = await response.text();
   const price = selectBestPrice(extractPricesFromText(text), fallbackPrice);
   const unitHints = extractUnitHintsFromText(text);
-  return price ? { prices: [price], usedSources: [source.url], unitHints } : { prices: [], usedSources: [], unitHints };
+  return price
+    ? {
+        prices: [price],
+        usedSources: [source.url],
+        unitHints,
+        selectionMeta: {
+          sourceKind: "generic",
+          modelToken: queryModelToken,
+          modelTokenMatched: isModelTokenInText(queryModelToken, source.url) || isModelTokenInText(queryModelToken, text.slice(0, 6000)),
+        },
+      }
+    : { prices: [], usedSources: [], unitHints };
 }
 
 async function fetchPriceForTarget(target, fallbackPrice) {
@@ -464,6 +653,14 @@ function selectFinalPrice(prices, fallbackPrice) {
   if (selected) return selected;
   const fallback = Number(fallbackPrice);
   return Number.isFinite(fallback) && fallback > 0 ? fallback : null;
+}
+
+function selectClosestToFallback(prices, fallbackPrice) {
+  const fallback = Number(fallbackPrice);
+  const sensible = (prices || []).filter((value) => Number.isFinite(value) && value > 0);
+  if (!sensible.length) return null;
+  if (!Number.isFinite(fallback) || fallback <= 0) return selectBestPrice(sensible, fallbackPrice);
+  return [...sensible].sort((left, right) => Math.abs(Math.log(left / fallback)) - Math.abs(Math.log(right / fallback)))[0];
 }
 
 export async function resolveVendorPrices(requests = []) {
@@ -488,30 +685,135 @@ export async function resolveVendorPrices(requests = []) {
         };
       }
 
+      const modelToken = buildModelTokenFromEntry(entry);
       const settled = await Promise.allSettled(targets.map((target) => fetchPriceForTarget(target, fallbackPrice)));
-      const prices = [];
-      const usedSources = [];
-      const unitHints = [];
+      const candidateRows = [];
 
-      settled.forEach((result) => {
+      settled.forEach((result, index) => {
         if (result.status !== "fulfilled") return;
-        prices.push(...(result.value.prices || []));
-        usedSources.push(...(result.value.usedSources || []));
-        unitHints.push(...(result.value.unitHints || []));
+        const value = result.value || {};
+        const source = normalizeSourceTarget(targets[index]);
+        const prices = (value.prices || []).filter((item) => Number.isFinite(item) && item > 0);
+        if (!prices.length) return;
+        const usedSources = (value.usedSources || []).filter(Boolean);
+        const sourceUrl = source?.url || usedSources[0] || "";
+        const sourceHost = hostFromUrl(sourceUrl);
+        const sourceName = source?.sourceName || value?.selectionMeta?.sourceKind || sourceHost || "";
+        const inferredModelMatch = modelToken
+          ? [sourceUrl, ...usedSources].some((url) => isModelTokenInText(modelToken, url))
+          : false;
+        const modelTokenMatched = Boolean(value?.selectionMeta?.modelTokenMatched) || inferredModelMatch;
+        const articleMatched = Boolean(value?.selectionMeta?.articleMatched);
+        const unitHints = (value.unitHints || []).map((item) => normalizeUnitHint(item)).filter(Boolean);
+
+        for (const price of prices) {
+          candidateRows.push({
+            price,
+            sourceName,
+            sourceHost,
+            usedSources: usedSources.length ? usedSources : sourceUrl ? [sourceUrl] : [],
+            unitHints,
+            modelTokenMatched,
+            articleMatched,
+          });
+        }
       });
 
-      const selectedPrice = selectFinalPrice(prices, fallbackPrice);
-      const uniqueSources = unique(usedSources);
-      const uniqueUnits = unique(unitHints.map((item) => normalizeUnitHint(item)).filter(Boolean));
-      if (selectedPrice && prices.length > 0) {
+      const unitCompatibleRows = candidateRows.filter((item) => isUnitCompatible(entry?.unit, item.unitHints));
+      const baseRows = unitCompatibleRows.length ? unitCompatibleRows : candidateRows;
+      const luisRows = baseRows.filter((item) => item.sourceName === "luis_api" || item.sourceHost === "luis.ru");
+      const articleRows = baseRows.filter((item) => item.articleMatched);
+      const modelRows = modelToken ? baseRows.filter((item) => item.modelTokenMatched) : [];
+      const luisExactRows = luisRows.filter((item) => item.modelTokenMatched);
+      const manufacturerHost = hostFromUrl(entry?.manufacturerWebsite || "");
+      const manufacturerRows = manufacturerHost ? baseRows.filter((item) => item.sourceHost === manufacturerHost) : [];
+
+      let selectionStrategy = "average_all_sources";
+      let selectionPool = baseRows;
+
+      if (articleRows.length) {
+        selectionPool = articleRows;
+        selectionStrategy = "article_exact_match";
+      } else if (modelToken && modelRows.length) {
+        selectionPool = modelRows;
+        selectionStrategy = "model_token_match";
+      } else if (modelToken && luisExactRows.length) {
+        selectionPool = luisExactRows;
+        selectionStrategy = "luis_api_exact_model";
+      } else if (modelToken && luisRows.length) {
+        selectionPool = luisRows;
+        selectionStrategy = "luis_api_model_bias";
+      } else if (modelToken && manufacturerRows.length) {
+        selectionPool = manufacturerRows;
+        selectionStrategy = "manufacturer_source_bias";
+      }
+
+      const poolPrices = selectionPool.map((item) => item.price);
+      const preferFallbackAnchoredSelection =
+        selectionStrategy === "article_exact_match" ||
+        selectionStrategy === "model_token_match" ||
+        selectionStrategy === "luis_api_exact_model" ||
+        selectionStrategy === "luis_api_model_bias";
+
+      let selectedPrice = preferFallbackAnchoredSelection
+        ? selectClosestToFallback(poolPrices, fallbackPrice) || selectBestPrice(poolPrices, fallbackPrice) || selectFinalPrice(poolPrices, fallbackPrice)
+        : selectFinalPrice(poolPrices, fallbackPrice);
+
+      const fallback = Number(fallbackPrice);
+      if (Number.isFinite(fallback) && fallback > 0 && Number.isFinite(selectedPrice) && selectedPrice > 0) {
+        const tooHigh = selectedPrice > fallback * 4;
+        const tooLow = selectedPrice < fallback * 0.2;
+        if (tooHigh || tooLow) {
+          const corridorRows = baseRows.filter((item) => item.price >= fallback * 0.22 && item.price <= fallback * 4.2);
+          if (corridorRows.length) {
+            selectionPool = corridorRows;
+            const corridorPrices = selectionPool.map((item) => item.price);
+            selectedPrice = preferFallbackAnchoredSelection
+              ? selectClosestToFallback(corridorPrices, fallback) || selectBestPrice(corridorPrices, fallback) || selectFinalPrice(corridorPrices, fallback)
+              : selectFinalPrice(corridorPrices, fallback);
+            selectionStrategy = `${selectionStrategy}_fallback_guard`;
+          } else {
+            selectedPrice = fallback;
+            selectionStrategy = `${selectionStrategy}_fallback_guard`;
+          }
+        }
+      }
+
+      const spreadBase = selectionPool.map((item) => item.price).filter((item) => Number.isFinite(item) && item > 0);
+      const spread = spreadBase.length > 1 ? Math.max(...spreadBase) / Math.max(Math.min(...spreadBase), 1) : 1;
+      const hasUnitMismatchRisk = !unitCompatibleRows.length && candidateRows.length > 0;
+      const recheckRequired = (spread >= 6 && selectionPool.length > 1) || hasUnitMismatchRisk;
+      const closestRows = selectedPrice
+        ? selectionPool.filter((item) => Math.abs(item.price - selectedPrice) <= Math.max(1, selectedPrice * 0.03))
+        : [];
+      const selectedRows = closestRows.length ? closestRows : selectionPool;
+
+      const selectedUsedSources = unique(selectedRows.flatMap((item) => item.usedSources || []).filter(Boolean));
+      const selectedUnits = unique(selectedRows.flatMap((item) => item.unitHints || []).filter(Boolean));
+
+      if (selectedPrice && candidateRows.length > 0) {
+        const baseConfidence =
+          selectionStrategy === "article_exact_match"
+            ? 0.97
+            : selectionPool.length === 1
+              ? 0.92
+              : spread <= 2
+                ? 0.88
+                : spread <= 4
+                  ? 0.72
+                  : 0.55;
         return {
           key,
           price: selectedPrice,
-          status: prices.length > 1 ? "fetched_multi" : "fetched",
-          sourceCount: uniqueSources.length,
+          status: selectionPool.length > 1 ? "fetched_multi" : "fetched",
+          sourceCount: selectedUsedSources.length,
           checkedSources: targets.length,
-          usedSources: uniqueSources,
-          unitHints: uniqueUnits,
+          usedSources: selectedUsedSources,
+          unitHints: selectedUnits,
+          selectionStrategy,
+          modelToken,
+          recheckRequired,
+          priceConfidence: Number(baseConfidence.toFixed(2)),
         };
       }
 
@@ -523,7 +825,11 @@ export async function resolveVendorPrices(requests = []) {
         sourceCount: 0,
         checkedSources: targets.length,
         usedSources: [],
-        unitHints: uniqueUnits,
+        unitHints: [],
+        selectionStrategy,
+        modelToken,
+        recheckRequired: false,
+        priceConfidence: 0,
       };
     })
   );

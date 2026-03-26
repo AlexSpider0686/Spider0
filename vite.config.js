@@ -2,7 +2,6 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
 import fs from "node:fs";
-import { execSync } from "node:child_process";
 import { resolveVendorPrices } from "./api/vendor-prices.js";
 import { issueOtpChallenge, verifyOtpChallenge } from "./api/auth-otp-core.js";
 
@@ -27,8 +26,9 @@ function parseTimestampCandidate(value) {
   return toBuildTimestamp(raw);
 }
 
-function resolveCommitBuildTimestamp() {
+function resolveBuildTimestamp() {
   const envCandidates = [
+    process.env.BUILD_TIMESTAMP,
     process.env.VERCEL_GIT_COMMIT_TIMESTAMP,
     process.env.GIT_COMMIT_TIMESTAMP,
     process.env.CI_COMMIT_TIMESTAMP,
@@ -40,18 +40,10 @@ function resolveCommitBuildTimestamp() {
     if (parsed) return parsed;
   }
 
-  try {
-    const gitTs = execSync("git show -s --format=%ct HEAD", { encoding: "utf8" }).trim();
-    const parsed = parseTimestampCandidate(gitTs);
-    if (parsed) return parsed;
-  } catch {
-    // fallback below
-  }
-
   return toBuildTimestamp(Date.now());
 }
 
-const buildTimestamp = resolveCommitBuildTimestamp();
+const buildTimestamp = resolveBuildTimestamp();
 const buildNumberBase = `${packageJson.version}.${buildTimestamp}`;
 const systemBuildNumber = `${buildNumberBase}.system`;
 const siteBuildNumber = `${buildNumberBase}.site`;

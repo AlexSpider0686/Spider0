@@ -973,6 +973,24 @@ select {
   gap: 8px;
 }
 
+.system-main-grid-wide {
+  grid-template-columns: 1.2fr 1fr;
+}
+
+.system-control-card {
+  padding: 10px;
+}
+
+.system-control-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.input-card.compact {
+  padding: 7px;
+}
+
 .vendor-hint {
   border: 1px solid rgba(141, 163, 196, 0.22);
   border-radius: 8px;
@@ -986,6 +1004,64 @@ select {
   margin: 0;
   color: var(--muted);
   font-size: 11px;
+}
+
+.vendor-hint-lg {
+  padding: 10px;
+  gap: 8px;
+}
+
+.vendor-hint-top {
+  display: grid;
+  gap: 4px;
+}
+
+.vendor-kpi {
+  font-size: 12px;
+  color: #2a4f79;
+}
+
+.vendor-kpi strong {
+  font-size: 14px;
+  color: #12395e;
+}
+
+.vendor-hint-mid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.vendor-hint-mid > div {
+  border: 1px solid rgba(141, 163, 196, 0.28);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.86);
+  padding: 7px;
+  display: grid;
+  gap: 2px;
+}
+
+.vendor-hint-mid span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.vendor-hint-mid strong {
+  font-size: 13px;
+  color: #11365a;
+}
+
+.vendor-hint-footer {
+  display: grid;
+  gap: 4px;
+}
+
+.vendor-hint-footer p {
+  font-size: 10px;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
 }
 
 .pricing-caption {
@@ -1059,6 +1135,10 @@ select {
   gap: 8px;
 }
 
+.equipment-config-grid.is-disabled {
+  opacity: 0.62;
+}
+
 .system-subgrid {
   margin-top: 8px;
   display: grid;
@@ -1114,6 +1194,16 @@ select {
 
 .table-wrap.compact {
   max-height: 210px;
+}
+
+.aps-item-title {
+  display: grid;
+  gap: 2px;
+}
+
+.aps-item-title small {
+  color: #5f7591;
+  font-size: 10px;
 }
 
 .equipment-principles {
@@ -1215,6 +1305,28 @@ select {
 
 .aps-import-card {
   margin-top: 8px;
+}
+
+.aps-ops-card {
+  margin-top: 8px;
+}
+
+.aps-ops-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .aps-import-actions {
@@ -1460,6 +1572,20 @@ tbody tr:hover {
   }
 }
 
+@media (max-width: 1100px) {
+  .system-main-grid-wide {
+    grid-template-columns: 1fr;
+  }
+
+  .system-control-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .vendor-hint-mid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 760px) {
   .page-shell {
     padding: 14px;
@@ -1485,8 +1611,10 @@ tbody tr:hover {
   .object-photo-gallery,
   .system-main-grid,
   .system-subgrid,
-  .equipment-config-grid,
-  .manual-item-grid,
+    .equipment-config-grid,
+    .system-control-grid,
+    .vendor-hint-mid,
+    .manual-item-grid,
   .region-select-grid,
   .logic-grid,
   .logic-system-metrics,
