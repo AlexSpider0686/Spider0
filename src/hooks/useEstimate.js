@@ -14,6 +14,7 @@ import { createProjectIdentity } from "../lib/projectIdentity";
 import { analyzeInspectionPhoto } from "../lib/aiPhotoInspection";
 import { buildAiSurveyPlan, calculateAiSurveyCompletion } from "../lib/aiTechnicalChecklist";
 import { buildAiTechnicalRecommendations } from "../lib/aiTechnicalConfigurator";
+import { buildAiProjectRisks } from "../lib/aiProjectRiskEngine";
 
 function removeById(mapObject, id) {
   if (!(id in mapObject)) return mapObject;
@@ -105,6 +106,19 @@ export default function useEstimate() {
         specOverrides: technicalSolution.specOverrides,
       }),
     [systems, systemResults, objectData, zones, technicalSolution.appliedAnswers, technicalSolution.specOverrides, apsProjectSnapshots]
+  );
+  const projectRisks = useMemo(
+    () =>
+      buildAiProjectRisks({
+        objectData: { ...objectData, protectedAreaM2: recalculatedArea },
+        zones,
+        systems,
+        systemResults,
+        technicalSolution,
+        aiSurveyCompletion: appliedAiSurveyCompletion,
+        apsProjectSnapshots,
+      }),
+    [objectData, recalculatedArea, zones, systems, systemResults, technicalSolution, appliedAiSurveyCompletion, apsProjectSnapshots]
   );
   const inputValidation = useMemo(
     () =>
@@ -575,6 +589,7 @@ export default function useEstimate() {
         recalculatedArea,
         systemResults,
         totals,
+        projectRisks,
         apsProjectExports,
       };
       const { exportEstimatePptx } = await import("../lib/pptxExport");
@@ -731,6 +746,7 @@ export default function useEstimate() {
     aiSurveyCompletion,
     appliedAiSurveyCompletion,
     technicalRecommendations,
+    projectRisks,
     VENDOR_EQUIPMENT,
     updateObject,
     verifyObjectAddress,

@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Building2, Layers, Wallet, Download, PieChart, FileText, Ruler } from "lucide-react";
+import { Building2, Layers, Wallet, Download, PieChart, FileText, Ruler, ShieldAlert } from "lucide-react";
 import useEstimate from "../hooks/useEstimate";
 import ObjectStep from "./ObjectStep";
 import SystemsStep from "./SystemsStep";
 import ProjectDesignStep from "./ProjectDesignStep";
 import BudgetStep from "./BudgetStep";
 import CostBreakdownStep from "./CostBreakdownStep";
+import ProjectRisksStep from "./ProjectRisksStep";
 import CalculationLogicStep from "./CalculationLogicStep";
 import Summary from "./Summary";
 import AuthGate from "./AuthGate";
@@ -32,11 +33,12 @@ export default function EstimatorApp() {
     { key: "design", label: "Проектирование", icon: Ruler },
     { key: "budget", label: "Бюджет", icon: Wallet },
     { key: "breakdown", label: "Стоимость проекта", icon: PieChart },
+    { key: "risks", label: "AI-риски проекта", icon: ShieldAlert },
     { key: "logic", label: "Логика расчета", icon: FileText },
   ];
 
   const currentVideoUrl = useMemo(() => BACKGROUND_VIDEO_URLS[Math.min(videoIndex, BACKGROUND_VIDEO_URLS.length - 1)], [videoIndex]);
-  const hideSummary = vm.step === 5;
+  const hideSummary = vm.step >= 5;
 
   useEffect(() => {
     setVideoReady(false);
@@ -122,7 +124,8 @@ export default function EstimatorApp() {
         {vm.step === 2 ? <ProjectDesignStep {...vm} /> : null}
         {vm.step === 3 ? <BudgetStep {...vm} /> : null}
         {vm.step === 4 ? <CostBreakdownStep systemResults={vm.systemResults} totals={vm.totals} /> : null}
-        {vm.step === 5 ? <CalculationLogicStep {...vm} /> : null}
+        {vm.step === 5 ? <ProjectRisksStep projectRisks={vm.projectRisks} /> : null}
+        {vm.step === 6 ? <CalculationLogicStep {...vm} /> : null}
 
         {!hideSummary ? <Summary totals={vm.totals} systemResults={vm.systemResults} objectData={vm.objectData} /> : null}
       </div>

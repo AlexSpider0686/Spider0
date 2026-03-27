@@ -392,6 +392,15 @@ function buildUnifiedSpecificationRows(systemResults = [], apsProjectExports = [
   return rows;
 }
 
+function buildProjectRiskRows(projectRisks = []) {
+  return (Array.isArray(projectRisks) ? projectRisks : []).map((risk, index) => [
+    `${index + 1}. ${sanitizeText(risk?.title || "Риск проекта")}`,
+    sanitizeText(risk?.severity === "high" ? "Критичный" : "Повышенный"),
+    shortenText(risk?.summary || "—", 120),
+    shortenText(risk?.impact || "—", 140),
+  ]);
+}
+
 function buildTimeline(systemResults, objectData, totals) {
   const systemsCount = Math.max(systemResults.length, 1);
   const area = safeNum(objectData?.totalArea, 0);
@@ -517,12 +526,13 @@ function addGanttSlide(slide, systemResults, objectData, totals) {
   );
 }
 
-export async function exportEstimatePptx({ objectData, budget, systemResults, totals, apsProjectExports = [] }) {
+export async function exportEstimatePptx({ objectData, budget, systemResults, totals, apsProjectExports = [], projectRisks = [] }) {
   const safeObject = objectData || {};
   const safeBudget = budget || {};
   const safeSystems = Array.isArray(systemResults) ? systemResults : [];
   const safeTotals = totals || {};
   const safeApsProjects = Array.isArray(apsProjectExports) ? apsProjectExports : [];
+  const safeProjectRisks = Array.isArray(projectRisks) ? projectRisks : [];
 
   const pptx = new PptxGenJS();
   pptx.layout = "LAYOUT_WIDE";
@@ -760,12 +770,34 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
     });
   });
 
+  const riskRows = buildProjectRiskRows(safeProjectRisks);
+  const riskSlide = pptx.addSlide();
+  addSlideFrame(
+    riskSlide,
+    "AI-риски проекта",
+    "До пяти самых критичных индивидуальных рисков по текущему объекту: монтаж, спецификация, закупка, координация и сроки.",
+    5 + specificationChunks.length
+  );
+  drawTable(riskSlide, {
+    x: 0.55,
+    y: 1.2,
+    w: 12.2,
+    headers: ["Риск", "Уровень", "Почему модуль его выделил", "Что это означает для проекта"],
+    widths: [0.24, 0.1, 0.31, 0.35],
+    rows: riskRows.length
+      ? riskRows
+      : [["AI-риски проекта", "Низкий", "На текущем наборе данных модуль не видит выраженных критичных рисков.", "Список обновляется автоматически при любом изменении объекта, систем, обследования и цен."]],
+    maxRows: 5,
+    rowH: 0.9,
+    fontSize: 9,
+  });
+
   const slide6 = pptx.addSlide();
   addSlideFrame(
     slide6,
     "График реализации проекта",
     "Ориентировочные сроки проектирования, поставки, СМР, ПНР и интеграции.",
-    5 + specificationChunks.length
+    6 + specificationChunks.length
   );
   addGanttSlide(slide6, safeSystems, safeObject, safeTotals);
 
