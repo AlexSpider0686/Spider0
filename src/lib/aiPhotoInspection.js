@@ -241,6 +241,20 @@ function inferEvacuationPlan(tokens, meta) {
   return (middle.edgeDensity > 0.16 && middle.contrast > 34 && top.brightness > 150) || (meta.width > 1200 && meta.height > 800);
 }
 
+function looksLikeDocumentOrPlan(meta) {
+  const middle = meta?.features?.middleRegion;
+  const top = meta?.features?.topRegion;
+  if (!middle || !top) return false;
+  return middle.edgeDensity > 0.16 && middle.contrast > 34 && top.brightness > 145;
+}
+
+function looksLikeRealSurfaceShot(meta) {
+  const wall = meta?.features?.wallRegion;
+  const ceiling = meta?.features?.topRegion;
+  if (!wall || !ceiling) return false;
+  return wall.edgeDensity < 0.2 || wall.saturation > 0.06 || ceiling.contrast < 40;
+}
+
 function summarizeConfidence(primary, fallbackType) {
   if (primary) return 0.86;
   if (fallbackType === "Смешанный") return 0.48;
@@ -254,7 +268,17 @@ async function executeAnalysis({ file, prompt }) {
 
   if (prompt?.type === "evacuation_plan") {
     const planDetected = inferEvacuationPlan(tokens, meta);
+    if (!planDetected) {
+      return {
+        accepted: false,
+        confidence: 0.22,
+        summary: "Загруженное фото не похоже на план эвакуации или схему маршрутов. Данные не приняты в чек-лист.",
+        detections: ["Фото не соответствует требуемому типу: нужен план эвакуации"],
+        suggestedAnswers: [],
+      };
+    }
     return {
+      accepted: true,
       confidence: planDetected ? 0.84 : 0.42,
       summary: planDetected
         ? "Обнаружены признаки плана эвакуации или маршрутной схемы."
@@ -268,6 +292,16 @@ async function executeAnalysis({ file, prompt }) {
   }
 
   if (prompt?.type === "surface_scan") {
+    if (looksLikeDocumentOrPlan(meta) && !looksLikeRealSurfaceShot(meta)) {
+      return {
+        accepted: false,
+        confidence: 0.24,
+        summary: "Загруженное фото похоже на документ, схему или план, а здесь нужен снимок реальной стены и потолка. Данные не приняты в чек-лист.",
+        detections: ["Фото не соответствует требуемому типу: нужен фрагмент конструкций на объекте"],
+        suggestedAnswers: [],
+      };
+    }
+
     const wallByTokens = inferWallMaterialByTokens(tokens);
     const ceilingByTokens = inferCeilingTypeByTokens(tokens);
     const wallMaterial = wallByTokens || inferWallMaterialByFeatures(meta.features);
@@ -278,6 +312,7 @@ async function executeAnalysis({ file, prompt }) {
     );
 
     return {
+      accepted: true,
       confidence,
       summary: `Определены вероятные типы конструкций: стены — ${wallMaterial}, потолок — ${ceilingType}.`,
       detections: [
@@ -299,6 +334,7 @@ async function executeAnalysis({ file, prompt }) {
   }
 
   return {
+    accepted: false,
     confidence: 0.35,
     summary: "AI-анализ не смог извлечь полезные признаки из фото.",
     detections: ["Нет уверенных признаков"],

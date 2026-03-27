@@ -627,90 +627,92 @@ export default function ObjectStep({
               </button>
             </div>
 
-            <div className="ai-checklist-sections">
-              {(aiSurveyPlan?.sections || []).map((section) => (
-                <div className="calc-explain ai-checklist-section" key={section.id}>
-                  <div className="ai-checklist-section__head">
-                    <div>
-                      <h4>{section.title}</h4>
-                      <p className="hint-inline">{section.description}</p>
+            <div className="ai-survey-modal__body">
+              <div className="ai-checklist-sections">
+                {(aiSurveyPlan?.sections || []).map((section) => (
+                  <div className="calc-explain ai-checklist-section" key={section.id}>
+                    <div className="ai-checklist-section__head">
+                      <div>
+                        <h4>{section.title}</h4>
+                        <p className="hint-inline">{section.description}</p>
+                      </div>
+                      <span className="pricing-source-chip muted">{section.questions.length} вопросов</span>
                     </div>
-                    <span className="pricing-source-chip muted">{section.questions.length} вопросов</span>
-                  </div>
 
-                  <div className="ai-checklist-grid">
-                    {section.questions.map((question) => (
-                      <div className="input-card ai-checklist-question" key={question.id}>
-                        <label>
-                          {question.label}
-                          {question.aiAutofill ? <span className="ai-inline-mark">AI</span> : null}
-                        </label>
-                        {renderChecklistInput(question, technicalSolution?.answers?.[question.id], (value) =>
-                          updateAiSurveyAnswer(question.id, value)
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {(aiSurveyPlan?.photoPrompts || []).length ? (
-              <div className="calc-explain ai-photo-prompt-block">
-                <h4>Интеллектуальная фотофиксация</h4>
-                <p className="hint-inline">
-                  AI-подсказки формируются по зонам. Загрузите фото плана или поверхностей, и система попытается автоматически заполнить связанные пункты чек-листа.
-                </p>
-                <div className="ai-photo-prompt-grid">
-                  {aiSurveyPlan.photoPrompts.map((prompt) => {
-                    const analysis = technicalSolution?.photoAnalyses?.[prompt.id];
-                    return (
-                      <div className="ai-photo-card" key={prompt.id}>
-                        <div className="ai-photo-card__head">
-                          <div>
-                            <strong>{prompt.title}</strong>
-                            <span>{prompt.hint}</span>
-                          </div>
-                          <label className="ghost-btn file-upload-btn" htmlFor={`ai-photo-${prompt.id}`}>
-                            <Camera size={14} /> Загрузить фото
+                    <div className="ai-checklist-grid">
+                      {section.questions.map((question) => (
+                        <div className="input-card ai-checklist-question" key={question.id}>
+                          <label>
+                            {question.label}
+                            {question.aiAutofill ? <span className="ai-inline-mark">AI</span> : null}
                           </label>
-                          <input
-                            id={`ai-photo-${prompt.id}`}
-                            className="file-upload-input"
-                            type="file"
-                            accept="image/*"
-                            onChange={async (event) => {
-                              const file = event.target.files?.[0];
-                              if (!file) return;
-                              try {
-                                await analyzeAiSurveyPhoto(prompt, file);
-                              } catch {
-                              } finally {
-                                event.target.value = "";
-                              }
-                            }}
-                          />
+                          {renderChecklistInput(question, technicalSolution?.answers?.[question.id], (value) =>
+                            updateAiSurveyAnswer(question.id, value)
+                          )}
                         </div>
-
-                        <div className={`address-status ${analysis?.state === "success" ? "success" : analysis?.state === "error" ? "error" : ""}`}>
-                          {analysis?.summary || "Пока фото не загружено. Используйте подсказку справа, чтобы заполнить AI-поля быстрее."}
-                        </div>
-
-                        {analysis?.detections?.length ? (
-                          <div className="ai-detection-list">
-                            {analysis.detections.map((item) => (
-                              <span className="pricing-source-chip ok" key={`${prompt.id}-${item}`}>
-                                {item}
-                              </span>
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
-            ) : null}
+
+              {(aiSurveyPlan?.photoPrompts || []).length ? (
+                <div className="calc-explain ai-photo-prompt-block">
+                  <h4>Интеллектуальная фотофиксация</h4>
+                  <p className="hint-inline">
+                    AI-подсказки формируются по зонам. Если загруженное фото не соответствует требуемому типу снимка, модуль отклоняет его и не вносит ложные данные в чек-лист.
+                  </p>
+                  <div className="ai-photo-prompt-grid">
+                    {aiSurveyPlan.photoPrompts.map((prompt) => {
+                      const analysis = technicalSolution?.photoAnalyses?.[prompt.id];
+                      return (
+                        <div className="ai-photo-card" key={prompt.id}>
+                          <div className="ai-photo-card__head">
+                            <div>
+                              <strong>{prompt.title}</strong>
+                              <span>{prompt.hint}</span>
+                            </div>
+                            <label className="ghost-btn file-upload-btn" htmlFor={`ai-photo-${prompt.id}`}>
+                              <Camera size={14} /> Загрузить фото
+                            </label>
+                            <input
+                              id={`ai-photo-${prompt.id}`}
+                              className="file-upload-input"
+                              type="file"
+                              accept="image/*"
+                              onChange={async (event) => {
+                                const file = event.target.files?.[0];
+                                if (!file) return;
+                                try {
+                                  await analyzeAiSurveyPhoto(prompt, file);
+                                } catch {
+                                } finally {
+                                  event.target.value = "";
+                                }
+                              }}
+                            />
+                          </div>
+
+                          <div className={`address-status ${analysis?.state === "success" ? "success" : analysis?.state === "error" ? "error" : ""}`}>
+                            {analysis?.summary || "Пока фото не загружено. Используйте подсказку справа, чтобы заполнить AI-поля быстрее."}
+                          </div>
+
+                          {analysis?.detections?.length ? (
+                            <div className="ai-detection-list">
+                              {analysis.detections.map((item) => (
+                                <span className={`pricing-source-chip ${analysis?.accepted === false ? "warn" : "ok"}`} key={`${prompt.id}-${item}`}>
+                                  {item}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+            </div>
 
             <div className="ai-survey-modal__footer">
               <div className="hint-inline">

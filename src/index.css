@@ -300,7 +300,9 @@ select {
   z-index: 1;
   width: min(1120px, 96vw);
   max-height: calc(100vh - 40px);
-  overflow: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   border-radius: 18px;
   padding: 18px;
   border: 1px solid rgba(141, 163, 196, 0.38);
@@ -330,18 +332,22 @@ select {
   white-space: nowrap;
 }
 
+.ai-survey-modal__body {
+  overflow: auto;
+  padding-right: 4px;
+}
+
 .ai-survey-modal__footer {
-  position: sticky;
-  bottom: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   margin-top: 16px;
   padding-top: 14px;
-  padding-bottom: 4px;
-  background: linear-gradient(180deg, rgba(240, 247, 255, 0), rgba(240, 247, 255, 0.96) 32%);
+  padding-bottom: 2px;
+  background: rgba(240, 247, 255, 0.98);
   border-top: 1px solid rgba(141, 163, 196, 0.24);
+  flex: 0 0 auto;
 }
 
 .ai-survey-modal__footer .hint-inline {

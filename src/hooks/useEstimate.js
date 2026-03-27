@@ -635,8 +635,10 @@ export default function useEstimate() {
 
       setTechnicalSolution((prev) => {
         const nextAnswers = { ...prev.answers };
-        for (const suggestion of result?.suggestedAnswers || []) {
-          nextAnswers[suggestion.questionId] = suggestion.value;
+        if (result?.accepted !== false) {
+          for (const suggestion of result?.suggestedAnswers || []) {
+            nextAnswers[suggestion.questionId] = suggestion.value;
+          }
         }
 
         return {
@@ -645,12 +647,13 @@ export default function useEstimate() {
           photoAnalyses: {
             ...prev.photoAnalyses,
             [prompt.id]: {
-              state: "success",
+              state: result?.accepted === false ? "error" : "success",
               fileName: file.name,
               summary: result.summary,
               confidence: result.confidence,
               detections: result.detections || [],
               suggestedAnswers: result.suggestedAnswers || [],
+              accepted: result?.accepted !== false,
             },
           },
         };
