@@ -1,6 +1,6 @@
 const fallbackTimestamp = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
 
-export const APP_VERSION = "1.0.4";
+export const APP_VERSION = "1.0.5";
 
 const defaultSystem = `local.system.${fallbackTimestamp}`;
 const defaultSite = `local.site.${fallbackTimestamp}`;
