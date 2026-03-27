@@ -1,12 +1,12 @@
-name: spider0
-
 meta:
-  toolchain: nodejs
+  environment: node
+  toolchain:
+    name: browser
+    version: 18
 
-services:
-  - name: web
-    type: nodejs
-    build:
-      command: npm install && npm run build
-    start:
-      command: npm run start
+build:
+  command: npm install && npm run build
+
+run:
+  command: npm run start
+  containerPort: 3000
