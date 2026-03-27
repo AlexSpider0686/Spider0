@@ -150,6 +150,29 @@ const coefficientGroups = [
   },
 ];
 
+const aiCapabilities = [
+  {
+    title: "AI-распознавание проектной документации",
+    text: "Нейросетевой модуль извлекает из PDF-спецификаций наименование, марку/модель, единицу измерения и количество, после чего передает позиции в расчетный контур.",
+  },
+  {
+    title: "Проверка качества распознавания",
+    text: "Нейросеть разделяет слипшиеся строки, выявляет конфликтные позиции и формирует список строк, которые требуют ручной проверки инженером.",
+  },
+  {
+    title: "AI-анализ рынка цен",
+    text: "По распознанным позициям автоматически запускается опрос сайтов поставщиков и сайта производителя выбранного вендора, затем выбирается итоговая расчетная цена.",
+  },
+];
+
+const aiFlowSteps = [
+  "1. Загрузка PDF и выделение блоков спецификации.",
+  "2. Распознавание строк: наименование, марка/модель, ед. изм., количество.",
+  "3. Проверка единиц измерения и выявление конфликтов проект ↔ поставщик.",
+  "4. Поиск цены по поставщикам и по сайту производителя выбранного вендора.",
+  "5. Пересчет стоимости оборудования, материалов, работ и итогового бюджета.",
+];
+
 export function HomePage() {
   const [authOpen, setAuthOpen] = useState(false);
 
@@ -230,7 +253,7 @@ export function HomePage() {
             сформировать предварительный бюджет и коммерческую рамку проекта.
           </SectionHeader>
           <div className="table-wrap">
-            <table className="positioning-table">
+            <table className="positioning-table positioning-table--large">
               <thead>
                 <tr>
                   <th>Характеристика</th>
@@ -303,6 +326,30 @@ export function HomePage() {
         </div>
       </section>
 
+      <section className="section section--dark ai-showcase" id="ai-engine">
+        <div className="container">
+          <SectionHeader eyebrow="AI-движок SmetaCore" title="Нейросеть уже встроена в платформу и работает внутри расчета">
+            AI-модуль анализирует проектную документацию, собирает структуру спецификации, проверяет качество распознавания и передает уточненные позиции в расчет бюджета.
+          </SectionHeader>
+          <div className="ai-capability-grid">
+            {aiCapabilities.map((item) => (
+              <article className="ai-capability-card" key={item.title}>
+                <h3>{item.title}</h3>
+                <p>{item.text}</p>
+              </article>
+            ))}
+          </div>
+          <div className="ai-flow">
+            <h3>Что делает нейросеть по шагам</h3>
+            <ul>
+              {aiFlowSteps.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </section>
+
       <section className="section section--light" id="calculation-logic">
         <div className="container">
           <SectionHeader
@@ -334,6 +381,16 @@ export function HomePage() {
               </article>
             ))}
           </div>
+
+          <article className="calc-logic-card calc-logic-card--wide">
+            <h3>Роль нейросети в расчетной логике</h3>
+            <ul>
+              <li>Без загруженного проекта система считает по параметрической модели.</li>
+              <li>С загруженным PDF нейросеть распознает спецификацию и подменяет расчетные объемы фактическими позициями.</li>
+              <li>Позиции проходят проверку единиц измерения и контроль конфликтов наименования/модели.</li>
+              <li>По валидным позициям выполняется сбор цен, после чего пересчитываются оборудование, материалы, работы и итог.</li>
+            </ul>
+          </article>
 
           <div className="system-logic-grid">
             {systemLogic.map((item) => (

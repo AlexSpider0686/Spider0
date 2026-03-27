@@ -385,6 +385,12 @@ html {
   text-align: left;
 }
 
+.app-shell .positioning-table--large th,
+.app-shell .positioning-table--large td {
+  font-size: 18px;
+  line-height: 1.45;
+}
+
 .app-shell .positioning-table th {
   background: #eff6ff;
   color: #0f2438;
@@ -519,6 +525,88 @@ html {
 .app-shell .coefficient-card li {
   color: #324f6d;
   line-height: 1.45;
+}
+
+.app-shell .calc-logic-card--wide {
+  margin-bottom: 16px;
+}
+
+.app-shell .ai-showcase {
+  position: relative;
+  overflow: hidden;
+}
+
+.app-shell .ai-showcase::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 8% 10%, rgba(92, 212, 255, 0.16), transparent 34%),
+    radial-gradient(circle at 92% 20%, rgba(136, 112, 255, 0.16), transparent 30%);
+  pointer-events: none;
+}
+
+.app-shell .ai-capability-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.app-shell .ai-capability-card {
+  padding: 22px;
+  border-radius: 24px;
+  background: linear-gradient(170deg, rgba(8, 28, 44, 0.9), rgba(11, 36, 58, 0.78));
+  border: 1px solid rgba(137, 224, 255, 0.24);
+  box-shadow: 0 12px 28px rgba(1, 10, 18, 0.34);
+  transition: transform 0.24s ease, border-color 0.24s ease;
+}
+
+.app-shell .ai-capability-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(137, 224, 255, 0.5);
+}
+
+.app-shell .ai-capability-card h3 {
+  margin: 0 0 10px;
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.app-shell .ai-capability-card p {
+  margin: 0;
+  color: #d2e4f7;
+  line-height: 1.55;
+  font-size: 16px;
+}
+
+.app-shell .ai-flow {
+  position: relative;
+  z-index: 1;
+  margin-top: 18px;
+  padding: 22px;
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.app-shell .ai-flow h3 {
+  margin: 0 0 10px;
+  font-size: 24px;
+}
+
+.app-shell .ai-flow ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+}
+
+.app-shell .ai-flow li {
+  color: #d7eafc;
+  line-height: 1.55;
+  font-size: 16px;
 }
 
 .app-shell .system-logic-grid {
@@ -899,6 +987,7 @@ html {
 @media (max-width: 960px) {
   .app-shell .hero__grid,
   .app-shell .comparison-grid,
+  .app-shell .ai-capability-grid,
   .app-shell .feature-layout,
   .app-shell .footer__grid,
   .app-shell .legal-strip,

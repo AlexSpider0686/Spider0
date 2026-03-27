@@ -198,7 +198,11 @@ export default function SystemsStep({
 
                     <div className="input-card compact">
                       <label>Вендор</label>
-                      <select value={system.vendor} onChange={(event) => updateSystem(system.id, "vendor", event.target.value)}>
+                      <select
+                        value={system.vendor}
+                        onChange={(event) => updateSystem(system.id, "vendor", event.target.value)}
+                        title="Вендор влияет на ценовой профиль, коэффициенты и итог системы. Базовый вендор применяйте, если бренд еще не выбран и нужна нейтральная рыночная оценка."
+                      >
                         {vendorList.map((vendor) => (
                           <option key={vendor} value={vendor}>
                             {vendor}
