@@ -38,8 +38,54 @@ export function calculateProtectedArea(objectData = {}) {
     0.98
   );
 
+  const breakdown = [
+    {
+      key: "base",
+      label: "Базовая доля по типу объекта",
+      value: baseShare,
+      reason: "Для каждого типа объекта задан стартовый уровень покрытия типовых защищаемых зон.",
+    },
+    {
+      key: "profile",
+      label: "Поправка на инженерную насыщенность и уровень защиты",
+      value: profileAdjustment,
+      reason: "Чем выше инженерная плотность и требования к безопасности, тем выше доля защищаемой площади.",
+    },
+    {
+      key: "floors",
+      label: "Поправка на надземную этажность",
+      value: floorAdjustment,
+      reason: "С ростом этажности обычно увеличивается объем общих и транзитных зон, входящих в защиту.",
+    },
+    {
+      key: "basement",
+      label: "Поправка на подземные этажи",
+      value: basementAdjustment,
+      reason: "Подземные уровни добавляют паркинг, техпомещения и маршруты, которые тоже попадают в защиту.",
+    },
+    {
+      key: "status",
+      label: "Поправка на статус здания",
+      value: statusAdjustment,
+      reason: "Для действующего здания учитывается больше реально используемых зон и ограничений.",
+    },
+    {
+      key: "large_object",
+      label: "Поправка на масштаб объекта",
+      value: largeObjectAdjustment,
+      reason: "У крупных объектов часть площадей обычно обслуживающая, поэтому защищаемая доля немного снижается.",
+    },
+    {
+      key: "ceiling",
+      label: "Поправка на высоту помещений",
+      value: ceilingAdjustment,
+      reason: "Большая высота не всегда пропорционально увеличивает защищаемую площадь по системам.",
+    },
+  ];
+
   return {
     protectedAreaM2: Math.round(totalAreaM2 * protectionShare),
     protectionShare,
+    breakdown,
   };
 }

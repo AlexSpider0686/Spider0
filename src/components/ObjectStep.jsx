@@ -70,6 +70,7 @@ export default function ObjectStep({
   const [regionQuery, setRegionQuery] = useState(objectData.regionName || "");
   const regionItems = useMemo(() => searchRegions(regionQuery).slice(0, 20), [regionQuery]);
   const selectedObjectType = OBJECT_TYPES.find((item) => item.value === objectData.objectType);
+
   return (
     <section className="panel">
       <div className="panel-header">
@@ -84,6 +85,7 @@ export default function ObjectStep({
           <label>Название проекта</label>
           <input value={objectData.projectName} onChange={(event) => updateObject("projectName", event.target.value)} />
         </div>
+
         <div className="input-card">
           <label>Тип объекта</label>
           <div className="object-type-wrap">
@@ -144,38 +146,37 @@ export default function ObjectStep({
 
         <div className="input-card">
           <div className="label-with-tooltip">
-            <label htmlFor="protected-zone-area">Защищаемая площадь зон, м²</label>
+            <label htmlFor="protected-zone-area">Защищаемая площадь, м²</label>
             <span
               className="label-tooltip-help"
               tabIndex={0}
               role="button"
-              title="Пояснение к защищаемой площади зон"
-              aria-label="Пояснение к защищаемой площади зон"
+              title="Логика расчета защищаемой площади"
+              aria-label="Логика расчета защищаемой площади"
             >
               ?
             </span>
             <div className="label-tooltip-popover" role="tooltip">
               <p>
-                <strong>Площадь по объекту</strong> - вся площадь здания или комплекса, даже если часть помещений не оснащается
-                системами.
+                <strong>Итог:</strong> защищаемая площадь = площадь объекта x {num((protectedAreaMeta?.protectionShare || 0) * 100, 1)}%.
               </p>
-              <p>
-                <strong>Защищаемая площадь зон</strong> - сумма только тех зон, где реально размещаются и рассчитываются средства
-                безопасности.
-              </p>
+              {(protectedAreaMeta?.breakdown || []).map((item) => (
+                <p key={item.key}>
+                  <strong>{item.label}:</strong> {item.value >= 0 ? "+" : ""}
+                  {num(item.value * 100, 1)}%. {item.reason}
+                </p>
+              ))}
             </div>
           </div>
           <input id="protected-zone-area" type="number" value={recalculatedArea} readOnly />
-          <small className="hint-inline">
-            Поле рассчитывается автоматически по параметрам объекта.
-            {protectedAreaMeta?.protectionShare ? ` Итог: ${num(protectedAreaMeta.protectionShare * 100, 1)}% от площади объекта.` : ""}
-          </small>
+          <small className="hint-inline">Поле рассчитывается автоматически по параметрам объекта.</small>
         </div>
 
         <div className="input-card">
           <label>Надземные этажи</label>
           <input type="number" value={objectData.floors} onChange={(event) => updateObject("floors", toNumber(event.target.value))} />
         </div>
+
         <div className="input-card">
           <label>Подземные этажи</label>
           <input
@@ -184,6 +185,7 @@ export default function ObjectStep({
             onChange={(event) => updateObject("basementFloors", toNumber(event.target.value))}
           />
         </div>
+
         <div className="input-card">
           <label>Статус здания</label>
           <select value={objectData.buildingStatus || "operational"} onChange={(event) => updateObject("buildingStatus", event.target.value)}>
@@ -356,6 +358,7 @@ export default function ObjectStep({
             {!zoneDistribution.isValid ? <span className="warn-inline"> Проверь распределение (должно быть 100%).</span> : null}
           </div>
         </div>
+
         {inputValidation?.errors?.length ? (
           <div className="warn-inline" style={{ display: "block", marginTop: 12 }}>
             {inputValidation.errors.join(" ")}
