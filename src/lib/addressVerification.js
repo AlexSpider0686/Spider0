@@ -70,35 +70,6 @@ function buildVerifiedLabel(item) {
   return parts.join(", ") || item?.display_name || "";
 }
 
-function tokenizeAddress(value) {
-  return normalizeName(value)
-    .split(/[^a-zа-я0-9]+/i)
-    .map((item) => item.trim())
-    .filter((item) => item.length >= 3);
-}
-
-function isStrictPhotoMatch(page, addressCandidate) {
-  const road = normalizeName(addressCandidate?.address?.road || "");
-  const houseNumber = normalizeName(addressCandidate?.address?.house_number || "");
-  const city = normalizeName(addressCandidate?.address?.city || addressCandidate?.address?.town || addressCandidate?.address?.village || "");
-  const title = normalizeName(page?.title || "");
-  const description = normalizeName(page?.description || "");
-  const haystack = `${title} ${description}`.trim();
-
-  if (!haystack) return false;
-
-  const hasRoad = road && haystack.includes(road);
-  const hasHouse = houseNumber && haystack.includes(houseNumber);
-  const hasCity = city && haystack.includes(city);
-
-  if (hasRoad && hasHouse) return true;
-  if (hasRoad && hasCity && houseNumber && title.includes(houseNumber)) return true;
-
-  const addressTokens = tokenizeAddress(buildVerifiedLabel(addressCandidate)).slice(0, 5);
-  const matchedTokens = addressTokens.filter((token) => haystack.includes(token));
-  return matchedTokens.length >= 3;
-}
-
 async function fetchJson(url, message) {
   const response = await fetch(url, {
     method: "GET",
@@ -114,44 +85,7 @@ async function fetchJson(url, message) {
   return response.json();
 }
 
-async function resolveNearbyPhoto(lat, lon, addressCandidate) {
-  const radius = 1200;
-  const limit = 10;
-  const query = new URLSearchParams({
-    action: "query",
-    generator: "geosearch",
-    ggscoord: `${lat}|${lon}`,
-    ggsradius: String(radius),
-    ggslimit: String(limit),
-    prop: "pageimages|description|coordinates",
-    piprop: "thumbnail",
-    pithumbsize: "900",
-    format: "json",
-    origin: "*",
-  });
-
-  const endpoints = [
-    `https://ru.wikipedia.org/w/api.php?${query.toString()}`,
-    `https://commons.wikimedia.org/w/api.php?${query.toString()}`,
-  ];
-
-  for (const endpoint of endpoints) {
-    try {
-      const payload = await fetchJson(endpoint, "Не удалось получить визуальное подтверждение адреса.");
-      const pages = Object.values(payload?.query?.pages || {});
-      const withThumbnail = pages.find((page) => page?.thumbnail?.source && isStrictPhotoMatch(page, addressCandidate));
-      if (withThumbnail) {
-        return {
-          imageUrl: withThumbnail.thumbnail.source,
-          title: withThumbnail.title || "Фото рядом с адресом",
-          source: endpoint.includes("commons") ? "Wikimedia Commons" : "Wikipedia",
-        };
-      }
-    } catch {
-      // Continue to next endpoint.
-    }
-  }
-
+async function resolveNearbyPhoto(lat, lon) {
   return {
     imageUrl: `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lon}&zoom=17&size=720x420&markers=${lat},${lon},red-pushpin`,
     title: "Карта проверенного адреса",
@@ -203,7 +137,7 @@ export async function verifyObjectAddress(addressLine) {
   const longitude = Number(bestResult.lon);
   const district = buildDistrictLabel(bestResult.address);
   const matchedRegion = findRegionByStateName(bestResult.address?.state);
-  const preview = await resolveNearbyPhoto(latitude, longitude, bestResult);
+  const preview = await resolveNearbyPhoto(latitude, longitude);
 
   return {
     query: normalizedQuery,
