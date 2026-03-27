@@ -38,6 +38,9 @@ function buildFallbackSecret() {
     process.env.VERCEL_PROJECT_PRODUCTION_URL || "",
     process.env.VERCEL_GIT_COMMIT_SHA || "",
     process.env.VERCEL_URL || "",
+    process.env.AMVERA_PROJECT_DOMAIN || "",
+    process.env.AMVERA_BRANCH || "",
+    process.env.HOSTNAME || "",
   ]
     .filter(Boolean)
     .join(":");
