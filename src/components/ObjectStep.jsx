@@ -158,6 +158,10 @@ export default function ObjectStep({
     if (applied) setSurveyModalOpen(false);
   };
 
+  const handleSurveyModalClose = () => {
+    setSurveyModalOpen(false);
+  };
+
   return (
     <section className="panel">
       <div className="panel-header">
@@ -613,8 +617,12 @@ export default function ObjectStep({
 
       {surveyModalOpen ? (
         <div className="ai-survey-modal" role="dialog" aria-modal="true" aria-label="AI-обследование объекта">
-          <div className="ai-survey-modal__backdrop" onClick={() => setSurveyModalOpen(false)} />
-          <div className="ai-survey-modal__card">
+          <div className="ai-survey-modal__backdrop" />
+          <div
+            className="ai-survey-modal__card"
+            onClick={(event) => event.stopPropagation()}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
             <div className="ai-survey-modal__header">
               <div>
                 <h3>AI-Обследование объекта</h3>
@@ -622,7 +630,7 @@ export default function ObjectStep({
                   Отдельное внутреннее окно обследования. Данные внутри него сохраняются в течение текущей сессии платформы, даже если вы закроете окно и откроете его снова.
                 </p>
               </div>
-              <button className="ghost-btn ai-survey-modal__close" type="button" onClick={() => setSurveyModalOpen(false)}>
+              <button className="ghost-btn ai-survey-modal__close" type="button" onClick={handleSurveyModalClose}>
                 <X size={16} /> Закрыть
               </button>
             </div>
@@ -696,6 +704,10 @@ export default function ObjectStep({
                           <div className={`address-status ${analysis?.state === "success" ? "success" : analysis?.state === "error" ? "error" : ""}`}>
                             {analysis?.summary || "Пока фото не загружено. Используйте подсказку справа, чтобы заполнить AI-поля быстрее."}
                           </div>
+
+                          {analysis?.state === "loading" ? (
+                            <div className="hint-inline ai-photo-card__loading">РРґРµС‚ AI-Р°РЅР°Р»РёР· С„РѕС‚Рѕ. РћРєРЅРѕ РѕР±СЃР»РµРґРѕРІР°РЅРёСЏ РѕСЃС‚Р°РµС‚СЃСЏ РѕС‚РєСЂС‹С‚С‹Рј, Р° РІРІРµРґРµРЅРЅС‹Рµ РѕС‚РІРµС‚С‹ РЅРµ С‚РµСЂСЏСЋС‚СЃСЏ.</div>
+                          ) : null}
 
                           {analysis?.detections?.length ? (
                             <div className="ai-detection-list">

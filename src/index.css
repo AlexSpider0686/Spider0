@@ -293,6 +293,7 @@ select {
   position: absolute;
   inset: 0;
   background: rgba(217, 229, 246, 0.72);
+  pointer-events: none;
 }
 
 .ai-survey-modal__card {
@@ -352,6 +353,12 @@ select {
 
 .ai-survey-modal__footer .hint-inline {
   max-width: 720px;
+}
+
+.ai-photo-card__loading {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
 }
 
 @keyframes sky-pan {
