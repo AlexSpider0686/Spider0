@@ -961,7 +961,6 @@ html {
     #07111c;
   color: #eff6ff;
   position: relative;
-  overflow: hidden;
 }
 
 .app-shell .about-system-hero {
@@ -1048,6 +1047,8 @@ html {
 .app-shell .about-system-toc {
   position: sticky;
   top: 24px;
+  align-self: start;
+  height: fit-content;
 }
 
 .app-shell .about-system-toc__card,
