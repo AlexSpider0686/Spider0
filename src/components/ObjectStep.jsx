@@ -98,28 +98,12 @@ export default function ObjectStep({
               onChange={(event) => updateObject("address", event.target.value)}
             />
           </div>
-          <div className="input-card nested-input-card">
-            <label>Название объекта / арендатора</label>
-            <input
-              type="text"
-              value={objectData.objectLabel || ""}
-              placeholder="Например: Сбер, БЦ Романов двор, ЖК ..."
-              onChange={(event) => updateObject("objectLabel", event.target.value)}
-            />
-          </div>
           <div className="address-actions">
             <button className="primary-btn" type="button" onClick={verifyObjectAddress} disabled={addressVerification?.state === "loading"}>
               {addressVerification?.state === "loading" ? "Проверка адреса..." : "Проверить адрес"}
             </button>
             <small className="hint-inline">
-              Алгоритм нормализует адрес, ищет его онлайн, подтверждает регион и при наличии названия объекта ищет фото по связке
-              адреса и бренда.
-            </small>
-            {!String(objectData.objectLabel || "").trim() ? (
-              <small className="warn-inline">Чтобы найти фото именно здания, заполните поле "Название объекта / арендатора".</small>
-            ) : null}
-            <small className="hint-inline">
-              Если открытые источники не дают надёжного совпадения, система специально оставляет карту точки, а не показывает чужое здание.
+              Можно вводить адрес в свободной форме. Алгоритм найдёт его онлайн и приведёт к корректной записи.
             </small>
           </div>
           <div
@@ -131,25 +115,13 @@ export default function ObjectStep({
           </div>
           {addressVerification?.result ? (
             <div className="verified-address-card">
-              <img
-                className="verified-address-card__media"
-                src={addressVerification.result.preview?.imageUrl}
-                alt={addressVerification.result.preview?.title || "Визуальное подтверждение адреса"}
-                loading="lazy"
-              />
               <div className="verified-address-card__body">
                 <strong>{addressVerification.result.verifiedLabel}</strong>
                 <span>
                   Район: {addressVerification.result.district || "не определён"} | Регион:{" "}
                   {addressVerification.result.regionName || objectData.regionName}
                 </span>
-                {objectData.objectLabel ? <span>Контекст поиска: {objectData.objectLabel}</span> : null}
-                <span>
-                  Источник подтверждения: {addressVerification.result.preview?.source}
-                  {addressVerification.result.preview?.isMapFallback
-                    ? " (карта по проверенной точке, без риска показать чужое здание)"
-                    : " (изображение найдено по связке адреса и названия объекта)"}
-                </span>
+                <span>Нормализованный адрес подставлен в поле выше и используется в дальнейших расчётах.</span>
               </div>
             </div>
           ) : null}

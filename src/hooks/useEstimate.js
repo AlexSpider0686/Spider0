@@ -18,22 +18,11 @@ function removeById(mapObject, id) {
   return next;
 }
 
-function resolveObjectSearchLabel(objectData = {}) {
-  const objectLabel = String(objectData.objectLabel || "").trim();
-  if (objectLabel) return objectLabel;
-
-  const projectName = String(objectData.projectName || "").trim();
-  if (projectName && projectName !== "Объект 1") return projectName;
-
-  return "";
-}
-
 export default function useEstimate() {
   const [step, setStep] = useState(0);
   const [objectData, setObjectData] = useState({
     projectName: "Объект 1",
     address: "",
-    objectLabel: "",
     objectType: "public",
     totalArea: 15000,
     floors: 5,
@@ -97,21 +86,11 @@ export default function useEstimate() {
       );
       return;
     }
-    if (key === "objectLabel") {
-      setObjectData((prev) => ({ ...prev, objectLabel: value }));
-      setAddressVerification((prev) =>
-        prev.state === "idle" && !prev.result
-          ? { ...prev, message: "Добавьте название объекта или арендатора для более точного поиска фото." }
-          : { state: "idle", message: "Название объекта изменено. Выполните проверку адреса заново.", result: null }
-      );
-      return;
-    }
     setObjectData((prev) => ({ ...prev, [key]: value }));
   };
 
   const verifyObjectAddress = async () => {
     const currentAddress = String(objectData.address || "").trim();
-    const objectSearchLabel = resolveObjectSearchLabel(objectData);
     if (!currentAddress) {
       setAddressVerification({
         state: "error",
@@ -123,26 +102,21 @@ export default function useEstimate() {
 
     setAddressVerification({
       state: "loading",
-      message: objectSearchLabel
-        ? "Идёт онлайн-поиск адреса и поиск объекта по связке адреса и названия..."
-        : "Идёт онлайн-поиск адреса. Для поиска фото здания добавьте название объекта или арендатора.",
+      message: "Идёт онлайн-поиск и уточнение адреса...",
       result: null,
     });
 
     try {
-      const result = await verifyObjectAddressOnline(currentAddress, objectSearchLabel);
+      const result = await verifyObjectAddressOnline(currentAddress);
       setObjectData((prev) => ({
         ...prev,
+        address: result.verifiedLabel || prev.address,
         regionName: result.regionName || prev.regionName,
         regionCoef: result.regionName ? getRegionCoef(result.regionName) : prev.regionCoef,
       }));
       setAddressVerification({
         state: "success",
-        message: result.preview?.isMapFallback
-          ? objectSearchLabel
-            ? "Адрес подтверждён, но открытые источники не дали надёжного совпадения по названию объекта. Показана карта проверенной точки."
-            : "Адрес подтверждён. Для точного поиска фото здания добавьте название объекта или арендатора."
-          : "Адрес подтверждён. Фото найдено по связке адреса и названия объекта.",
+        message: "Адрес подтверждён и приведён к корректному формату.",
         result,
       });
     } catch (error) {
