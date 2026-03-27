@@ -501,6 +501,14 @@ export default function SystemsStep({
                         </div>
                       </div>
 
+                      <div className="calc-explain">
+                        <h4>Полный перечень распознанного оборудования и материалов из спецификации</h4>
+                        <p className="hint-inline">
+                          В таблице ниже выводятся все позиции, которые AI-модуль распознал по загруженной спецификации, включая
+                          оборудование, материалы, кабельные позиции и вручную добавленные строки.
+                        </p>
+                      </div>
+
                       <div className="table-wrap compact">
                         <table>
                           <thead>

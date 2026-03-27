@@ -488,7 +488,31 @@ export default function useEstimate() {
   const exportEstimate = async () => {
     try {
       const objectTypeLabel = OBJECT_TYPES.find((item) => item.value === objectData.objectType)?.label || objectData.objectType;
-      const payload = { objectData: { ...objectData, objectTypeLabel }, budget, zones, recalculatedArea, systemResults, totals };
+      const apsProjectExports = systems
+        .map((system) => {
+          const snapshot = apsProjectSnapshots?.[system.id];
+          if (!snapshot?.active) return null;
+          return {
+            systemId: system.id,
+            systemType: system.type,
+            systemName: SYSTEM_TYPES.find((item) => item.code === system.type)?.name || system.type,
+            vendor: system.vendor,
+            fileName: snapshot.fileName || "",
+            gostStandard: snapshot.gostStandard || "",
+            recognitionRate: snapshot.sourceStats?.recognitionRate || 0,
+            items: Array.isArray(snapshot.items) ? snapshot.items : [],
+          };
+        })
+        .filter(Boolean);
+      const payload = {
+        objectData: { ...objectData, objectTypeLabel },
+        budget,
+        zones,
+        recalculatedArea,
+        systemResults,
+        totals,
+        apsProjectExports,
+      };
       const { exportEstimatePptx } = await import("../lib/pptxExport");
       await exportEstimatePptx(payload);
     } catch (error) {

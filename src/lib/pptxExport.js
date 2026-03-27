@@ -213,6 +213,15 @@ function drawTable(slide, options) {
   });
 }
 
+function chunkArray(list = [], chunkSize = 10) {
+  const normalizedSize = Math.max(Math.floor(safeNum(chunkSize, 1)), 1);
+  const chunks = [];
+  for (let index = 0; index < list.length; index += normalizedSize) {
+    chunks.push(list.slice(index, index + normalizedSize));
+  }
+  return chunks;
+}
+
 function buildEquipmentRegistryRows(systemResults = []) {
   const rows = [];
 
@@ -257,6 +266,43 @@ function buildEquipmentRegistryRows(systemResults = []) {
         rub(unitPrice),
         rub(total),
         shortenText(sourceLink || "нет ссылки", 72),
+      ]);
+    }
+  }
+
+  return rows;
+}
+
+function buildRecognizedSpecRows(apsProjectExports = []) {
+  const rows = [];
+
+  for (const project of apsProjectExports) {
+    const systemName = sanitizeText(project?.systemName || project?.systemType || "—");
+    const fileName = sanitizeText(project?.fileName || "PDF-спецификация");
+    const items = Array.isArray(project?.items) ? project.items : [];
+
+    if (!items.length) {
+      rows.push([systemName, fileName, "—", "Нет распознанных позиций", "—", "—", "—"]);
+      continue;
+    }
+
+    for (const item of items) {
+      const itemName = sanitizeText(item?.name || "—");
+      const itemModel = sanitizeText(item?.model || item?.brand || "");
+      const fullName = itemModel ? `${itemName} (${itemModel})` : itemName;
+      const qty = safeNum(item?.qty, 0);
+      const unit = sanitizeText(item?.unit || "");
+      const unitPrice = safeNum(item?.unitPrice, 0);
+      const total = safeNum(item?.total, qty * unitPrice);
+      const position = sanitizeText(item?.position || "—");
+      rows.push([
+        systemName,
+        shortenText(fileName, 28),
+        position,
+        shortenText(fullName, 46),
+        `${num(qty, 0)} ${unit}`.trim(),
+        rub(unitPrice),
+        rub(total),
       ]);
     }
   }
@@ -389,11 +435,12 @@ function addGanttSlide(slide, systemResults, objectData, totals) {
   );
 }
 
-export async function exportEstimatePptx({ objectData, budget, systemResults, totals }) {
+export async function exportEstimatePptx({ objectData, budget, systemResults, totals, apsProjectExports = [] }) {
   const safeObject = objectData || {};
   const safeBudget = budget || {};
   const safeSystems = Array.isArray(systemResults) ? systemResults : [];
   const safeTotals = totals || {};
+  const safeApsProjects = Array.isArray(apsProjectExports) ? apsProjectExports : [];
 
   const pptx = new PptxGenJS();
   pptx.layout = "LAYOUT_WIDE";
@@ -624,12 +671,39 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
     fontSize: 8,
   });
 
+  const recognizedSpecRows = buildRecognizedSpecRows(safeApsProjects);
+  const recognizedSpecChunks = chunkArray(recognizedSpecRows, 12);
+
+  if (recognizedSpecChunks.length) {
+    recognizedSpecChunks.forEach((rowsChunk, chunkIndex) => {
+      const slide = pptx.addSlide();
+      const titleSuffix = recognizedSpecChunks.length > 1 ? ` (${chunkIndex + 1}/${recognizedSpecChunks.length})` : "";
+      addSlideFrame(
+        slide,
+        `Распознанная спецификация APS${titleSuffix}`,
+        "Полный перечень оборудования и материалов, распознанных по загруженной PDF-спецификации.",
+        6 + chunkIndex
+      );
+      drawTable(slide, {
+        x: 0.55,
+        y: 1.2,
+        w: 12.2,
+        headers: ["Система", "Файл", "Позиция", "Наименование", "Кол-во", "Цена за ед.", "Сумма"],
+        widths: [0.14, 0.14, 0.08, 0.32, 0.1, 0.1, 0.12],
+        rows: rowsChunk,
+        maxRows: 12,
+        rowH: 0.45,
+        fontSize: 8,
+      });
+    });
+  }
+
   const slide6 = pptx.addSlide();
   addSlideFrame(
     slide6,
     "График реализации проекта",
     "Ориентировочные сроки проектирования, поставки, СМР, ПНР и интеграции.",
-    6
+    6 + recognizedSpecChunks.length
   );
   addGanttSlide(slide6, safeSystems, safeObject, safeTotals);
 
