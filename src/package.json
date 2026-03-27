@@ -1,6 +1,6 @@
 {
   "name": "smeta-app",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Смета системы безопасности",
   "type": "module",
   "main": "src/App.jsx",

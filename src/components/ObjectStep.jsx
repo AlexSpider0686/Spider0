@@ -3,7 +3,7 @@ import { Plus, Trash2, Lock, Unlock, Search } from "lucide-react";
 import { OBJECT_TYPES } from "../config/estimateConfig";
 import { BUILDING_STATUS_OPTIONS } from "../config/costModelConfig";
 import { searchRegions } from "../config/regionsConfig";
-import { ZONE_PRESETS, ZONE_TYPES } from "../config/zonesConfig";
+import { ZONE_PRESET_DETAILS, ZONE_PRESETS, ZONE_TYPES } from "../config/zonesConfig";
 import { getZonePercentSum, normalizeZoneAreas } from "../lib/zoneEngine";
 import { num, toNumber } from "../lib/estimate";
 
@@ -248,7 +248,36 @@ export default function ObjectStep({
         </div>
 
         <div className="preset-row">
-          <select value={zonePreset} onChange={(event) => setZonePreset(event.target.value)}>
+          <div className="label-with-tooltip">
+            <label htmlFor="zone-preset-select">Шаблон распределения зон</label>
+            <span
+              className="label-tooltip-help"
+              tabIndex={0}
+              role="button"
+              title="Пояснение к шаблонам распределения зон"
+              aria-label="Пояснение к шаблонам распределения зон"
+            >
+              ?
+            </span>
+            <div className="label-tooltip-popover" role="tooltip">
+              <p>
+                <strong>Это меню</strong> помогает быстро выбрать типовой сценарий распределения зон по объекту, чтобы не заполнять доли вручную с нуля.
+              </p>
+              <p>
+                <strong>Для чего выбирать шаблон:</strong> система сразу подставляет ориентировочные проценты зон, которые потом можно уточнить под конкретный проект.
+              </p>
+              <p>
+                <strong>Как это влияет на расчет:</strong> состав зон меняет плотность оборудования, длину кабельных трасс, сложность монтажа и, как следствие, итоговую смету.
+              </p>
+              {Object.entries(ZONE_PRESETS).map(([key, preset]) => (
+                <p key={key}>
+                  <strong>{preset.label}</strong> - {ZONE_PRESET_DETAILS[key]?.description || "Типовой набор зон для этого сценария объекта."}{" "}
+                  {ZONE_PRESET_DETAILS[key]?.impact || ""}
+                </p>
+              ))}
+            </div>
+          </div>
+          <select id="zone-preset-select" value={zonePreset} onChange={(event) => setZonePreset(event.target.value)}>
             {Object.entries(ZONE_PRESETS).map(([key, preset]) => (
               <option key={key} value={key}>
                 {preset.label}
