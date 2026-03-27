@@ -151,11 +151,11 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
               <input type="checkbox" checked={consentChecked} onChange={(event) => setConsentChecked(event.target.checked)} disabled={busy} />
               <span>
                 Я ознакомлен(а) с{" "}
-                <Link to="/legal/user-agreement" target="_blank" rel="noreferrer">
+                <Link to="/legal/user-agreement">
                   Пользовательским соглашением
                 </Link>{" "}
                 и даю согласие на обработку персональных данных в соответствии с{" "}
-                <Link to="/legal/personal-data" target="_blank" rel="noreferrer">
+                <Link to="/legal/personal-data">
                   Политикой обработки ПДн
                 </Link>
                 .
