@@ -332,6 +332,7 @@ export function calculateSystemWithBreakdown(
     coefficientLayer: coefficients,
     designHours: quantities.designHoursBase + cableModel.cableLengthM * 0.0038,
     designComplexityFactor: objectClassification.designComplexityIndex,
+    projectMode: projectOverrides.projectMode,
     ...projectOverrides.laborOverride,
   });
 
@@ -459,6 +460,8 @@ export function calculateSystemWithBreakdown(
       workBreakdown: laborModel.workBreakdown,
       workChargesBeforeRegion: laborModel.workChargesBeforeRegion,
       workTotalBeforeRegion: laborModel.workTotalBeforeRegion,
+      marketGuard: laborModel.marketGuard,
+      neuralCheck: laborModel.neuralCheck,
     },
     designBase,
     designCharges,
@@ -549,6 +552,29 @@ export function calculateSystemWithBreakdown(
     },
   ];
 
+  const marketAndAiInsights = [
+    {
+      key: "laborMarketFloor",
+      label: "Р С‹РЅРѕС‡РЅС‹Р№ РїРѕР» РЎРњР +РџРќР ",
+      value: laborModel.marketGuard?.minBaseFactor || 1,
+      useCase: "РљРѕРЅСЃРµСЂРІР°С‚РёРІРЅР°СЏ РЅРёР¶РЅСЏСЏ РіСЂР°РЅРёС†Р° Р±Р°Р·С‹ СЂР°Р±РѕС‚ РїРѕ С‚РёРїСѓ СЃРёСЃС‚РµРјС‹ Рё СЂС‹РЅРѕС‡РЅС‹Рј РѕСЂРёРµРЅС‚РёСЂР°Рј.",
+      recommended:
+        laborModel.workBase > laborModel.workBreakdown.computedWorkBase
+          ? "Р‘Р°Р·Р° СЂР°Р±РѕС‚ РїРѕРґРЅСЏС‚Р° РґРѕ Р±РµР·РѕРїР°СЃРЅРѕРіРѕ РЅРёР¶РЅРµРіРѕ СЂС‹РЅРѕС‡РЅРѕРіРѕ РґРёР°РїР°Р·РѕРЅР°."
+          : "Р‘Р°Р·Р° СЂР°Р±РѕС‚ СѓР¶Рµ РІС‹С€Рµ РєРѕРЅСЃРµСЂРІР°С‚РёРІРЅРѕРіРѕ СЂС‹РЅРѕС‡РЅРѕРіРѕ РјРёРЅРёРјСѓРјР°.",
+    },
+    {
+      key: "laborNeuralRisk",
+      label: "AI-РїСЂРѕРІРµСЂРєР° РЅРµРґРѕРѕС†РµРЅРєРё СЂР°Р±РѕС‚",
+      value: laborModel.neuralCheck?.neuralUpliftMultiplier || 1,
+      useCase: "Р›РѕРєР°Р»СЊРЅС‹Р№ РЅРµР№СЂРѕСЃРµС‚РµРІРѕР№ risk scorer РѕС†РµРЅРёРІР°РµС‚ PDF-override, РєР°Р±РµР»СЊРЅСѓСЋ РЅР°СЃС‹С‰РµРЅРЅРѕСЃС‚СЊ, РљРќРЎ, РїР»РѕС‚РЅРѕСЃС‚СЊ СѓР·Р»РѕРІ Рё СЂРµРіРёРѕРЅ.",
+      recommended:
+        toNumber(laborModel.neuralCheck?.underestimationRisk, 0) > 0.55
+          ? "РћР±РЅР°СЂСѓР¶РµРЅ РїРѕРІС‹С€РµРЅРЅС‹Р№ СЂРёСЃРє РЅРµРґРѕРѕС†РµРЅРєРё, РїСЂРёРјРµРЅРµРЅ РєРѕРЅСЃРµСЂРІР°С‚РёРІРЅС‹Р№ uplift."
+          : "AI-РїСЂРѕРІРµСЂРєР° РЅРµ РІС‹СЏРІРёР»Р° РєСЂРёС‚РёС‡РЅРѕР№ РЅРµРґРѕРѕС†РµРЅРєРё.",
+    },
+  ];
+
   return {
     ...systemResult,
     formulaRows: [...vendorRows, ...explainability.formulaRows],
@@ -560,6 +586,7 @@ export function calculateSystemWithBreakdown(
             ? "Повышенный коэффициент оправдан для сложных и интеграционно насыщенных объектов."
             : "Коэффициент в базовом диапазоне.",
       })),
+      ...marketAndAiInsights,
       ...explainability.coefficientInsights,
     ],
     explanation: explainability.explanation,

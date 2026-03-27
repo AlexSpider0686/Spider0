@@ -73,6 +73,8 @@ function renderWorkCostPopover(result) {
   const rates = laborDetails.unitRates;
   const breakdown = laborDetails.workBreakdown;
   const charges = laborDetails.workChargesBeforeRegion || {};
+  const marketGuard = laborDetails.marketGuard || {};
+  const neuralCheck = laborDetails.neuralCheck || {};
   const regionalFactor = Math.max(toNumber(breakdown.regionalFactor, 1), 0.0001);
   const workAfterConditions = toNumber(result?.laborBase, 0) / regionalFactor;
   const chargesTotal =
@@ -87,8 +89,8 @@ function renderWorkCostPopover(result) {
       <span className="work-cost-popover__section">
         <strong>Как считается стоимость работ</strong>
         <span>
-          СМР+ПНР считаются по внутренней модели единичных расценок. Для APS с PDF база работ берется из состава проекта и его
-          трудоемкости.
+          СМР+ПНР считаются по внутренней модели единичных расценок, затем проверяются рыночным полом и AI-анализом риска
+          недооценки. Для APS с PDF итог не может быть ниже базы по единичным расценкам.
         </span>
       </span>
 
@@ -122,6 +124,10 @@ function renderWorkCostPopover(result) {
         </span>
         <span>
           Начисления: {rub(chargesTotal)}; до региона {rub(laborDetails.workTotalBeforeRegion || 0)}; регион {formatMultiplier(breakdown.regionalFactor)}.
+        </span>
+        <span>
+          Рыночный пол: {rub(marketGuard.marketFloorTotal || 0)}; AI uplift {formatMultiplier(neuralCheck.neuralUpliftMultiplier || 1)}; риск
+          недооценки {num(toNumber(neuralCheck.underestimationRisk, 0) * 100, 0)}%.
         </span>
       </span>
 

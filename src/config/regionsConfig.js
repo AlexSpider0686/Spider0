@@ -95,7 +95,7 @@ export const RF_SUBJECTS = [
 export const DEFAULT_REGION_NAME = "Москва";
 
 export function getRegionCoef(regionName) {
-  return RF_SUBJECTS.find((region) => region.name === regionName)?.coef || 1;
+  return Math.max(RF_SUBJECTS.find((region) => region.name === regionName)?.coef || 1, 1);
 }
 
 export function searchRegions(query) {

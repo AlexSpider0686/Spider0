@@ -8,7 +8,7 @@ function clamp(value, min, max) {
 export function resolveRegionalCoefficient({ regionSubject, regionCoef }) {
   const dictionaryValue = getRegionCoef(regionSubject);
   const incomingValue = toNumber(regionCoef, dictionaryValue);
-  const value = clamp(incomingValue || dictionaryValue || 1, 0.7, 1.8);
+  const value = clamp(incomingValue || dictionaryValue || 1, 1, 1.8);
 
   return {
     key: "regionalCoefficient",

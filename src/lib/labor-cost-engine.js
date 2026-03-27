@@ -1,5 +1,6 @@
-import { LABOR_UNIT_RATES } from "../config/costModelConfig";
+import { LABOR_MARKET_GUARDRAILS, LABOR_UNIT_RATES } from "../config/costModelConfig";
 import { toNumber } from "./estimate";
+import { buildLaborMarketNeuralCheck } from "./labor-market-neural-check";
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -24,6 +25,20 @@ function calcCharges(baseValue, budget) {
     ppe,
     admin,
     total: overhead + payrollTaxes + utilization + ppe + admin,
+  };
+}
+
+function calculateWorkTotals(baseValue, conditionFactor, exploitedFactor, regionalFactor, budget) {
+  const workAfterConditions = baseValue * conditionFactor * exploitedFactor;
+  const workChargesBeforeRegion = calcCharges(workAfterConditions, budget);
+  const workTotalBeforeRegion = workAfterConditions + workChargesBeforeRegion.total;
+  const workTotal = workTotalBeforeRegion * regionalFactor;
+
+  return {
+    workAfterConditions,
+    workChargesBeforeRegion,
+    workTotalBeforeRegion,
+    workTotal,
   };
 }
 
@@ -56,6 +71,7 @@ export function calculateLaborCost({
   workBaseOverride = null,
   executionHoursOverride = null,
   designHoursOverride = null,
+  projectMode = false,
 }) {
   const rates = LABOR_UNIT_RATES[systemType] || LABOR_UNIT_RATES.sot;
   const primaryUnits = Math.max(toNumber(quantities?.primaryUnits, 0), 0);
@@ -74,18 +90,50 @@ export function calculateLaborCost({
   const integrationBase = integrationPoints * toNumber(rates.integrationPoint, 0);
   const knsBase = knsLengthM * toNumber(rates.knsPerMeter, 0) + knsWorkUnits * toNumber(rates.knsPerMeter, 0) * 0.22;
   const computedWorkBase = smrBase + pnrBase + integrationBase + knsBase;
-  const workBase =
+  const projectWorkBase =
     workBaseOverride === null || workBaseOverride === undefined || workBaseOverride === ""
       ? Math.max(computedWorkBase, 0)
-      : Math.max(toNumber(workBaseOverride, computedWorkBase), 0);
+      : Math.max(toNumber(workBaseOverride, computedWorkBase), computedWorkBase, 0);
 
   const conditionFactor = Math.max(toNumber(coefficientLayer.conditionLaborFactor, 1), 0.5);
   const exploitedFactor = Math.max(toNumber(coefficientLayer.exploitedBuildingCoefficient, 1), 0.5);
   const regionalFactor = Math.max(toNumber(coefficientLayer.regionalCoefficient, 1), 0.5);
-  const workAfterConditions = workBase * conditionFactor * exploitedFactor;
-  const workChargesBeforeRegion = calcCharges(workAfterConditions, budget);
-  const workTotalBeforeRegion = workAfterConditions + workChargesBeforeRegion.total;
-  const workTotal = workTotalBeforeRegion * regionalFactor;
+  const baseWorkMetrics = calculateWorkTotals(1, conditionFactor, exploitedFactor, regionalFactor, budget);
+  const workTotalMultiplier = Math.max(baseWorkMetrics.workTotal, 0.0001);
+  const markerUnits = Math.max(toNumber(quantities?.markerUnits, primaryUnits), 1);
+  const marketGuardrail = LABOR_MARKET_GUARDRAILS[systemType] || LABOR_MARKET_GUARDRAILS.sot;
+  const marketFloorBaseByRates = computedWorkBase * Math.max(toNumber(marketGuardrail.minBaseFactor, 1), 1);
+  const marketFloorTotal =
+    markerUnits *
+    Math.max(toNumber(marketGuardrail.minFinalPerMarker, 0), 0) *
+    Math.max(conditionFactor * exploitedFactor, 1) *
+    Math.max(regionalFactor, 1);
+  const marketFloorBaseByMarker = marketFloorTotal / workTotalMultiplier;
+  const marketFloorBase = Math.max(marketFloorBaseByRates, marketFloorBaseByMarker, computedWorkBase);
+  const neuralCheck = buildLaborMarketNeuralCheck({
+    systemType,
+    workBaseCandidate: projectWorkBase,
+    projectWorkBase,
+    computedWorkBase,
+    markerUnits,
+    primaryUnits,
+    controllerUnits,
+    cableLengthM,
+    knsLengthM,
+    conditionFactor,
+    exploitedFactor,
+    regionalFactor,
+    projectMode,
+    marketFloorBase,
+  });
+  const workBase = Math.max(projectWorkBase, marketFloorBase, neuralCheck.neuralFloorBase, computedWorkBase);
+  const { workAfterConditions, workChargesBeforeRegion, workTotalBeforeRegion, workTotal } = calculateWorkTotals(
+    workBase,
+    conditionFactor,
+    exploitedFactor,
+    regionalFactor,
+    budget
+  );
 
   const safeDesignHours =
     designHoursOverride === null || designHoursOverride === undefined || designHoursOverride === ""
@@ -108,11 +156,12 @@ export function calculateLaborCost({
   const workSchedule = estimateExecutionSchedule(safeExecutionHours);
   const designSchedule = estimateDesignSchedule(safeDesignHours);
 
-  const markerUnits = Math.max(toNumber(quantities?.markerUnits, primaryUnits), 1);
   const markerCostPerUnit = workTotal / markerUnits;
 
   return {
     workBase,
+    projectWorkBase,
+    marketFloorBase,
     workAfterConditions,
     workChargesBeforeRegion,
     workTotalBeforeRegion,
@@ -133,6 +182,8 @@ export function calculateLaborCost({
       integrationBase,
       knsBase,
       computedWorkBase,
+      projectWorkBase,
+      marketFloorBase,
       primaryUnits,
       controllerUnits,
       activeElements,
@@ -144,6 +195,12 @@ export function calculateLaborCost({
       exploitedFactor,
       regionalFactor,
     },
+    marketGuard: {
+      minBaseFactor: toNumber(marketGuardrail.minBaseFactor, 1),
+      minFinalPerMarker: toNumber(marketGuardrail.minFinalPerMarker, 0),
+      marketFloorTotal,
+    },
+    neuralCheck,
     designHours: safeDesignHours,
     designBase,
     designAfterConditions,

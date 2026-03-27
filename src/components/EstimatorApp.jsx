@@ -9,7 +9,7 @@ import CostBreakdownStep from "./CostBreakdownStep";
 import CalculationLogicStep from "./CalculationLogicStep";
 import Summary from "./Summary";
 import AuthGate from "./AuthGate";
-import { BUILD_NUMBER } from "../config/estimateConfig";
+import { APP_VERSION_LABEL, BUILD_NUMBER } from "../config/estimateConfig";
 import { isStoredAuthTokenValid } from "../lib/authApi";
 
 const BACKGROUND_VIDEO_URLS = ["/assets/background/city-loop.mp4"];
@@ -79,7 +79,7 @@ export default function EstimatorApp() {
         ) : null}
       </div>
 
-      <div className="build-badge">Сборка: {BUILD_NUMBER}</div>
+      <div className="build-badge">Версия {APP_VERSION_LABEL} · сборка {BUILD_NUMBER}</div>
 
       <div className={`app-wrap ${authorized ? "" : "locked"}`} aria-hidden={!authorized}>
         <header className="hero-card">
