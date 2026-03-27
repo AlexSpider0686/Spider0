@@ -1,0 +1,9 @@
+name: spider0
+
+services:
+  - name: web
+    type: nodejs
+    build:
+      command: npm install && npm run build
+    start:
+      command: npm run start
