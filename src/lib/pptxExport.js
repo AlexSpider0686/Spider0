@@ -356,7 +356,7 @@ function buildUnifiedSpecificationRows(systemResults = [], apsProjectExports = [
         `${num(qty, 0)} ${unit}`.trim(),
         rub(unitPrice),
         rub(total),
-        shortenText(sourceLink || "нет ссылки", 40),
+        sourceLink || "нет ссылки",
         "—",
       ]);
     }
@@ -383,7 +383,7 @@ function buildUnifiedSpecificationRows(systemResults = [], apsProjectExports = [
         `${num(qty, 0)} ${unit}`.trim(),
         rub(unitPrice),
         rub(total),
-        shortenText(sourceLink || "нет ссылки", 40),
+        sourceLink || "нет ссылки",
         position,
       ]);
     }
@@ -752,7 +752,7 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
       y: 1.2,
       w: 12.2,
       headers: ["Система", "Наименование", "Кол-во", "Цена за ед.", "Сумма", "Ссылка", "Поз. в файле"],
-      widths: [0.14, 0.28, 0.1, 0.11, 0.11, 0.18, 0.08],
+      widths: [0.13, 0.24, 0.09, 0.1, 0.1, 0.26, 0.08],
       rows: rowsChunk,
       maxRows: 12,
       rowH: 0.45,
