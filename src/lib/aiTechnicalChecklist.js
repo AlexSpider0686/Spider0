@@ -159,6 +159,18 @@ export function buildAiSurveyPlan({ objectData, zones, systems, protectedArea })
         aiAutofill: true,
       }),
       createQuestion({
+        id: `zone-${zone.id}-ceiling-height`,
+        sectionId: zoneSectionId,
+        group: "zone",
+        zoneId: zone.id,
+        type: "number",
+        label: `\u0412\u044b\u0441\u043e\u0442\u0430 \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f \u0432 \u0437\u043e\u043d\u0435 "${zoneTitle}", \u043c`,
+        placeholder: "3.2",
+        aiAutofill: true,
+        min: 2,
+        max: 18,
+      }),
+      createQuestion({
         id: `zone-${zone.id}-mount-height-limit`,
         sectionId: zoneSectionId,
         group: "zone",
@@ -208,7 +220,7 @@ export function buildAiSurveyPlan({ objectData, zones, systems, protectedArea })
       type: "surface_scan",
       title: `Фото поверхностей и потолка: ${zoneTitle}`,
       hint: "Снимите участок стены и потолка так, чтобы были видны материал и тип крепления будущих трасс.",
-      targetQuestionIds: [`zone-${zone.id}-wall-material`, `zone-${zone.id}-ceiling-type`],
+      targetQuestionIds: [`zone-${zone.id}-wall-material`, `zone-${zone.id}-ceiling-type`, `zone-${zone.id}-ceiling-height`],
     });
 
     sections.push({

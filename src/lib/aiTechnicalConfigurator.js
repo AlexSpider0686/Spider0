@@ -10,6 +10,11 @@ function firstAnswer(answers, key, fallback = []) {
   return [value];
 }
 
+function numericAnswer(answers, key, fallback = 0) {
+  const value = Number(answers?.[key]);
+  return Number.isFinite(value) ? value : fallback;
+}
+
 function buildStatusMaterials(systemType, objectData, markerUnits, answers, zones) {
   const materialRows = [];
   const floors = Math.max(num(objectData?.floors, 1), 1);
@@ -58,6 +63,7 @@ function buildZoneMaterials(systemType, zones, answers) {
   return (zones || []).flatMap((zone) => {
     const wallMaterials = firstAnswer(answers, `zone-${zone.id}-wall-material`, []);
     const ceilingTypes = firstAnswer(answers, `zone-${zone.id}-ceiling-type`, []);
+    const ceilingHeight = numericAnswer(answers, `zone-${zone.id}-ceiling-height`, 0);
     const rows = [];
 
     if (wallMaterials.includes("Бетон")) {
@@ -77,6 +83,16 @@ function buildZoneMaterials(systemType, zones, answers) {
         qty: Math.max(Math.ceil(num(zone.area) / 22), 1),
         unit: "шт",
         basis: "Подвесной потолок по результатам обследования",
+      });
+    }
+
+    if (ceilingHeight >= 4.2) {
+      rows.push({
+        key: `${systemType}-zone-${zone.id}-high-access`,
+        name: `Подмости/подъемные элементы для высотного монтажа в зоне "${zone.name}"`,
+        qty: Math.max(Math.ceil(num(zone.area) / 90), 1),
+        unit: "компл.",
+        basis: `Высота помещения ${ceilingHeight.toFixed(1)} м по чек-листу/фотоанализу`,
       });
     }
 
@@ -143,6 +159,10 @@ export function buildAiTechnicalRecommendations({
 
     const integrationCount = num(surveyAnswers?.[`system-${system.id}-integration-count`], result?.unitWorkMarker?.qty ? 1 : 0);
     const lowCurrentRooms = num(surveyAnswers?.["object-low-current-rooms"], 0);
+    const avgZoneHeight =
+      zones && zones.length
+        ? zones.reduce((sum, zone) => sum + numericAnswer(surveyAnswers, `zone-${zone.id}-ceiling-height`, 0), 0) / zones.length
+        : 0;
     const readinessScoreBase = 66 + (system.hasWorkingDocs ? 16 : 0) + (integrationCount > 0 ? 6 : 0) + (lowCurrentRooms > 0 ? 4 : 0);
 
     return {

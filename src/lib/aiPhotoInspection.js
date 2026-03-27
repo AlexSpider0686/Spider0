@@ -3,8 +3,8 @@ import { withAiRetry } from "./aiRetry";
 function normalizeText(value) {
   return String(value || "")
     .toLowerCase()
-    .replace(/ё/g, "е")
-    .replace(/[^\p{L}\p{N}\s._-]/gu, " ")
+    .replace(/[ё]/g, "е")
+    .replace(/[^\p{L}\p{N}\s.,_:-]/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -37,11 +37,11 @@ function rgbToStats(r, g, b) {
   return { lightness, saturation };
 }
 
-function clampCanvasSize(image, maxSize = 120) {
+function clampCanvasSize(image, maxSize = 140) {
   const scale = Math.min(maxSize / Math.max(image.naturalWidth || 1, 1), maxSize / Math.max(image.naturalHeight || 1, 1), 1);
   return {
-    width: Math.max(24, Math.round((image.naturalWidth || 1) * scale)),
-    height: Math.max(24, Math.round((image.naturalHeight || 1) * scale)),
+    width: Math.max(28, Math.round((image.naturalWidth || 1) * scale)),
+    height: Math.max(28, Math.round((image.naturalHeight || 1) * scale)),
   };
 }
 
@@ -133,11 +133,12 @@ async function getImageMeta(file) {
     return {
       width: 0,
       height: 0,
+      orientation: "unknown",
       features: null,
     };
   }
 
-  const { width, height } = clampCanvasSize(image, 128);
+  const { width, height } = clampCanvasSize(image, 140);
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -147,6 +148,7 @@ async function getImageMeta(file) {
     return {
       width: Number(image.naturalWidth || 0),
       height: Number(image.naturalHeight || 0),
+      orientation: image.naturalWidth >= image.naturalHeight ? "landscape" : "portrait",
       features: null,
     };
   }
@@ -165,6 +167,7 @@ async function getImageMeta(file) {
   );
   const leftWallRegion = analyzeRegion(imageData, width, 0, Math.max(10, Math.round(width * 0.38)), Math.round(height * 0.18), height);
   const rightWallRegion = analyzeRegion(imageData, width, Math.round(width * 0.62), width, Math.round(height * 0.18), height);
+  const bottomRegion = analyzeRegion(imageData, width, 0, width, Math.round(height * 0.66), height);
 
   const wallRegion = {
     brightness: (leftWallRegion.brightness + rightWallRegion.brightness + middleRegion.brightness) / 3,
@@ -180,9 +183,11 @@ async function getImageMeta(file) {
   return {
     width: Number(image.naturalWidth || 0),
     height: Number(image.naturalHeight || 0),
+    orientation: (image.naturalWidth || 0) >= (image.naturalHeight || 0) ? "landscape" : "portrait",
     features: {
       topRegion,
       middleRegion,
+      bottomRegion,
       wallRegion,
     },
   };
@@ -261,6 +266,98 @@ function summarizeConfidence(primary, fallbackType) {
   return 0.71;
 }
 
+function parseHeightFromTokens(tokens) {
+  const joined = tokens.join(" ");
+  const match = joined.match(/(?:h|height|высота|потолок|ceiling)?\s*([2-9](?:[.,]\d{1,2})?)\s*(?:м|m|метр)/i);
+  if (!match) return null;
+  const value = Number(String(match[1]).replace(",", "."));
+  if (!Number.isFinite(value) || value < 2 || value > 18) return null;
+  return {
+    value: Number(value.toFixed(1)),
+    confidence: 0.95,
+    source: "token",
+  };
+}
+
+function estimateHeightByFeatures(meta, ceilingType) {
+  const top = meta?.features?.topRegion;
+  const middle = meta?.features?.middleRegion;
+  const bottom = meta?.features?.bottomRegion;
+  if (!top || !middle || !bottom) return null;
+
+  let height = 3.2;
+  let confidence = 0.42;
+
+  switch (ceilingType) {
+    case "Армстронг":
+      height = 3.0;
+      confidence = 0.68;
+      break;
+    case "ГКЛ":
+      height = 3.1;
+      confidence = 0.63;
+      break;
+    case "Монолит":
+      height = 3.5;
+      confidence = 0.58;
+      break;
+    case "Грильято":
+      height = 3.9;
+      confidence = 0.72;
+      break;
+    case "Открытый":
+      height = 4.8;
+      confidence = 0.76;
+      break;
+    default:
+      height = 3.4;
+      confidence = 0.4;
+      break;
+  }
+
+  if (meta.orientation === "portrait" && meta.height >= meta.width * 1.2) {
+    height += 0.4;
+    confidence += 0.08;
+  }
+
+  if (top.brightness < 122 && top.contrast > 34) {
+    height += 0.5;
+    confidence += 0.05;
+  }
+
+  if (top.edgeDensity > 0.21 || middle.verticalEdgeDensity > 0.11) {
+    height += 0.3;
+    confidence += 0.04;
+  }
+
+  if (bottom.edgeDensity < 0.08 && top.brightness > 170 && top.edgeDensity < 0.09) {
+    height -= 0.2;
+    confidence += 0.02;
+  }
+
+  if (ceilingType === "Смешанный") {
+    confidence -= 0.08;
+  }
+
+  const boundedHeight = Math.min(Math.max(height, 2.4), 9.5);
+  const boundedConfidence = Math.min(Math.max(confidence, 0), 0.9);
+
+  if (boundedConfidence < 0.64) return null;
+
+  return {
+    value: Number(boundedHeight.toFixed(1)),
+    confidence: Number(boundedConfidence.toFixed(2)),
+    source: "image",
+  };
+}
+
+function buildSurfaceSummary(wallMaterial, ceilingType, heightEstimate) {
+  if (heightEstimate) {
+    return `Определены вероятные типы конструкций: стены — ${wallMaterial}, потолок — ${ceilingType}, высота помещения — около ${heightEstimate.value} м.`;
+  }
+  return `Определены вероятные типы конструкций: стены — ${wallMaterial}, потолок — ${ceilingType}. Высоту помещения по этому фото лучше подтвердить вручную.`;
+}
+
 async function executeAnalysis({ file, prompt }) {
   const normalizedName = normalizeText(file?.name || "");
   const tokens = normalizedName.split(/[\s._-]+/).filter(Boolean);
@@ -272,21 +369,19 @@ async function executeAnalysis({ file, prompt }) {
       return {
         accepted: false,
         confidence: 0.22,
-        summary: "Загруженное фото не похоже на план эвакуации или схему маршрутов. Данные не приняты в чек-лист.",
+        summary: "Загруженное фото не похоже на план эвакуации или маршрутную схему. Данные не приняты в чек-лист.",
         detections: ["Фото не соответствует требуемому типу: нужен план эвакуации"],
         suggestedAnswers: [],
       };
     }
     return {
       accepted: true,
-      confidence: planDetected ? 0.84 : 0.42,
-      summary: planDetected
-        ? "Обнаружены признаки плана эвакуации или маршрутной схемы."
-        : "На фото не удалось уверенно подтвердить план эвакуации.",
-      detections: [planDetected ? "План эвакуации" : "Требуется ручная проверка"],
+      confidence: 0.84,
+      summary: "Обнаружены признаки плана эвакуации или маршрутной схемы.",
+      detections: ["План эвакуации подтвержден"],
       suggestedAnswers: prompt.targetQuestionIds.map((questionId) => ({
         questionId,
-        value: planDetected,
+        value: true,
       })),
     };
   }
@@ -296,8 +391,8 @@ async function executeAnalysis({ file, prompt }) {
       return {
         accepted: false,
         confidence: 0.24,
-        summary: "Загруженное фото похоже на документ, схему или план, а здесь нужен снимок реальной стены и потолка. Данные не приняты в чек-лист.",
-        detections: ["Фото не соответствует требуемому типу: нужен фрагмент конструкций на объекте"],
+        summary: "Загруженное фото похоже на документ, схему или план. Здесь нужен снимок реальной стены и потолка, поэтому данные не приняты в чек-лист.",
+        detections: ["Фото отклонено: загружен не фрагмент реального помещения"],
         suggestedAnswers: [],
       };
     }
@@ -306,30 +401,53 @@ async function executeAnalysis({ file, prompt }) {
     const ceilingByTokens = inferCeilingTypeByTokens(tokens);
     const wallMaterial = wallByTokens || inferWallMaterialByFeatures(meta.features);
     const ceilingType = ceilingByTokens || inferCeilingTypeByFeatures(meta);
+    const tokenHeight = parseHeightFromTokens(tokens);
+    const featureHeight = tokenHeight ? null : estimateHeightByFeatures(meta, ceilingType);
+    const heightEstimate = tokenHeight || featureHeight;
     const confidence = Math.min(
-      summarizeConfidence(Boolean(wallByTokens), wallMaterial) * 0.5 + summarizeConfidence(Boolean(ceilingByTokens), ceilingType) * 0.5,
-      0.92
+      summarizeConfidence(Boolean(wallByTokens), wallMaterial) * 0.4 +
+        summarizeConfidence(Boolean(ceilingByTokens), ceilingType) * 0.35 +
+        (heightEstimate?.confidence || 0.48) * 0.25,
+      0.93
     );
+
+    const detections = [
+      `Стены: ${wallMaterial}`,
+      `Потолок: ${ceilingType}`,
+      heightEstimate
+        ? `Высота помещения: около ${heightEstimate.value} м (${heightEstimate.source === "token" ? "по подсказке из имени файла" : "по анализу изображения"})`
+        : "Высота помещения: автоопределение недостаточно надежно, нужен ручной ввод",
+      wallByTokens || ceilingByTokens ? "Использованы подсказки из имени файла и анализ изображения" : "Использован анализ самого изображения",
+      "Защита активна: неподходящие фото не попадают в чек-лист",
+    ];
+
+    const suggestedAnswers = [
+      {
+        questionId: prompt.targetQuestionIds[0],
+        value: [wallMaterial],
+      },
+      {
+        questionId: prompt.targetQuestionIds[1],
+        value: [ceilingType],
+      },
+    ];
+
+    if (heightEstimate && prompt.targetQuestionIds[2]) {
+      suggestedAnswers.push({
+        questionId: prompt.targetQuestionIds[2],
+        value: heightEstimate.value,
+      });
+    }
 
     return {
       accepted: true,
       confidence,
-      summary: `Определены вероятные типы конструкций: стены — ${wallMaterial}, потолок — ${ceilingType}.`,
-      detections: [
-        `Стены: ${wallMaterial}`,
-        `Потолок: ${ceilingType}`,
-        wallByTokens || ceilingByTokens ? "Использованы признаки из имени файла" : "Использован анализ самого изображения",
-      ],
-      suggestedAnswers: [
-        {
-          questionId: prompt.targetQuestionIds[0],
-          value: [wallMaterial],
-        },
-        {
-          questionId: prompt.targetQuestionIds[1],
-          value: [ceilingType],
-        },
-      ],
+      summary: buildSurfaceSummary(wallMaterial, ceilingType, heightEstimate),
+      detections,
+      suggestedAnswers,
+      estimatedCeilingHeight: heightEstimate?.value ?? null,
+      estimatedCeilingHeightConfidence: heightEstimate?.confidence ?? null,
+      needsManualCeilingHeight: !heightEstimate,
     };
   }
 
