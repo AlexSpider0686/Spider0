@@ -1114,6 +1114,40 @@ select {
   color: #334155;
 }
 
+.pricing-chip-tooltip {
+  position: relative;
+  display: inline-flex;
+}
+
+.pricing-chip-popover {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 6px);
+  min-width: 240px;
+  max-width: min(360px, 72vw);
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(122, 154, 193, 0.3);
+  background: rgba(15, 23, 42, 0.94);
+  color: #e2ecff;
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.2);
+  font-size: 12px;
+  line-height: 1.45;
+  z-index: 20;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s ease;
+  pointer-events: none;
+}
+
+.pricing-chip-tooltip:hover .pricing-chip-popover,
+.pricing-chip-tooltip:focus-within .pricing-chip-popover {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
 .equipment-config {
   border: 1px solid rgba(141, 163, 196, 0.22);
   border-radius: 8px;
