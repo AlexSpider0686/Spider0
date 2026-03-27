@@ -94,6 +94,9 @@ const DESIGN_HOURS_BY_MATERIAL_UNIT = {
   [UNIT.set]: 0.06,
 };
 
+const FASTENER_EXECUTION_HOURS_PER_PIECE = 0.0025;
+const FASTENER_DESIGN_HOURS_PER_PIECE = 0.0004;
+
 const MODEL_FALLBACK_PRICE_HINTS = [
   {
     pattern: /(?:1[-/.]?520[-/.]?887[-/.]?052|сириус)/iu,
@@ -468,9 +471,21 @@ function estimateLaborByProjectItems(items = [], metrics = {}, objectData = {}) 
   for (const item of items) {
     const qty = toSafeQty(item.qty);
     if (qty <= 0) continue;
+    const title = normalizeSearchText(`${item.name || ""} ${item.model || ""} ${item.rawLine || ""}`).toLowerCase();
 
     if (item.kind === "material") {
       materialLines += 1;
+
+      if (item.unit === UNIT.meter && CABLE_KEYWORDS.test(title)) {
+        continue;
+      }
+
+      if (item.unit === UNIT.piece && FASTENER_KEYWORDS.test(title)) {
+        executionHours += qty * FASTENER_EXECUTION_HOURS_PER_PIECE;
+        designHours += qty * FASTENER_DESIGN_HOURS_PER_PIECE;
+        continue;
+      }
+
       executionHours += qty * (EXECUTION_HOURS_BY_MATERIAL_UNIT[item.unit] || 0.08);
       designHours += qty * (DESIGN_HOURS_BY_MATERIAL_UNIT[item.unit] || 0.015);
       continue;

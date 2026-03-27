@@ -1204,16 +1204,20 @@ select {
 }
 
 .work-cost-popover {
-  min-width: 320px;
-  max-width: min(460px, 78vw);
+  left: auto;
+  right: 0;
+  min-width: 420px;
+  max-width: min(620px, 88vw);
+  max-height: min(70vh, 420px);
+  overflow-y: auto;
   display: grid;
-  gap: 10px;
+  gap: 8px;
   white-space: normal;
 }
 
 .work-cost-popover__section {
   display: grid;
-  gap: 4px;
+  gap: 3px;
 }
 
 .work-cost-popover__section strong {
