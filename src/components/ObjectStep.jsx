@@ -52,6 +52,7 @@ export default function ObjectStep({
   objectData,
   zones,
   recalculatedArea,
+  protectedAreaMeta,
   zonePreset,
   setZonePreset,
   lockedZoneIds,
@@ -165,6 +166,10 @@ export default function ObjectStep({
             </div>
           </div>
           <input id="protected-zone-area" type="number" value={recalculatedArea} readOnly />
+          <small className="hint-inline">
+            Поле рассчитывается автоматически по параметрам объекта.
+            {protectedAreaMeta?.protectionShare ? ` Итог: ${num(protectedAreaMeta.protectionShare * 100, 1)}% от площади объекта.` : ""}
+          </small>
         </div>
 
         <div className="input-card">
@@ -282,14 +287,14 @@ export default function ObjectStep({
           <button className="ghost-btn" type="button" onClick={() => applyZonePreset(zonePreset)}>
             Применить пресет
           </button>
-          <button className="ghost-btn" type="button" onClick={() => setZones((prev) => normalizeZoneAreas(prev, objectData.totalArea))}>
+          <button className="ghost-btn" type="button" onClick={() => setZones((prev) => normalizeZoneAreas(prev, recalculatedArea))}>
             Нормализовать
           </button>
         </div>
 
         <div className="slider-stack">
           {zones.map((zone) => {
-            const zonePercent = objectData.totalArea > 0 ? (toNumber(zone.area) / toNumber(objectData.totalArea, 1)) * 100 : 0;
+            const zonePercent = recalculatedArea > 0 ? (toNumber(zone.area) / toNumber(recalculatedArea, 1)) * 100 : 0;
             const isLocked = lockedZoneIds.includes(zone.id);
             return (
               <div className="slider-card" key={`share-${zone.id}`}>
@@ -347,7 +352,7 @@ export default function ObjectStep({
             );
           })}
           <div className="slider-total">
-            Сумма процентов: <strong>{num(getZonePercentSum(zones, objectData.totalArea), 1)}%</strong>
+            Сумма процентов: <strong>{num(getZonePercentSum(zones, recalculatedArea), 1)}%</strong>
             {!zoneDistribution.isValid ? <span className="warn-inline"> Проверь распределение (должно быть 100%).</span> : null}
           </div>
         </div>
