@@ -1,4 +1,4 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 import { Plus, Trash2, Shield, FileUp, RefreshCcw, Eye, EyeOff } from "lucide-react";
 import { SYSTEM_TYPES, VENDORS } from "../config/estimateConfig";
 import { getManufacturerSource, getVendorByName } from "../config/vendorsConfig";
@@ -7,9 +7,9 @@ import VendorConfigurator from "./VendorConfigurator";
 
 function renderApsImportStatus(status) {
   if (!status) return null;
-  if (status.state === "loading") return <p className="hint-inline">РЎС‚Р°С‚СѓСЃ: {status.message}</p>;
-  if (status.state === "error") return <p className="warn-inline">РЎС‚Р°С‚СѓСЃ: {status.message}</p>;
-  return <p className="hint-inline">РЎС‚Р°С‚СѓСЃ: {status.message}</p>;
+  if (status.state === "loading") return <p className="hint-inline">Статус: {status.message}</p>;
+  if (status.state === "error") return <p className="warn-inline">Статус: {status.message}</p>;
+  return <p className="hint-inline">Статус: {status.message}</p>;
 }
 
 function toHost(url) {
@@ -27,34 +27,34 @@ function toHost(url) {
 
 function resolveUnrecognizedReason(reason) {
   const map = {
-    position_not_found: "РЅРµ РЅР°Р№РґРµРЅ РЅРѕРјРµСЂ РїРѕР·РёС†РёРё",
-    descriptor_missing: "РЅРµС‚ РѕРїРёСЃР°РЅРёСЏ РїРѕР·РёС†РёРё",
-    qty_or_unit_not_found: "РЅРµ РѕРїСЂРµРґРµР»РµРЅС‹ РєРѕР»РёС‡РµСЃС‚РІРѕ РёР»Рё РµРґРёРЅРёС†Р° РёР·РјРµСЂРµРЅРёСЏ",
-    validation_failed: "РЅРµ РїСЂРѕР№РґРµРЅР° РІР°Р»РёРґР°С†РёСЏ СЃС‚СЂРѕРєРё",
-    not_parsed: "СЃС‚СЂРѕРєР° С‚СЂРµР±СѓРµС‚ СЂСѓС‡РЅРѕР№ РїСЂРѕРІРµСЂРєРё",
+    position_not_found: "не найден номер позиции",
+    descriptor_missing: "нет описания позиции",
+    qty_or_unit_not_found: "не определены количество или единица измерения",
+    validation_failed: "не пройдена валидация строки",
+    not_parsed: "строка требует ручной проверки",
   };
-  return map[reason] || "СЃС‚СЂРѕРєР° С‚СЂРµР±СѓРµС‚ СЂСѓС‡РЅРѕР№ РїСЂРѕРІРµСЂРєРё";
+  return map[reason] || "строка требует ручной проверки";
 }
 
 function formatSelectionStrategy(strategy) {
   const value = String(strategy || "");
-  if (value.includes("article_exact_match")) return "С‚РѕС‡РЅРѕРµ СЃРѕРІРїР°РґРµРЅРёРµ Р°СЂС‚РёРєСѓР»Р°";
-  if (value.includes("model_token_match")) return "СЃРѕРІРїР°РґРµРЅРёРµ Р°СЂС‚РёРєСѓР»Р°/РјРѕРґРµР»Рё";
-  if (value.includes("luis_api_exact_model")) return "С‚РѕС‡РЅРѕРµ СЃРѕРІРїР°РґРµРЅРёРµ РјРѕРґРµР»Рё (LUIS+ API)";
-  if (value.includes("luis_api_model_bias")) return "РїСЂРёРѕСЂРёС‚РµС‚ РїРѕ РјРѕРґРµР»Рё (LUIS+ API)";
-  if (value.includes("manufacturer_source_bias")) return "РїСЂРёРѕСЂРёС‚РµС‚ РёСЃС‚РѕС‡РЅРёРєР° РїСЂРѕРёР·РІРѕРґРёС‚РµР»СЏ";
-  if (value.includes("average_all_sources")) return "СЃСЂРµРґРЅРµРµ РїРѕ РґРѕСЃС‚СѓРїРЅС‹Рј РёСЃС‚РѕС‡РЅРёРєР°Рј";
-  return "Р°Р»РіРѕСЂРёС‚Рј РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ";
+  if (value.includes("article_exact_match")) return "точное совпадение артикула";
+  if (value.includes("model_token_match")) return "совпадение артикула/модели";
+  if (value.includes("luis_api_exact_model")) return "точное совпадение модели (LUIS+ API)";
+  if (value.includes("luis_api_model_bias")) return "приоритет по модели (LUIS+ API)";
+  if (value.includes("manufacturer_source_bias")) return "приоритет источника производителя";
+  if (value.includes("average_all_sources")) return "среднее по доступным источникам";
+  return "алгоритм по умолчанию";
 }
 
-const APS_MANUAL_UNIT_OPTIONS = ["С€С‚", "РєРѕРјРїР»", "Рј", "Рј2", "РєРі", "Р»", "СѓРї", "Р»РёСЃС‚"];
+const APS_MANUAL_UNIT_OPTIONS = ["шт", "компл", "м", "м2", "кг", "л", "уп", "лист"];
 
 function defaultManualDraft() {
   return {
     kind: "equipment",
     name: "",
     model: "",
-    unit: "С€С‚",
+    unit: "шт",
     qty: 1,
     unitPrice: 0,
   };
@@ -116,11 +116,11 @@ export default function SystemsStep({
     <section className="panel">
       <div className="panel-header">
         <div>
-          <h2>РЎРёСЃС‚РµРјС‹</h2>
-          <p>РќР° РѕРґРЅРѕРј РѕР±СЉРµРєС‚Рµ РјРѕР¶РµС‚ Р±С‹С‚СЊ С‚РѕР»СЊРєРѕ РѕРґРЅР° СЃРёСЃС‚РµРјР° РєР°Р¶РґРѕРіРѕ РІРёРґР°.</p>
+          <h2>Системы</h2>
+          <p>На одном объекте может быть только одна система каждого вида.</p>
         </div>
         <button className="primary-btn" onClick={addSystem} type="button" disabled={!canAddMoreSystems}>
-          <Plus size={16} /> + РЎРёСЃС‚РµРјР°
+          <Plus size={16} /> + Система
         </button>
       </div>
 
@@ -128,7 +128,7 @@ export default function SystemsStep({
         {systems.map((system, index) => {
           const typeMeta = SYSTEM_TYPES.find((item) => item.code === system.type);
           const Icon = typeMeta?.icon || Shield;
-          const vendorList = VENDORS[system.type] || ["Р‘Р°Р·РѕРІС‹Р№"];
+          const vendorList = VENDORS[system.type] || ["Базовый"];
           const selectedVendor = getVendorByName(system.type, system.vendor);
           const snapshot = vendorPriceSnapshots?.[system.id];
           const result = systemResults[index];
@@ -172,7 +172,7 @@ export default function SystemsStep({
                 </div>
                 <div>
                   <h3>
-                    РЎРёСЃС‚РµРјР° {index + 1}: {typeMeta?.name}
+                    Система {index + 1}: {typeMeta?.name}
                   </h3>
                   <p>{selectedVendor.description}</p>
                 </div>
@@ -183,7 +183,7 @@ export default function SystemsStep({
                 <div className="input-card system-control-card">
                   <div className="system-control-grid">
                     <div className="input-card compact">
-                      <label>РўРёРї СЃРёСЃС‚РµРјС‹</label>
+                      <label>Тип системы</label>
                       <select value={system.type} onChange={(event) => updateSystem(system.id, "type", event.target.value)}>
                         {SYSTEM_TYPES.map((item) => {
                           const usedByOther = [...usedTypeMap.entries()].some(([id, code]) => id !== system.id && code === item.code);
@@ -197,11 +197,11 @@ export default function SystemsStep({
                     </div>
 
                     <div className="input-card compact">
-                      <label>Р’РµРЅРґРѕСЂ</label>
+                      <label>Вендор</label>
                       <select
                         value={system.vendor}
                         onChange={(event) => updateSystem(system.id, "vendor", event.target.value)}
-                        title="Р’РµРЅРґРѕСЂ РІР»РёСЏРµС‚ РЅР° С†РµРЅРѕРІРѕР№ РїСЂРѕС„РёР»СЊ, РєРѕСЌС„С„РёС†РёРµРЅС‚С‹ Рё РёС‚РѕРі СЃРёСЃС‚РµРјС‹. Р‘Р°Р·РѕРІС‹Р№ РІРµРЅРґРѕСЂ РїСЂРёРјРµРЅСЏР№С‚Рµ, РµСЃР»Рё Р±СЂРµРЅРґ РµС‰Рµ РЅРµ РІС‹Р±СЂР°РЅ Рё РЅСѓР¶РЅР° РЅРµР№С‚СЂР°Р»СЊРЅР°СЏ СЂС‹РЅРѕС‡РЅР°СЏ РѕС†РµРЅРєР°."
+                        title="Вендор влияет на ценовой профиль, коэффициенты и итог системы. Базовый вендор применяйте, если бренд еще не выбран и нужна нейтральная рыночная оценка."
                       >
                         {vendorList.map((vendor) => (
                           <option key={vendor} value={vendor}>
@@ -213,14 +213,14 @@ export default function SystemsStep({
 
                     <div className="input-card compact">
                       <div className="label-with-tooltip">
-                        <label>РљР°СЃС‚РѕРјРЅС‹Р№ РёРЅРґРµРєСЃ</label>
+                        <label>Кастомный индекс</label>
                         <span className="label-tooltip-help">?</span>
                         <div className="label-tooltip-popover">
                           <p>
-                            РљР°СЃС‚РѕРјРЅС‹Р№ РёРЅРґРµРєСЃ РєРѕСЂСЂРµРєС‚РёСЂСѓРµС‚ С†РµРЅРѕРІРѕР№ РїСЂРѕС„РёР»СЊ РІС‹Р±СЂР°РЅРЅРѕРіРѕ РІРµРЅРґРѕСЂР° РґР»СЏ РєРѕРЅРєСЂРµС‚РЅРѕРіРѕ РѕР±СЉРµРєС‚Р°. Р—РЅР°С‡РµРЅРёРµ Р±РѕР»СЊС€Рµ
-                            1.00 РїРѕРІС‹С€Р°РµС‚ СЃС‚РѕРёРјРѕСЃС‚СЊ, РјРµРЅСЊС€Рµ 1.00 СЃРЅРёР¶Р°РµС‚.
+                            Кастомный индекс корректирует ценовой профиль выбранного вендора для конкретного объекта. Значение больше
+                            1.00 повышает стоимость, меньше 1.00 снижает.
                           </p>
-                          <p>РџР°СЂР°РјРµС‚СЂ СѓС‡РёС‚С‹РІР°РµС‚СЃСЏ РїСЂРё СЂР°СЃС‡С‘С‚Рµ СЃС‚РѕРёРјРѕСЃС‚Рё РѕР±РѕСЂСѓРґРѕРІР°РЅРёСЏ Рё Р·Р°РІРёСЃСЏС‰РёС… РѕС‚ РЅРµРіРѕ СЂР°Р±РѕС‚ СЌС‚РѕР№ СЃРёСЃС‚РµРјС‹.</p>
+                          <p>Параметр учитывается при расчёте стоимости оборудования и зависящих от него работ этой системы.</p>
                         </div>
                       </div>
                       <input
@@ -238,36 +238,36 @@ export default function SystemsStep({
                 <div className="vendor-hint vendor-hint-lg">
                   <div className="vendor-hint-top">
                     <p className="vendor-kpi">
-                      Р•Рґ. С†РµРЅР°: <strong>{rub(result?.equipmentData?.unitPrice || 0)}</strong>
+                      Ед. цена: <strong>{rub(result?.equipmentData?.unitPrice || 0)}</strong>
                     </p>
                     <p className="vendor-kpi">
-                      РњР°СЂРєРµСЂ: <strong>{result?.unitWorkMarker?.label || "вЂ”"}</strong>
+                      Маркер: <strong>{result?.unitWorkMarker?.label || "—"}</strong>
                     </p>
                     <p className="vendor-kpi">
-                      Р—Р° РµРґРёРЅРёС†Сѓ: <strong>{num(result?.unitWorkMarker?.costPerUnit || 0, 0)}</strong>
+                      За единицу: <strong>{num(result?.unitWorkMarker?.costPerUnit || 0, 0)}</strong>
                     </p>
                   </div>
 
                   <div className="vendor-hint-mid">
                     <div>
-                      <span>РћР±РѕСЂСѓРґРѕРІР°РЅРёРµ</span>
+                      <span>Оборудование</span>
                       <strong>{rub(result?.equipmentCost || 0)}</strong>
                     </div>
                     <div>
-                      <span>Р Р°Р±РѕС‚С‹ (РЎРњР +РџРќР )</span>
+                      <span>Работы (СМР+ПНР)</span>
                       <strong>{rub(result?.workTotal || 0)}</strong>
                     </div>
                     <div>
-                      <span>РњР°С‚РµСЂРёР°Р»С‹</span>
+                      <span>Материалы</span>
                       <strong>{rub(result?.materialCost || 0)}</strong>
                     </div>
                   </div>
 
                   <div className="vendor-hint-footer">
-                    <p>РљР»СЋС‡ РІС‹Р±РѕСЂР°: {result?.equipmentData?.selectionKey || "fallback"}</p>
-                    <p>Р РµР¶РёРј: {result?.estimateMode === "project_pdf" ? "РїРѕ PDF-РїСЂРѕРµРєС‚Сѓ" : "РїРѕ РІРЅСѓС‚СЂРµРЅРЅРµР№ РјРѕРґРµР»Рё"}</p>
+                    <p>Ключ выбора: {result?.equipmentData?.selectionKey || "fallback"}</p>
+                    <p>Режим: {result?.estimateMode === "project_pdf" ? "по PDF-проекту" : "по внутренней модели"}</p>
                     <button className="ghost-btn" type="button" onClick={() => handleRefresh(system)} disabled={isRefreshing}>
-                      <RefreshCcw size={14} className={isRefreshing ? "spin" : ""} /> {isRefreshing ? "РћР±РЅРѕРІР»РµРЅРёРµ..." : "РћР±РЅРѕРІРёС‚СЊ С†РµРЅС‹"}
+                      <RefreshCcw size={14} className={isRefreshing ? "spin" : ""} /> {isRefreshing ? "Обновление..." : "Обновить цены"}
                     </button>
                   </div>
                 </div>
@@ -288,7 +288,7 @@ export default function SystemsStep({
                     </span>
                     <span className="pricing-chip-tooltip">
                       <span className={`pricing-source-chip ${pricedSourceCount > 0 ? "ok" : "warn"}`}>
-                        <strong>Источников с найденной ценой:</strong> {pricedSourceCount}
+                        <strong>Источники с найденной ценой:</strong> {pricedSourceCount}
                       </span>
                       <span className="pricing-chip-popover">
                         Это число источников, где удалось найти пригодную цену по сопоставленной позиции. Чем больше
@@ -341,18 +341,19 @@ export default function SystemsStep({
                   {snapshot.error ? <span className="warn-inline"> Ошибка API: {snapshot.error}</span> : null}
                 </div>
               ) : null}
+
               {system.type === "aps" ? (
                 <div className="calc-explain aps-import-card">
-                  <h4>РРјРїРѕСЂС‚ РїСЂРѕРµРєС‚Р° РђРџРЎ (PDF РїРѕ Р“РћРЎРў 21.110-2013)</h4>
+                  <h4>Импорт проекта АПС (PDF по ГОСТ 21.110-2013)</h4>
                   <p className="hint-inline">
-                    Р•СЃР»Рё РїСЂРѕРµРєС‚ Р·Р°РіСЂСѓР¶РµРЅ, СЂР°СЃС‡РµС‚ РђРџРЎ РІС‹РїРѕР»РЅСЏРµС‚СЃСЏ РїРѕ СЃРїРµС†РёС„РёРєР°С†РёРё (РѕР±РѕСЂСѓРґРѕРІР°РЅРёРµ, РјР°С‚РµСЂРёР°Р»С‹, С‚СЂСѓРґРѕР·Р°С‚СЂР°С‚С‹ Рё СЃСЂРѕРєРё). Р•СЃР»Рё
-                    РїСЂРѕРµРєС‚ РЅРµ Р·Р°РіСЂСѓР¶РµРЅ, РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ РІРЅСѓС‚СЂРµРЅРЅСЏСЏ РјРѕРґРµР»СЊ.
+                    Если проект загружен, расчет АПС выполняется по спецификации (оборудование, материалы, трудозатраты и сроки). Если
+                    проект не загружен, используется внутренняя модель.
                   </p>
-                  <p className="hint-inline">РќРѕСЂРјР°С‚РёРІ: РЎРџР”РЎ, Р“РћРЎРў Р  21.101-2020 Рё Р“РћРЎРў 21.110-2013 (СЃРїРµС†РёС„РёРєР°С†РёСЏ РѕР±РѕСЂСѓРґРѕРІР°РЅРёСЏ, РёР·РґРµР»РёР№ Рё РјР°С‚РµСЂРёР°Р»РѕРІ).</p>
+                  <p className="hint-inline">Норматив: СПДС, ГОСТ Р 21.101-2020 и ГОСТ 21.110-2013 (спецификация оборудования, изделий и материалов).</p>
 
                   <div className="aps-import-actions">
                     <label className="ghost-btn file-upload-btn" htmlFor={`aps-pdf-${system.id}`}>
-                      <FileUp size={14} /> Р—Р°РіСЂСѓР·РёС‚СЊ PDF
+                      <FileUp size={14} /> Загрузить PDF
                     </label>
                     <input
                       id={`aps-pdf-${system.id}`}
@@ -365,7 +366,7 @@ export default function SystemsStep({
                         try {
                           await importApsProjectPdf(system.id, file);
                         } catch {
-                          // РћС€РёР±РєР° РѕС‚РѕР±СЂР°Р¶Р°РµС‚СЃСЏ С‡РµСЂРµР· apsImportStatuses.
+                          // Ошибка отображается через apsImportStatuses.
                         } finally {
                           event.target.value = "";
                         }
@@ -373,48 +374,48 @@ export default function SystemsStep({
                     />
                     {apsSnapshot ? (
                       <button className="danger-btn" type="button" onClick={() => clearApsProjectPdf(system.id)}>
-                        РћС‡РёСЃС‚РёС‚СЊ РїСЂРѕРµРєС‚
+                        Очистить проект
                       </button>
                     ) : null}
                   </div>
 
                   {renderApsImportStatus(apsStatus)}
-                  {apsSnapshot?.gostStandard ? <p className="hint-inline">РЎС‚Р°РЅРґР°СЂС‚ PDF: {apsSnapshot.gostStandard}</p> : null}
+                  {apsSnapshot?.gostStandard ? <p className="hint-inline">Стандарт PDF: {apsSnapshot.gostStandard}</p> : null}
 
                   {apsSnapshot ? (
                     <>
                       <div className="summary-grid breakdown-metrics">
                         <div className="metric-card">
-                          <span>Р¤Р°Р№Р» РїСЂРѕРµРєС‚Р°</span>
+                          <span>Файл проекта</span>
                           <strong>{apsSnapshot.fileName}</strong>
                         </div>
                         <div className="metric-card">
-                          <span>РџРѕР·РёС†РёРё РІ СЃРїРµС†РёС„РёРєР°С†РёРё</span>
+                          <span>Позиции в спецификации</span>
                           <strong>{num(apsSnapshot.items.length, 0)}</strong>
                         </div>
                         <div className="metric-card">
-                          <span>РџРѕР·РёС†РёРё СЃ С†РµРЅРѕР№ РїРѕСЃС‚Р°РІС‰РёРєР°</span>
+                          <span>Позиции с ценой поставщика</span>
                           <strong>{num(apsSnapshot.sourceStats.itemsWithSupplierPrice, 0)}</strong>
                         </div>
                         <div className="metric-card">
-                          <span>РџРѕР·РёС†РёРё Р±РµР· С†РµРЅС‹</span>
+                          <span>Позиции без цены</span>
                           <strong>{num(apsSnapshot.sourceStats.itemsWithoutPrice, 0)}</strong>
                         </div>
                         <div className="metric-card">
-                          <span>РќРµСЂР°СЃРїРѕР·РЅР°РЅРЅС‹Рµ СЃС‚СЂРѕРєРё</span>
+                          <span>Нераспознанные строки</span>
                           <strong>{num(apsSnapshot.sourceStats.unresolvedPositions, 0)}</strong>
                         </div>
                         <div className="metric-card">
-                          <span>РўРѕС‡РЅРѕСЃС‚СЊ СЂР°СЃРїРѕР·РЅР°РІР°РЅРёСЏ</span>
+                          <span>Точность распознавания</span>
                           <strong>{num((apsSnapshot.sourceStats.recognitionRate || 0) * 100, 1)}%</strong>
                         </div>
                         <div className="metric-card">
-                          <span>РљР°Р±РµР»СЊ (РёР· РїСЂРѕРµРєС‚Р°/РјРѕРґРµР»Рё)</span>
-                          <strong>{num(apsSnapshot.metrics?.cableLengthM || 0, 1)} Рј</strong>
+                          <span>Кабель (из проекта/модели)</span>
+                          <strong>{num(apsSnapshot.metrics?.cableLengthM || 0, 1)} м</strong>
                         </div>
                         <div className="metric-card">
-                          <span>РљСЂРµРїРµР¶ (РёР· РїСЂРѕРµРєС‚Р°/РјРѕРґРµР»Рё)</span>
-                          <strong>{num(apsSnapshot.metrics?.fastenerQty || 0, 0)} С€С‚</strong>
+                          <span>Крепеж (из проекта/модели)</span>
+                          <strong>{num(apsSnapshot.metrics?.fastenerQty || 0, 0)} шт</strong>
                         </div>
                       </div>
 
@@ -422,13 +423,13 @@ export default function SystemsStep({
                         <table>
                           <thead>
                             <tr>
-                              <th>РќР°РёРјРµРЅРѕРІР°РЅРёРµ</th>
-                              <th>РњР°СЂРєР°/РјРѕРґРµР»СЊ</th>
-                              <th>РљР°С‚РµРіРѕСЂРёСЏ</th>
-                              <th>РљРѕР»-РІРѕ</th>
-                              <th>Р¦РµРЅР°, в‚Ѕ</th>
-                              <th>Р•Рґ. РїСЂРѕРµРєС‚/РїРѕСЃС‚Р°РІС‰РёРє</th>
-                              <th>РЎСѓРјРјР°</th>
+                              <th>Наименование</th>
+                              <th>Марка/модель</th>
+                              <th>Категория</th>
+                              <th>Кол-во</th>
+                              <th>Цена, ₽</th>
+                              <th>Ед. проект/поставщик</th>
+                              <th>Сумма</th>
                               <th />
                             </tr>
                           </thead>
@@ -438,10 +439,10 @@ export default function SystemsStep({
                                 <td>
                                   <div className="aps-item-title">
                                     <span>{item.name}</span>
-                                    {item.position ? <small>РџСѓРЅРєС‚ СЃРїРµС†РёС„РёРєР°С†РёРё {item.position}</small> : null}
+                                    {item.position ? <small>Пункт спецификации {item.position}</small> : null}
                                   </div>
                                 </td>
-                                <td>{item.model || item.brand || "вЂ”"}</td>
+                                <td>{item.model || item.brand || "—"}</td>
                                 <td>{item.category}</td>
                                 <td>
                                   <div className="table-edit-cell">
@@ -468,7 +469,7 @@ export default function SystemsStep({
                                 </td>
                                 <td>
                                   <span className={`unit-audit-badge ${item?.unitAudit?.status || "unknown"}`}>
-                                    {item?.unitAudit?.message || "РЅРµС‚ РґР°РЅРЅС‹С…"}
+                                    {item?.unitAudit?.message || "нет данных"}
                                   </span>
                                 </td>
                                 <td>{rub(item.total)}</td>
@@ -477,9 +478,9 @@ export default function SystemsStep({
                                     className="table-action-btn"
                                     type="button"
                                     onClick={() => removeApsProjectItemById(system.id, item.id)}
-                                    title="РЈРґР°Р»РёС‚СЊ РїРѕР·РёС†РёСЋ"
+                                    title="Удалить позицию"
                                   >
-                                    РЈРґР°Р»РёС‚СЊ
+                                    Удалить
                                   </button>
                                 </td>
                               </tr>
@@ -489,38 +490,38 @@ export default function SystemsStep({
                       </div>
 
                       <div className="calc-explain">
-                        <h4>Р”РѕР±Р°РІРёС‚СЊ РїРѕР·РёС†РёСЋ РІСЂСѓС‡РЅСѓСЋ</h4>
+                        <h4>Добавить позицию вручную</h4>
                         <div className="manual-item-grid">
                           <div className="input-card">
-                            <label>РўРёРї</label>
+                            <label>Тип</label>
                             <select
                               value={getManualDraft(system.id).kind}
                               onChange={(event) => updateManualDraft(system.id, "kind", event.target.value)}
                             >
-                              <option value="equipment">РћР±РѕСЂСѓРґРѕРІР°РЅРёРµ</option>
-                              <option value="material">РњР°С‚РµСЂРёР°Р»</option>
+                              <option value="equipment">Оборудование</option>
+                              <option value="material">Материал</option>
                             </select>
                           </div>
                           <div className="input-card">
-                            <label>РќР°РёРјРµРЅРѕРІР°РЅРёРµ</label>
+                            <label>Наименование</label>
                             <input
                               type="text"
                               value={getManualDraft(system.id).name}
                               onChange={(event) => updateManualDraft(system.id, "name", event.target.value)}
-                              placeholder="Р’РІРµРґРёС‚Рµ РїРѕР·РёС†РёСЋ"
+                              placeholder="Введите позицию"
                             />
                           </div>
                           <div className="input-card">
-                            <label>РњР°СЂРєР°/РјРѕРґРµР»СЊ</label>
+                            <label>Марка/модель</label>
                             <input
                               type="text"
                               value={getManualDraft(system.id).model}
                               onChange={(event) => updateManualDraft(system.id, "model", event.target.value)}
-                              placeholder="РњРѕРґРµР»СЊ"
+                              placeholder="Модель"
                             />
                           </div>
                           <div className="input-card">
-                            <label>Р•Рґ. РёР·Рј</label>
+                            <label>Ед. изм</label>
                             <select
                               value={getManualDraft(system.id).unit}
                               onChange={(event) => updateManualDraft(system.id, "unit", event.target.value)}
@@ -533,7 +534,7 @@ export default function SystemsStep({
                             </select>
                           </div>
                           <div className="input-card">
-                            <label>РљРѕР»РёС‡РµСЃС‚РІРѕ</label>
+                            <label>Количество</label>
                             <input
                               type="number"
                               min="0"
@@ -543,7 +544,7 @@ export default function SystemsStep({
                             />
                           </div>
                           <div className="input-card">
-                            <label>Р¦РµРЅР°, в‚Ѕ</label>
+                            <label>Цена, ₽</label>
                             <input
                               type="number"
                               min="0"
@@ -563,7 +564,7 @@ export default function SystemsStep({
                                 resetManualDraft(system.id);
                               }}
                             >
-                              Р”РѕР±Р°РІРёС‚СЊ РїРѕР·РёС†РёСЋ
+                              Добавить позицию
                             </button>
                           </div>
                         </div>
@@ -571,24 +572,24 @@ export default function SystemsStep({
 
                       {apsSnapshot.itemsWithoutPrice?.length ? (
                         <div className="calc-explain">
-                          <h4>РџРѕР·РёС†РёРё Р±РµР· РЅР°Р№РґРµРЅРЅРѕР№ С†РµРЅС‹ РїРѕСЃС‚Р°РІС‰РёРєР°</h4>
+                          <h4>Позиции без найденной цены поставщика</h4>
                           <div className="table-wrap compact">
                             <table>
                               <thead>
                                 <tr>
-                                  <th>РџРѕР·.</th>
-                                  <th>РќР°РёРјРµРЅРѕРІР°РЅРёРµ</th>
-                                  <th>РњР°СЂРєР°/РјРѕРґРµР»СЊ</th>
-                                  <th>РљРѕР»-РІРѕ</th>
-                                  <th>РџСЂРёС‡РёРЅР°</th>
+                                  <th>Поз.</th>
+                                  <th>Наименование</th>
+                                  <th>Марка/модель</th>
+                                  <th>Кол-во</th>
+                                  <th>Причина</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {apsSnapshot.itemsWithoutPrice.map((item) => (
                                   <tr key={`${system.id}-no-price-${item.id}`}>
-                                    <td>{item.position || "вЂ”"}</td>
+                                    <td>{item.position || "—"}</td>
                                     <td>{item.name}</td>
-                                    <td>{item.model || "вЂ”"}</td>
+                                    <td>{item.model || "—"}</td>
                                     <td>
                                       {num(item.qty, 0)} {item.unit}
                                     </td>
@@ -603,20 +604,20 @@ export default function SystemsStep({
 
                       {apsSnapshot.unrecognizedRows?.length ? (
                         <div className="calc-explain">
-                          <h4>РќРµСЂР°СЃРїРѕР·РЅР°РЅРЅС‹Рµ РїРѕР·РёС†РёРё PDF (С‚СЂРµР±СѓСЋС‚ РїСЂРѕРІРµСЂРєРё)</h4>
+                          <h4>Нераспознанные позиции PDF (требуют проверки)</h4>
                           <div className="table-wrap compact">
                             <table>
                               <thead>
                                 <tr>
-                                  <th>РџРѕР·.</th>
-                                  <th>РЎС‚СЂРѕРєР° РёР· PDF</th>
-                                  <th>РџСЂРёС‡РёРЅР°</th>
+                                  <th>Поз.</th>
+                                  <th>Строка из PDF</th>
+                                  <th>Причина</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {apsSnapshot.unrecognizedRows.map((row) => (
                                   <tr key={`${system.id}-unrecognized-${row.id}`}>
-                                    <td>{row.position || "вЂ”"}</td>
+                                    <td>{row.position || "—"}</td>
                                     <td>{row.rawLine}</td>
                                     <td>{resolveUnrecognizedReason(row.reason)}</td>
                                   </tr>
@@ -629,29 +630,29 @@ export default function SystemsStep({
 
                       <div className="calc-explain aps-ops-card">
                         <div className="aps-ops-header">
-                          <h4>РўСЂСѓРґРѕРµРјРєРѕСЃС‚СЊ, РїСЂРѕРІРµСЂРєР° РµРґРёРЅРёС†, РєР°Р±РµР»СЊ Рё РєСЂРµРїРµР¶</h4>
+                          <h4>Трудоемкость, проверка единиц, кабель и крепеж</h4>
                           <button className="ghost-btn" type="button" onClick={() => toggleUnitAudit(system.id)}>
                             {showUnitAudit ? <EyeOff size={14} /> : <Eye size={14} />}
-                            {showUnitAudit ? "РЎРєСЂС‹С‚СЊ РїСЂРѕРІРµСЂРєСѓ РµРґРёРЅРёС†" : "РџРѕРєР°Р·Р°С‚СЊ РїСЂРѕРІРµСЂРєСѓ РµРґРёРЅРёС†"}
+                            {showUnitAudit ? "Скрыть проверку единиц" : "Показать проверку единиц"}
                           </button>
                         </div>
 
                         <div className="equipment-principles">
                           <p>
-                            <strong>РўСЂСѓРґРѕРµРјРєРѕСЃС‚СЊ РЎРњР +РџРќР :</strong> {num(apsSnapshot.labor.executionHoursBase, 1)} С‡; Р±СЂРёРіР°РґР°{" "}
-                            {num(apsSnapshot.labor.crewSize, 0)} С‡РµР».; СЃСЂРѕРє {num(apsSnapshot.labor.executionDays, 0)} СЂР°Р±. РґРЅРµР№.
+                            <strong>Трудоемкость СМР+ПНР:</strong> {num(apsSnapshot.labor.executionHoursBase, 1)} ч; бригада{" "}
+                            {num(apsSnapshot.labor.crewSize, 0)} чел.; срок {num(apsSnapshot.labor.executionDays, 0)} раб. дней.
                           </p>
                           <p>
-                            <strong>РўСЂСѓРґРѕРµРјРєРѕСЃС‚СЊ РїСЂРѕРµРєС‚РёСЂРѕРІР°РЅРёСЏ:</strong> {num(apsSnapshot.labor.designHoursBase, 1)} С‡; РіСЂСѓРїРїР°{" "}
-                            {num(apsSnapshot.labor.designTeamSize, 0)} С‡РµР».; СЃСЂРѕРє {num(apsSnapshot.labor.designMonths, 0)} РјРµСЃ.
+                            <strong>Трудоемкость проектирования:</strong> {num(apsSnapshot.labor.designHoursBase, 1)} ч; группа{" "}
+                            {num(apsSnapshot.labor.designTeamSize, 0)} чел.; срок {num(apsSnapshot.labor.designMonths, 0)} мес.
                           </p>
                           <p>
-                            <strong>РџСЂРѕРІРµСЂРєР° РµРґРёРЅРёС†:</strong> СЃРѕРІРїР°Р»Рѕ {num(apsSnapshot.sourceStats.unitMatch, 0)}, С‚СЂРµР±СѓРµС‚СЃСЏ РїСЂРѕРІРµСЂРєР°{" "}
-                            {num(apsSnapshot.sourceStats.unitMismatch, 0)}, Р±РµР· РґР°РЅРЅС‹С… {num(apsSnapshot.sourceStats.unitUnknown, 0)}.
+                            <strong>Проверка единиц:</strong> совпало {num(apsSnapshot.sourceStats.unitMatch, 0)}, требуется проверка{" "}
+                            {num(apsSnapshot.sourceStats.unitMismatch, 0)}, без данных {num(apsSnapshot.sourceStats.unitUnknown, 0)}.
                           </p>
                           <p>
-                            <strong>РљР°Р±РµР»СЊ Рё РєСЂРµРїРµР¶:</strong> РєР°Р±РµР»СЊ {num(apsSnapshot.metrics?.cableLengthM || 0, 1)} Рј, Р»РёРЅРёР№{" "}
-                            {num(apsSnapshot.metrics?.cableLines || 0, 0)}; РєСЂРµРїРµР¶ {num(apsSnapshot.metrics?.fastenerQty || 0, 0)} С€С‚, РїРѕР·РёС†РёР№{" "}
+                            <strong>Кабель и крепеж:</strong> кабель {num(apsSnapshot.metrics?.cableLengthM || 0, 1)} м, линий{" "}
+                            {num(apsSnapshot.metrics?.cableLines || 0, 0)}; крепеж {num(apsSnapshot.metrics?.fastenerQty || 0, 0)} шт, позиций{" "}
                             {num(apsSnapshot.metrics?.fastenerLines || 0, 0)}.
                           </p>
                         </div>
@@ -661,23 +662,23 @@ export default function SystemsStep({
                             <table>
                               <thead>
                                 <tr>
-                                  <th>РџРѕР·.</th>
-                                  <th>РќР°РёРјРµРЅРѕРІР°РЅРёРµ</th>
-                                  <th>Р•Рґ. РїСЂРѕРµРєС‚Р°</th>
-                                  <th>Р•Рґ. РїРѕСЃС‚Р°РІС‰РёРєР°</th>
-                                  <th>РЎС‚Р°С‚СѓСЃ</th>
+                                  <th>Поз.</th>
+                                  <th>Наименование</th>
+                                  <th>Ед. проекта</th>
+                                  <th>Ед. поставщика</th>
+                                  <th>Статус</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {unitAuditRows.map((item) => (
                                   <tr key={`${system.id}-unit-audit-${item.id}`}>
-                                    <td>{item.position || "вЂ”"}</td>
+                                    <td>{item.position || "—"}</td>
                                     <td>{item.name}</td>
-                                    <td>{item?.unitAudit?.projectUnit || item.unit || "вЂ”"}</td>
-                                    <td>{item?.unitAudit?.supplierUnits?.join(", ") || "РЅРµС‚ РґР°РЅРЅС‹С…"}</td>
+                                    <td>{item?.unitAudit?.projectUnit || item.unit || "—"}</td>
+                                    <td>{item?.unitAudit?.supplierUnits?.join(", ") || "нет данных"}</td>
                                     <td>
                                       <span className={`unit-audit-badge ${item?.unitAudit?.status || "unknown"}`}>
-                                        {item?.unitAudit?.message || "С‚СЂРµР±СѓРµС‚СЃСЏ РїСЂРѕРІРµСЂРєР°"}
+                                        {item?.unitAudit?.message || "требуется проверка"}
                                       </span>
                                     </td>
                                   </tr>
@@ -705,7 +706,7 @@ export default function SystemsStep({
 
               <div className="system-subgrid">
                 <div className="calc-explain">
-                  <h4>РљРѕСЌС„С„РёС†РёРµРЅС‚С‹ СЃРёСЃС‚РµРјС‹</h4>
+                  <h4>Коэффициенты системы</h4>
                   <div className="coeff-list">
                     {(result?.coefficientInsights || []).map((item) => (
                       <div className="coeff-item" key={`${system.id}-${item.key}`}>
@@ -721,15 +722,15 @@ export default function SystemsStep({
                 </div>
 
                 <div className="calc-explain">
-                  <h4>РљР»СЋС‡РµРІРѕРµ РѕР±РѕСЂСѓРґРѕРІР°РЅРёРµ, РѕРїСЂРµРґРµР»СЏСЋС‰РµРµ С†РµРЅСѓ</h4>
+                  <h4>Ключевое оборудование, определяющее цену</h4>
                   <div className="table-wrap compact">
                     <table>
                       <thead>
                         <tr>
-                          <th>РќР°РёРјРµРЅРѕРІР°РЅРёРµ</th>
-                          <th>РљРѕР»-РІРѕ</th>
-                          <th>Р¦РµРЅР°</th>
-                          <th>РЎСѓРјРјР°</th>
+                          <th>Наименование</th>
+                          <th>Кол-во</th>
+                          <th>Цена</th>
+                          <th>Сумма</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -751,9 +752,9 @@ export default function SystemsStep({
                       </p>
                     ))}
                     <p>
-                      <strong>РљР°Р±РµР»СЊ:</strong> {num(result?.cable || 0, 1)} Рј; <strong>РљСЂРµРїРµР¶:</strong>{" "}
-                      {num(apsSnapshot?.metrics?.fastenerQty ?? result?.fastenerUnits ?? 0, 0)} С€С‚; <strong>РљРќРЎ:</strong>{" "}
-                      {num(result?.knsLength || result?.trace?.knsLengthM || 0, 1)} Рј.
+                      <strong>Кабель:</strong> {num(result?.cable || 0, 1)} м; <strong>Крепеж:</strong>{" "}
+                      {num(apsSnapshot?.metrics?.fastenerQty ?? result?.fastenerUnits ?? 0, 0)} шт; <strong>КНС:</strong>{" "}
+                      {num(result?.knsLength || result?.trace?.knsLengthM || 0, 1)} м.
                     </p>
                   </div>
                 </div>
@@ -761,7 +762,7 @@ export default function SystemsStep({
 
               <div className="action-cell">
                 <button className="danger-btn" type="button" onClick={() => removeSystem(system.id)} disabled={systems.length <= 1}>
-                  <Trash2 size={16} /> РЈРґР°Р»РёС‚СЊ СЃРёСЃС‚РµРјСѓ
+                  <Trash2 size={16} /> Удалить систему
                 </button>
               </div>
             </div>
@@ -771,4 +772,3 @@ export default function SystemsStep({
     </section>
   );
 }
-
