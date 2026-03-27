@@ -84,8 +84,8 @@ export default function EstimatorApp() {
       <div className={`app-wrap ${authorized ? "" : "locked"}`} aria-hidden={!authorized}>
         <header className="hero-card">
           <div>
-            <div className="hero-kicker">SmetaCore</div>
-            <h1>SmetaCore — предварительный расчет бюджета систем безопасности</h1>
+            <div className="hero-kicker">Smeta.Core™</div>
+            <h1>Smeta.Core™ — предварительный расчет бюджета систем безопасности</h1>
             <p>С AI-аудитом цен и трудозатрат, рыночной верификацией и защитой от недооценки бюджета.</p>
           </div>
           <button className="primary-btn" onClick={vm.exportEstimate} type="button">

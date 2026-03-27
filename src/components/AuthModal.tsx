@@ -9,7 +9,7 @@ type AuthModalProps = {
 };
 
 const CODE_LENGTH = 6;
-const LEGAL_WARNING = "Для продолжения нужно подтвердить согласие на обработку персональных данных.";
+const LEGAL_WARNING = "Для продолжения нужно подтвердить согласие с условиями использования сервиса и обработкой персональных данных.";
 
 export function AuthModal({ open, onClose }: AuthModalProps) {
   const navigate = useNavigate();
@@ -151,10 +151,14 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
               <input type="checkbox" checked={consentChecked} onChange={(event) => setConsentChecked(event.target.checked)} disabled={busy} />
               <span>
                 Я ознакомлен(а) с{" "}
+                <Link to="/legal/user-agreement" target="_blank" rel="noreferrer">
+                  Пользовательским соглашением
+                </Link>{" "}
+                и даю согласие на обработку персональных данных в соответствии с{" "}
                 <Link to="/legal/personal-data" target="_blank" rel="noreferrer">
                   Политикой обработки ПДн
-                </Link>{" "}
-                и даю согласие на обработку персональных данных для авторизации.
+                </Link>
+                .
               </span>
             </label>
             <div className="auth-form__hint">Тестовый код в дебаг-режиме ротируется раз в 60 секунд.</div>

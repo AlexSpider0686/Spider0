@@ -1,5 +1,5 @@
-import { Link } from 'react-router-dom';
-import { siteConfig } from '../data/siteContent';
+import { Link } from "react-router-dom";
+import { siteConfig } from "../data/siteContent";
 
 export function Footer() {
   return (
@@ -8,13 +8,15 @@ export function Footer() {
         <div>
           <div className="footer__brand">{siteConfig.brand}</div>
           <p className="footer__copy">
-            Платформа предварительной бюджетной оценки систем безопасности. Расчёт не является
-            проектно-сметной документацией и служит для пресейла и ранней финансовой модели.
+            Платформа предварительной бюджетной оценки систем безопасности. Расчет не является проектно-сметной документацией и служит для пресейла и ранней
+            финансовой модели.
           </p>
+          <p className="footer__copy">© 2026 Александр Александрович Тартаковский. Все права защищены. Smeta.Core™</p>
         </div>
         <nav className="footer__nav" aria-label="Юридическая информация">
           <Link to="/legal/privacy">Политика конфиденциальности</Link>
           <Link to="/legal/personal-data">Политика обработки персональных данных</Link>
+          <Link to="/legal/user-agreement">Пользовательское соглашение</Link>
           <Link to="/legal/cookies">Cookies</Link>
           <Link to="/legal/disclaimer">Отказ от ответственности</Link>
         </nav>
