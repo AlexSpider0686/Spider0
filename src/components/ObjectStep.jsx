@@ -127,7 +127,9 @@ export default function ObjectStep({
                 </span>
                 <span>
                   Источник подтверждения: {addressVerification.result.preview?.source}
-                  {addressVerification.result.preview?.isMapFallback ? " (карта по проверенной точке)" : ""}
+                  {addressVerification.result.preview?.isMapFallback
+                    ? " (карта по проверенной точке, без риска показать чужое здание)"
+                    : " (фото прошло строгую проверку совпадения с адресом)"}
                 </span>
               </div>
             </div>
