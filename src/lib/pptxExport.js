@@ -310,6 +310,88 @@ function buildRecognizedSpecRows(apsProjectExports = []) {
   return rows;
 }
 
+function buildUnifiedSpecificationRows(systemResults = [], apsProjectExports = []) {
+  const rows = [];
+  const apsTypes = new Set(
+    apsProjectExports
+      .map((project) => sanitizeText(project?.systemType || "").toLowerCase())
+      .filter(Boolean)
+  );
+
+  for (const system of systemResults) {
+    const systemType = sanitizeText(system?.systemType || "").toLowerCase();
+    if (apsTypes.has(systemType)) continue;
+
+    const systemName = sanitizeText(system?.systemName || system?.systemType || "—");
+    const details = Array.isArray(system?.equipmentData?.details) ? system.equipmentData.details : [];
+    const marketEntries = Array.isArray(system?.equipmentData?.marketEntries) ? system.equipmentData.marketEntries : [];
+    const linkIndex = new Map();
+
+    for (const entry of marketEntries) {
+      const label = sanitizeText(entry?.equipmentLabel || "").toLowerCase();
+      const source = sanitizeText((entry?.usedSources || [])[0] || "");
+      if (!label || !source || linkIndex.has(label)) continue;
+      linkIndex.set(label, source);
+    }
+
+    for (const item of details) {
+      const itemName = sanitizeText(item?.name || item?.code || "—");
+      const itemModel = sanitizeText(item?.model || "");
+      const fullName = itemModel ? `${itemName} (${itemModel})` : itemName;
+      const qty = safeNum(item?.qty, 0);
+      const unit = sanitizeText(item?.unit || "");
+      const unitPrice = safeNum(item?.unitPrice, 0);
+      const total = safeNum(item?.total, qty * unitPrice);
+
+      let sourceLink = sanitizeText((item?.usedSources || [])[0] || "");
+      if (!sourceLink) {
+        const candidates = [fullName, itemName, itemModel].map((value) => sanitizeText(value).toLowerCase()).filter(Boolean);
+        const found = candidates.find((candidate) => linkIndex.has(candidate));
+        if (found) sourceLink = linkIndex.get(found) || "";
+      }
+
+      rows.push([
+        systemName,
+        shortenText(fullName, 54),
+        `${num(qty, 0)} ${unit}`.trim(),
+        rub(unitPrice),
+        rub(total),
+        shortenText(sourceLink || "нет ссылки", 40),
+        "—",
+      ]);
+    }
+  }
+
+  for (const project of apsProjectExports) {
+    const systemName = sanitizeText(project?.systemName || project?.systemType || "—");
+    const items = Array.isArray(project?.items) ? project.items : [];
+
+    for (const item of items) {
+      const itemName = sanitizeText(item?.name || "—");
+      const itemModel = sanitizeText(item?.model || item?.brand || "");
+      const fullName = itemModel ? `${itemName} (${itemModel})` : itemName;
+      const qty = safeNum(item?.qty, 0);
+      const unit = sanitizeText(item?.unit || "");
+      const unitPrice = safeNum(item?.unitPrice, 0);
+      const total = safeNum(item?.total, qty * unitPrice);
+      const sourceLink = sanitizeText((item?.usedSources || [])[0] || "");
+      const position = sanitizeText(item?.position || "—");
+
+      rows.push([
+        systemName,
+        shortenText(fullName, 54),
+        `${num(qty, 0)} ${unit}`.trim(),
+        rub(unitPrice),
+        rub(total),
+        shortenText(sourceLink || "нет ссылки", 40),
+        position,
+      ]);
+    }
+  }
+
+  return rows;
+}
+
 function buildTimeline(systemResults, objectData, totals) {
   const systemsCount = Math.max(systemResults.length, 1);
   const area = safeNum(objectData?.totalArea, 0);
@@ -650,60 +732,40 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
     fontSize: 9,
   });
 
-  const slide5 = pptx.addSlide();
-  addSlideFrame(
-    slide5,
-    "Реестр оборудования и материалов",
-    "Позиции по системам: количество, цена за единицу, сумма и ссылка на источник цены.",
-    5
+  const unifiedSpecificationRows = buildUnifiedSpecificationRows(safeSystems, safeApsProjects);
+  const specificationChunks = chunkArray(
+    unifiedSpecificationRows.length ? unifiedSpecificationRows : [["—", "Нет данных", "—", "—", "—", "—", "—"]],
+    12
   );
 
-  const registryRows = buildEquipmentRegistryRows(safeSystems);
-  drawTable(slide5, {
-    x: 0.55,
-    y: 1.2,
-    w: 12.2,
-    headers: ["Система", "Наименование", "Кол-во", "Цена за ед.", "Сумма", "Ссылка"],
-    widths: [0.16, 0.3, 0.12, 0.12, 0.13, 0.17],
-    rows: registryRows.length ? registryRows : [["—", "Нет данных", "—", "—", "—", "—"]],
-    maxRows: 14,
-    rowH: 0.41,
-    fontSize: 8,
-  });
-
-  const recognizedSpecRows = buildRecognizedSpecRows(safeApsProjects);
-  const recognizedSpecChunks = chunkArray(recognizedSpecRows, 12);
-
-  if (recognizedSpecChunks.length) {
-    recognizedSpecChunks.forEach((rowsChunk, chunkIndex) => {
-      const slide = pptx.addSlide();
-      const titleSuffix = recognizedSpecChunks.length > 1 ? ` (${chunkIndex + 1}/${recognizedSpecChunks.length})` : "";
-      addSlideFrame(
-        slide,
-        `Распознанная спецификация APS${titleSuffix}`,
-        "Полный перечень оборудования и материалов, распознанных по загруженной PDF-спецификации.",
-        6 + chunkIndex
-      );
-      drawTable(slide, {
-        x: 0.55,
-        y: 1.2,
-        w: 12.2,
-        headers: ["Система", "Файл", "Позиция", "Наименование", "Кол-во", "Цена за ед.", "Сумма"],
-        widths: [0.14, 0.14, 0.08, 0.32, 0.1, 0.1, 0.12],
-        rows: rowsChunk,
-        maxRows: 12,
-        rowH: 0.45,
-        fontSize: 8,
-      });
+  specificationChunks.forEach((rowsChunk, chunkIndex) => {
+    const slide = pptx.addSlide();
+    const titleSuffix = specificationChunks.length > 1 ? ` (${chunkIndex + 1}/${specificationChunks.length})` : "";
+    addSlideFrame(
+      slide,
+      `Спецификация оборудования и материалов${titleSuffix}`,
+      "Единый перечень по всем системам: оборудование, материалы, количество, цена, сумма, ссылка и позиция из проекта.",
+      5 + chunkIndex
+    );
+    drawTable(slide, {
+      x: 0.55,
+      y: 1.2,
+      w: 12.2,
+      headers: ["Система", "Наименование", "Кол-во", "Цена за ед.", "Сумма", "Ссылка", "Поз. в файле"],
+      widths: [0.14, 0.28, 0.1, 0.11, 0.11, 0.18, 0.08],
+      rows: rowsChunk,
+      maxRows: 12,
+      rowH: 0.45,
+      fontSize: 8,
     });
-  }
+  });
 
   const slide6 = pptx.addSlide();
   addSlideFrame(
     slide6,
     "График реализации проекта",
     "Ориентировочные сроки проектирования, поставки, СМР, ПНР и интеграции.",
-    6 + recognizedSpecChunks.length
+    5 + specificationChunks.length
   );
   addGanttSlide(slide6, safeSystems, safeObject, safeTotals);
 
