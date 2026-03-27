@@ -115,6 +115,9 @@ export default function ObjectStep({
               Алгоритм нормализует адрес, ищет его онлайн, подтверждает регион и при наличии названия объекта ищет фото по связке
               адреса и бренда.
             </small>
+            {!String(objectData.objectLabel || "").trim() ? (
+              <small className="warn-inline">Чтобы найти фото именно здания, заполните поле "Название объекта / арендатора".</small>
+            ) : null}
           </div>
           <div
             className={`address-status ${

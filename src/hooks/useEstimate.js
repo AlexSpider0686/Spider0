@@ -18,6 +18,16 @@ function removeById(mapObject, id) {
   return next;
 }
 
+function resolveObjectSearchLabel(objectData = {}) {
+  const objectLabel = String(objectData.objectLabel || "").trim();
+  if (objectLabel) return objectLabel;
+
+  const projectName = String(objectData.projectName || "").trim();
+  if (projectName && projectName !== "Объект 1") return projectName;
+
+  return "";
+}
+
 export default function useEstimate() {
   const [step, setStep] = useState(0);
   const [objectData, setObjectData] = useState({
@@ -101,6 +111,7 @@ export default function useEstimate() {
 
   const verifyObjectAddress = async () => {
     const currentAddress = String(objectData.address || "").trim();
+    const objectSearchLabel = resolveObjectSearchLabel(objectData);
     if (!currentAddress) {
       setAddressVerification({
         state: "error",
@@ -112,12 +123,14 @@ export default function useEstimate() {
 
     setAddressVerification({
       state: "loading",
-      message: "Идёт онлайн-поиск адреса и визуального подтверждения...",
+      message: objectSearchLabel
+        ? "Идёт онлайн-поиск адреса и поиск объекта по связке адреса и названия..."
+        : "Идёт онлайн-поиск адреса. Для поиска фото здания добавьте название объекта или арендатора.",
       result: null,
     });
 
     try {
-      const result = await verifyObjectAddressOnline(currentAddress, objectData.objectLabel || "");
+      const result = await verifyObjectAddressOnline(currentAddress, objectSearchLabel);
       setObjectData((prev) => ({
         ...prev,
         regionName: result.regionName || prev.regionName,
@@ -126,7 +139,9 @@ export default function useEstimate() {
       setAddressVerification({
         state: "success",
         message: result.preview?.isMapFallback
-          ? "Адрес подтверждён. Надёжного совпадения по названию объекта не найдено, поэтому показана карта проверенной точки."
+          ? objectSearchLabel
+            ? "Адрес подтверждён, но надёжного совпадения по названию объекта не найдено. Показана карта проверенной точки."
+            : "Адрес подтверждён. Для поиска фото именно здания добавьте название объекта или арендатора."
           : "Адрес подтверждён. Фото найдено по связке адреса и названия объекта.",
         result,
       });
