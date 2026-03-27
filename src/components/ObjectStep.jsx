@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, Lock, Unlock, Search, ClipboardList, Camera, CheckCircle2 } from "lucide-react";
+import { Plus, Trash2, Lock, Unlock, Search, ClipboardList, Camera, CheckCircle2, X } from "lucide-react";
 import { OBJECT_TYPES, SYSTEM_TYPES } from "../config/estimateConfig";
 import { BUILDING_STATUS_OPTIONS } from "../config/costModelConfig";
 import { searchRegions } from "../config/regionsConfig";
@@ -130,6 +130,7 @@ export default function ObjectStep({
   analyzeAiSurveyPhoto,
 }) {
   const [regionQuery, setRegionQuery] = useState(objectData.regionName || "");
+  const [surveyModalOpen, setSurveyModalOpen] = useState(false);
   const regionItems = useMemo(() => searchRegions(regionQuery).slice(0, 20), [regionQuery]);
   const selectedObjectType = OBJECT_TYPES.find((item) => item.value === objectData.objectType);
   const activeSystemTypes = new Set((systems || []).map((item) => item.type));
@@ -144,6 +145,11 @@ export default function ObjectStep({
   useEffect(() => {
     setRegionQuery(objectData.regionName || "");
   }, [objectData.regionName]);
+
+  const handleOpenSurvey = () => {
+    const started = technicalSolution?.surveyStartedAt ? true : startAiSurvey();
+    if (started) setSurveyModalOpen(true);
+  };
 
   return (
     <section className="panel">
@@ -476,28 +482,15 @@ export default function ObjectStep({
         <div className="subpanel-header">
           <div>
             <h3>AI-Техническое решение: обследование объекта</h3>
-            <p>Сначала фиксируем состав систем и наличие РД, затем запускаем адаптивное обследование по объекту, зонам и выбранным системам.</p>
+            <p>Модуль запускается как отдельное внутреннее окно после заполнения обязательных данных по объекту. Введенная внутри него информация сохраняется, пока пользователь остается в платформе.</p>
           </div>
-          <button
-            className="primary-btn"
-            type="button"
-            onClick={startAiSurvey}
-            disabled={!aiSurveyPlan?.readiness?.isReady}
-          >
+          <button className="primary-btn" type="button" onClick={handleOpenSurvey} disabled={!aiSurveyPlan?.readiness?.isReady}>
             <ClipboardList size={16} />
-            AI-Обследование
+            {technicalSolution?.surveyStartedAt ? "Открыть AI-обследование" : "AI-Обследование"}
           </button>
         </div>
 
         <div className="ai-survey-summary-grid">
-          <div className="metric-card">
-            <span>UUID проекта</span>
-            <strong>{objectData.projectUuid}</strong>
-          </div>
-          <div className="metric-card">
-            <span>UUID объекта</span>
-            <strong>{objectData.objectUuid}</strong>
-          </div>
           <div className="metric-card">
             <span>Расчетное время обследования</span>
             <strong>{num(aiSurveyPlan?.estimatedHours || 0, 1)} ч</strong>
@@ -505,6 +498,14 @@ export default function ObjectStep({
           <div className="metric-card">
             <span>Заполнение чек-листа</span>
             <strong>{aiSurveyCompletion?.percent || 0}%</strong>
+          </div>
+          <div className="metric-card">
+            <span>Систем в обследовании</span>
+            <strong>{num(aiSurveyPlan?.activeSystems?.length || 0, 0)}</strong>
+          </div>
+          <div className="metric-card">
+            <span>Статус модуля</span>
+            <strong>{technicalSolution?.surveyStartedAt ? "Окно доступно" : "Не запускалось"}</strong>
           </div>
         </div>
 
@@ -565,7 +566,50 @@ export default function ObjectStep({
         ) : null}
 
         {technicalSolution?.surveyStartedAt ? (
-          <>
+          <div className="calc-explain ai-checklist-footer">
+            <h4>Статус этапа</h4>
+            <div className="ai-summary-list">
+              <div>
+                <CheckCircle2 size={16} />
+                <span>
+                  Опросник уже создан. Если закрыть внутреннее окно и открыть его снова, все ответы и результаты фотоанализа останутся внутри текущей сессии платформы.
+                </span>
+              </div>
+              <div>
+                <CheckCircle2 size={16} />
+                <span>
+                  Охват: объект, {zones.length} зон и системы: {(aiSurveyPlan?.activeSystems || []).map((code) => systemNames[code] || code).join(", ") || "не выбраны"}.
+                </span>
+              </div>
+              {(aiSurveyPlan?.skippedSystems || []).length ? (
+                <div>
+                  <CheckCircle2 size={16} />
+                  <span>
+                    С чек-листа исключены системы с РД: {aiSurveyPlan.skippedSystems.map((code) => systemNames[code] || code).join(", ")}.
+                  </span>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      {surveyModalOpen ? (
+        <div className="ai-survey-modal" role="dialog" aria-modal="true" aria-label="AI-обследование объекта">
+          <div className="ai-survey-modal__backdrop" onClick={() => setSurveyModalOpen(false)} />
+          <div className="ai-survey-modal__card">
+            <div className="ai-survey-modal__header">
+              <div>
+                <h3>AI-Обследование объекта</h3>
+                <p>
+                  Отдельное внутреннее окно обследования. Данные внутри него сохраняются в течение текущей сессии платформы, даже если вы закроете окно и откроете его снова.
+                </p>
+              </div>
+              <button className="ghost-btn ai-survey-modal__close" type="button" onClick={() => setSurveyModalOpen(false)}>
+                <X size={16} /> Закрыть
+              </button>
+            </div>
+
             <div className="ai-checklist-sections">
               {(aiSurveyPlan?.sections || []).map((section) => (
                 <div className="calc-explain ai-checklist-section" key={section.id}>
@@ -574,9 +618,7 @@ export default function ObjectStep({
                       <h4>{section.title}</h4>
                       <p className="hint-inline">{section.description}</p>
                     </div>
-                    <span className="pricing-source-chip muted">
-                      {section.questions.length} вопросов
-                    </span>
+                    <span className="pricing-source-chip muted">{section.questions.length} вопросов</span>
                   </div>
 
                   <div className="ai-checklist-grid">
@@ -626,7 +668,6 @@ export default function ObjectStep({
                               try {
                                 await analyzeAiSurveyPhoto(prompt, file);
                               } catch {
-                                // Сообщение показывается в analysis.summary
                               } finally {
                                 event.target.value = "";
                               }
@@ -653,29 +694,9 @@ export default function ObjectStep({
                 </div>
               </div>
             ) : null}
-
-            <div className="calc-explain ai-checklist-footer">
-              <h4>Статус этапа</h4>
-              <div className="ai-summary-list">
-                <div>
-                  <CheckCircle2 size={16} />
-                  <span>
-                    Опросник охватывает объект, {zones.length} зон и системы: {(aiSurveyPlan?.activeSystems || []).map((code) => systemNames[code] || code).join(", ") || "не выбраны"}.
-                  </span>
-                </div>
-                {(aiSurveyPlan?.skippedSystems || []).length ? (
-                  <div>
-                    <CheckCircle2 size={16} />
-                    <span>
-                      С чек-листа исключены системы с РД: {aiSurveyPlan.skippedSystems.map((code) => systemNames[code] || code).join(", ")}.
-                    </span>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </>
-        ) : null}
-      </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

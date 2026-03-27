@@ -279,6 +279,57 @@ select {
   width: 90px;
 }
 
+.ai-survey-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.ai-survey-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(217, 229, 246, 0.72);
+}
+
+.ai-survey-modal__card {
+  position: relative;
+  z-index: 1;
+  width: min(1120px, 96vw);
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  border-radius: 18px;
+  padding: 18px;
+  border: 1px solid rgba(141, 163, 196, 0.38);
+  box-shadow: 0 22px 56px rgba(37, 73, 121, 0.22);
+  background: linear-gradient(180deg, rgba(252, 254, 255, 0.97), rgba(240, 247, 255, 0.95));
+}
+
+.ai-survey-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.ai-survey-modal__header h3 {
+  margin: 0 0 6px;
+}
+
+.ai-survey-modal__header p {
+  margin: 0;
+  color: var(--muted);
+  max-width: 760px;
+}
+
+.ai-survey-modal__close {
+  white-space: nowrap;
+}
+
 @keyframes sky-pan {
   0% {
     transform: translate3d(-4%, -2%, 0) scale(1);
@@ -1970,6 +2021,20 @@ tbody tr:hover {
   .panel {
     padding: 10px;
     border-radius: 12px;
+  }
+
+  .ai-survey-modal {
+    padding: 12px;
+  }
+
+  .ai-survey-modal__card {
+    max-height: calc(100vh - 24px);
+    padding: 12px;
+    border-radius: 14px;
+  }
+
+  .ai-survey-modal__header {
+    flex-direction: column;
   }
 
   .grid-two,
