@@ -1,9 +1,8 @@
-name: spider0
+meta:
+  environment: node
+  tool: browser
 
-services:
-  - name: web
-    type: nodejs
-    build:
-      command: npm install && npm run build
-    start:
-      command: npm run start
+run:
+  buildFile: package.json
+  buildCommand: npm install && npm run build
+  scriptName: npm run start

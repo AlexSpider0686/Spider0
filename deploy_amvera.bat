@@ -1,17 +1,19 @@
 @echo off
 cd /d C:\Users\User\Documents\GitHub\Spider0
 
-echo ===== Проверка git =====
+echo ==== Проверка состояния ====
 git status
 
-echo ===== Добавляем изменения =====
+echo ==== Добавляем изменения ====
 git add .
 
-echo ===== Коммит =====
+echo ==== Коммит ====
 git commit -m "deploy to amvera"
 
-echo ===== Отправка в Amvera =====
-git push amvera main
+echo ==== Отправка в GitHub ====
+git push origin main
 
-echo ===== ГОТОВО =====
+echo ==== Отправка в Amvera ====
+git push amvera main:master
+
 pause
