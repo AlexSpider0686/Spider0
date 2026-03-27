@@ -86,7 +86,7 @@ export default function EstimatorApp() {
           <div>
             <div className="hero-kicker">SmetaCore</div>
             <h1>SmetaCore — предварительный расчет бюджета систем безопасности</h1>
-            <p>С автоматическим формированием сметы и коммерческого предложения</p>
+            <p>С AI-аудитом цен и трудозатрат, рыночной верификацией и защитой от недооценки бюджета.</p>
           </div>
           <button className="primary-btn" onClick={vm.exportEstimate} type="button">
             <Download size={16} /> Экспорт ТКП
