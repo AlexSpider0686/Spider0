@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import EstimatorApp from "./components/EstimatorApp";
+import { AboutSystemPage } from "./pages/AboutSystemPage";
 import { HomePage } from "./pages/HomePage";
 import { CookiesPage } from "./pages/legal/CookiesPage";
 import { DisclaimerPage } from "./pages/legal/DisclaimerPage";
@@ -12,6 +13,7 @@ export default function App() {
     <Routes>
       <Route element={<AppShell />}>
         <Route path="/" element={<HomePage />} />
+        <Route path="/about-system" element={<AboutSystemPage />} />
         <Route path="/legal/privacy" element={<PrivacyPage />} />
         <Route path="/legal/personal-data" element={<PersonalDataPage />} />
         <Route path="/legal/cookies" element={<CookiesPage />} />

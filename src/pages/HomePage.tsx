@@ -187,6 +187,9 @@ export function HomePage() {
             <a className="btn btn--ghost-light" href="#calculation-logic">
               Логика расчета
             </a>
+            <Link className="btn btn--ghost-light" to="/about-system">
+              О системе
+            </Link>
           </div>
           <div className="hero__grid">
             {metrics.map((metric) => (
