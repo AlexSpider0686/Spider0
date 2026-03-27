@@ -1089,6 +1089,14 @@ select {
   margin-top: 2px;
 }
 
+.nested-input-card {
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 .address-status {
   margin-top: 2px;
   font-size: 10px;

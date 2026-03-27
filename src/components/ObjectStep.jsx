@@ -98,11 +98,23 @@ export default function ObjectStep({
               onChange={(event) => updateObject("address", event.target.value)}
             />
           </div>
+          <div className="input-card nested-input-card">
+            <label>Название объекта / арендатора</label>
+            <input
+              type="text"
+              value={objectData.objectLabel || ""}
+              placeholder="Например: Сбер, БЦ Романов двор, ЖК ..."
+              onChange={(event) => updateObject("objectLabel", event.target.value)}
+            />
+          </div>
           <div className="address-actions">
             <button className="primary-btn" type="button" onClick={verifyObjectAddress} disabled={addressVerification?.state === "loading"}>
               {addressVerification?.state === "loading" ? "Проверка адреса..." : "Проверить адрес"}
             </button>
-            <small className="hint-inline">Алгоритм нормализует адрес, ищет его онлайн, подтверждает регион и подбирает фото рядом с точкой.</small>
+            <small className="hint-inline">
+              Алгоритм нормализует адрес, ищет его онлайн, подтверждает регион и при наличии названия объекта ищет фото по связке
+              адреса и бренда.
+            </small>
           </div>
           <div
             className={`address-status ${
@@ -125,9 +137,12 @@ export default function ObjectStep({
                   Район: {addressVerification.result.district || "не определён"} | Регион:{" "}
                   {addressVerification.result.regionName || objectData.regionName}
                 </span>
+                {objectData.objectLabel ? <span>Контекст поиска: {objectData.objectLabel}</span> : null}
                 <span>
                   Источник подтверждения: {addressVerification.result.preview?.source}
-                  {" (карта по проверенной точке, без риска показать чужое здание)"}
+                  {addressVerification.result.preview?.isMapFallback
+                    ? " (карта по проверенной точке, без риска показать чужое здание)"
+                    : " (изображение найдено по связке адреса и названия объекта)"}
                 </span>
               </div>
             </div>

@@ -23,6 +23,7 @@ export default function useEstimate() {
   const [objectData, setObjectData] = useState({
     projectName: "Объект 1",
     address: "",
+    objectLabel: "",
     objectType: "public",
     totalArea: 15000,
     floors: 5,
@@ -86,6 +87,15 @@ export default function useEstimate() {
       );
       return;
     }
+    if (key === "objectLabel") {
+      setObjectData((prev) => ({ ...prev, objectLabel: value }));
+      setAddressVerification((prev) =>
+        prev.state === "idle" && !prev.result
+          ? { ...prev, message: "Добавьте название объекта или арендатора для более точного поиска фото." }
+          : { state: "idle", message: "Название объекта изменено. Выполните проверку адреса заново.", result: null }
+      );
+      return;
+    }
     setObjectData((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -107,7 +117,7 @@ export default function useEstimate() {
     });
 
     try {
-      const result = await verifyObjectAddressOnline(currentAddress);
+      const result = await verifyObjectAddressOnline(currentAddress, objectData.objectLabel || "");
       setObjectData((prev) => ({
         ...prev,
         regionName: result.regionName || prev.regionName,
@@ -115,7 +125,9 @@ export default function useEstimate() {
       }));
       setAddressVerification({
         state: "success",
-        message: "Адрес подтверждён. Показана карта проверенной точки, чтобы исключить ошибочное фото другого здания.",
+        message: result.preview?.isMapFallback
+          ? "Адрес подтверждён. Надёжного совпадения по названию объекта не найдено, поэтому показана карта проверенной точки."
+          : "Адрес подтверждён. Фото найдено по связке адреса и названия объекта.",
         result,
       });
     } catch (error) {
