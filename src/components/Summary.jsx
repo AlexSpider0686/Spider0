@@ -10,6 +10,7 @@ export default function Summary({ totals, systemResults, objectData }) {
           <p>
             Регион: {objectData?.regionName || "—"} | Региональный коэффициент: <strong>x{num(objectData?.regionCoef || 1, 2)}</strong>
           </p>
+          {objectData?.address ? <p>Адрес объекта: {objectData.address}</p> : null}
         </div>
       </div>
       <div className="summary-grid">

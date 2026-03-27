@@ -9,6 +9,7 @@ import { DEFAULT_REGION_NAME, getRegionCoef } from "../config/regionsConfig";
 import { validateEstimateInput } from "../lib/input-normalization";
 import { appendManualApsProjectItem, recalculateApsProjectSnapshot, removeApsProjectItem } from "../lib/apsProjectEstimate";
 import { calculateProtectedArea } from "../lib/protectedArea";
+import { verifyObjectAddress as verifyObjectAddressOnline } from "../lib/addressVerification";
 
 function removeById(mapObject, id) {
   if (!(id in mapObject)) return mapObject;
@@ -21,6 +22,7 @@ export default function useEstimate() {
   const [step, setStep] = useState(0);
   const [objectData, setObjectData] = useState({
     projectName: "Объект 1",
+    address: "",
     objectType: "public",
     totalArea: 15000,
     floors: 5,
@@ -44,6 +46,11 @@ export default function useEstimate() {
   const [vendorPriceSnapshots, setVendorPriceSnapshots] = useState({});
   const [apsProjectSnapshots, setApsProjectSnapshots] = useState({});
   const [apsImportStatuses, setApsImportStatuses] = useState({});
+  const [addressVerification, setAddressVerification] = useState({
+    state: "idle",
+    message: "Введите адрес объекта и запустите онлайн-проверку.",
+    result: null,
+  });
 
   const pricingSignaturesRef = useRef(new Map());
   const protectedAreaMeta = useMemo(() => calculateProtectedArea(objectData), [objectData]);
@@ -70,7 +77,56 @@ export default function useEstimate() {
       setObjectData((prev) => ({ ...prev, regionName: value, regionCoef: getRegionCoef(value) }));
       return;
     }
+    if (key === "address") {
+      setObjectData((prev) => ({ ...prev, address: value }));
+      setAddressVerification((prev) =>
+        prev.state === "idle" && !prev.result
+          ? { ...prev, message: "Введите адрес объекта и запустите онлайн-проверку." }
+          : { state: "idle", message: "Адрес изменён. Выполните проверку заново.", result: null }
+      );
+      return;
+    }
     setObjectData((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const verifyObjectAddress = async () => {
+    const currentAddress = String(objectData.address || "").trim();
+    if (!currentAddress) {
+      setAddressVerification({
+        state: "error",
+        message: "Укажите адрес объекта перед проверкой.",
+        result: null,
+      });
+      return;
+    }
+
+    setAddressVerification({
+      state: "loading",
+      message: "Идёт онлайн-поиск адреса и визуального подтверждения...",
+      result: null,
+    });
+
+    try {
+      const result = await verifyObjectAddressOnline(currentAddress);
+      setObjectData((prev) => ({
+        ...prev,
+        regionName: result.regionName || prev.regionName,
+        regionCoef: result.regionName ? getRegionCoef(result.regionName) : prev.regionCoef,
+      }));
+      setAddressVerification({
+        state: "success",
+        message: result.preview?.isMapFallback
+          ? "Адрес подтверждён. Для этой точки показана карта, потому что фото рядом не найдено."
+          : "Адрес подтверждён. Подтянуто визуальное подтверждение по этой локации.",
+        result,
+      });
+    } catch (error) {
+      setAddressVerification({
+        state: "error",
+        message: error?.message || "Не удалось подтвердить адрес объекта.",
+        result: null,
+      });
+    }
   };
 
   const updateZone = (id, key, value) => {
@@ -452,6 +508,7 @@ export default function useEstimate() {
     step,
     setStep,
     objectData,
+    addressVerification,
     zones,
     systems,
     budget,
@@ -469,6 +526,7 @@ export default function useEstimate() {
     inputValidation,
     VENDOR_EQUIPMENT,
     updateObject,
+    verifyObjectAddress,
     updateZone,
     addZone,
     removeZone,

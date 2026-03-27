@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2, Lock, Unlock, Search } from "lucide-react";
 import { OBJECT_TYPES } from "../config/estimateConfig";
 import { BUILDING_STATUS_OPTIONS } from "../config/costModelConfig";
@@ -50,6 +50,7 @@ const OBJECT_TYPE_IMAGE_FALLBACKS = {
 
 export default function ObjectStep({
   objectData,
+  addressVerification,
   zones,
   recalculatedArea,
   protectedAreaMeta,
@@ -59,6 +60,7 @@ export default function ObjectStep({
   zoneDistribution,
   inputValidation,
   updateObject,
+  verifyObjectAddress,
   addZone,
   updateZone,
   removeZone,
@@ -71,6 +73,10 @@ export default function ObjectStep({
   const regionItems = useMemo(() => searchRegions(regionQuery).slice(0, 20), [regionQuery]);
   const selectedObjectType = OBJECT_TYPES.find((item) => item.value === objectData.objectType);
 
+  useEffect(() => {
+    setRegionQuery(objectData.regionName || "");
+  }, [objectData.regionName]);
+
   return (
     <section className="panel">
       <div className="panel-header">
@@ -80,65 +86,99 @@ export default function ObjectStep({
         </div>
       </div>
 
-      <div className="grid-two">
-        <div className="input-card">
-          <label>Название проекта</label>
-          <input value={objectData.projectName} onChange={(event) => updateObject("projectName", event.target.value)} />
-        </div>
-
-        <div className="input-card">
-          <label>Тип объекта</label>
-          <div className="object-type-wrap">
-            <select value={objectData.objectType} onChange={(event) => updateObject("objectType", event.target.value)}>
-              {OBJECT_TYPES.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-            <div className="object-type-help" aria-hidden>
-              ?
-            </div>
-            <div className="object-type-tooltip">
-              {OBJECT_TYPES.map((item) => (
-                <p key={item.value}>
-                  <strong>{item.label}:</strong> {item.description}
-                </p>
-              ))}
-            </div>
+      <div className="object-top-grid">
+        <div className="input-card address-card">
+          <label>Адрес объекта</label>
+          <div className="region-search-row">
+            <Search size={14} />
+            <input
+              type="text"
+              value={objectData.address || ""}
+              placeholder="Город, улица, дом"
+              onChange={(event) => updateObject("address", event.target.value)}
+            />
           </div>
-          {selectedObjectType ? <small className="hint-inline">{selectedObjectType.description}</small> : null}
+          <div className="address-actions">
+            <button className="primary-btn" type="button" onClick={verifyObjectAddress} disabled={addressVerification?.state === "loading"}>
+              {addressVerification?.state === "loading" ? "Проверка адреса..." : "Проверить адрес"}
+            </button>
+            <small className="hint-inline">Алгоритм нормализует адрес, ищет его онлайн, подтверждает регион и подбирает фото рядом с точкой.</small>
+          </div>
+          <div
+            className={`address-status ${
+              addressVerification?.state === "error" ? "error" : addressVerification?.state === "success" ? "success" : ""
+            }`}
+          >
+            {addressVerification?.message}
+          </div>
+          {addressVerification?.result ? (
+            <div className="verified-address-card">
+              <img
+                className="verified-address-card__media"
+                src={addressVerification.result.preview?.imageUrl}
+                alt={addressVerification.result.preview?.title || "Визуальное подтверждение адреса"}
+                loading="lazy"
+              />
+              <div className="verified-address-card__body">
+                <strong>{addressVerification.result.verifiedLabel}</strong>
+                <span>
+                  Район: {addressVerification.result.district || "не определён"} | Регион:{" "}
+                  {addressVerification.result.regionName || objectData.regionName}
+                </span>
+                <span>
+                  Источник подтверждения: {addressVerification.result.preview?.source}
+                  {addressVerification.result.preview?.isMapFallback ? " (карта по проверенной точке)" : ""}
+                </span>
+              </div>
+            </div>
+          ) : null}
         </div>
 
-        <div className="object-photo-gallery">
-          {OBJECT_TYPES.map((item) => {
-            const isActive = objectData.objectType === item.value;
-            return (
-              <button
-                key={item.value}
-                type="button"
-                className={`object-photo-card ${isActive ? "active" : ""}`}
-                onClick={() => updateObject("objectType", item.value)}
-                title={item.description}
-              >
-                <img
-                  src={OBJECT_TYPE_IMAGES[item.value]}
-                  alt={item.label}
-                  loading="lazy"
-                  onError={(event) => {
-                    event.currentTarget.onerror = null;
-                    event.currentTarget.src = OBJECT_TYPE_IMAGE_FALLBACKS[item.value];
-                  }}
-                />
-                <div className="object-photo-overlay">
-                  <strong>{item.label}</strong>
-                  <span>{item.description}</span>
-                </div>
-              </button>
-            );
-          })}
-        </div>
+        <div className="object-side-stack">
+          <div className="input-card">
+            <label>Название проекта</label>
+            <input value={objectData.projectName} onChange={(event) => updateObject("projectName", event.target.value)} />
+          </div>
 
+          <div className="input-card">
+            <label>Тип объекта</label>
+            <input value={selectedObjectType?.label || "Не выбран"} readOnly className="readonly-field" />
+            {selectedObjectType ? <small className="hint-inline">{selectedObjectType.description}</small> : null}
+            <small className="hint-inline">Тип выбирается кнопками-карточками ниже.</small>
+          </div>
+        </div>
+      </div>
+
+      <div className="object-photo-gallery">
+        {OBJECT_TYPES.map((item) => {
+          const isActive = objectData.objectType === item.value;
+          return (
+            <button
+              key={item.value}
+              type="button"
+              className={`object-photo-card ${isActive ? "active" : ""}`}
+              onClick={() => updateObject("objectType", item.value)}
+              title={item.description}
+            >
+              <img
+                src={OBJECT_TYPE_IMAGES[item.value]}
+                alt={item.label}
+                loading="lazy"
+                onError={(event) => {
+                  event.currentTarget.onerror = null;
+                  event.currentTarget.src = OBJECT_TYPE_IMAGE_FALLBACKS[item.value];
+                }}
+              />
+              <div className="object-photo-overlay">
+                <strong>{item.label}</strong>
+                <span>{item.description}</span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="grid-two">
         <div className="input-card">
           <label>Площадь по объекту, м²</label>
           <input type="number" value={objectData.totalArea} onChange={(event) => updateObject("totalArea", toNumber(event.target.value))} />

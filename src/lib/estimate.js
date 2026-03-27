@@ -263,6 +263,7 @@ export function buildEstimateRows({ objectData, recalculatedArea, systemResults,
   const objectTypeLabel = OBJECT_TYPES.find((item) => item.value === objectData.objectType)?.label || objectData.objectType;
   return [
     ["Проект", objectData.projectName],
+    ["Адрес объекта", objectData.address || "—"],
     ["Тип объекта", objectTypeLabel],
     ["Субъект РФ", objectData.regionName || "—"],
     ["Региональный коэффициент", num(objectData.regionCoef || 1, 2)],
