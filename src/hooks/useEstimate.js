@@ -8,6 +8,7 @@ import { VENDOR_EQUIPMENT } from "../config/vendorConfig";
 import { DEFAULT_REGION_NAME, getRegionCoef } from "../config/regionsConfig";
 import { validateEstimateInput } from "../lib/input-normalization";
 import { appendManualApsProjectItem, recalculateApsProjectSnapshot, removeApsProjectItem } from "../lib/apsProjectEstimate";
+import { calculateProtectedArea } from "../lib/protectedArea";
 
 function removeById(mapObject, id) {
   if (!(id in mapObject)) return mapObject;
@@ -45,12 +46,17 @@ export default function useEstimate() {
   const [apsImportStatuses, setApsImportStatuses] = useState({});
 
   const pricingSignaturesRef = useRef(new Map());
-  const recalculatedArea = useMemo(() => zones.reduce((sum, zone) => sum + toNumber(zone.area), 0), [zones]);
+  const protectedAreaMeta = useMemo(() => calculateProtectedArea(objectData), [objectData]);
+  const recalculatedArea = protectedAreaMeta.protectedAreaM2;
+
+  useEffect(() => {
+    setZones((prev) => normalizeZoneAreas(prev, recalculatedArea));
+  }, [recalculatedArea]);
   const { systemsDetailed: systemResults, totals } = useMemo(
     () => calculateEstimateEngine(systems, zones, budget, objectData, vendorPriceSnapshots, apsProjectSnapshots),
     [systems, zones, budget, objectData, vendorPriceSnapshots, apsProjectSnapshots]
   );
-  const zoneDistribution = useMemo(() => validateZoneDistribution(zones, objectData.totalArea), [zones, objectData.totalArea]);
+  const zoneDistribution = useMemo(() => validateZoneDistribution(zones, recalculatedArea), [zones, recalculatedArea]);
   const inputValidation = useMemo(
     () =>
       validateEstimateInput({
@@ -79,13 +85,13 @@ export default function useEstimate() {
   const removeZone = (id) => setZones((prev) => (prev.length <= 1 ? prev : prev.filter((zone) => zone.id !== id)));
 
   const updateZoneShare = (zoneId, nextPercent) =>
-    setZones((prev) => rebalanceZoneAreasWithLocks(prev, zoneId, nextPercent, objectData.totalArea, lockedZoneIds));
+    setZones((prev) => rebalanceZoneAreasWithLocks(prev, zoneId, nextPercent, recalculatedArea, lockedZoneIds));
 
   const toggleZoneLock = (zoneId) =>
     setLockedZoneIds((prev) => (prev.includes(zoneId) ? prev.filter((item) => item !== zoneId) : [...prev, zoneId]));
 
   const applyZonePreset = (presetKey) => {
-    const next = buildZonesFromPreset(presetKey, objectData.totalArea);
+    const next = buildZonesFromPreset(presetKey, recalculatedArea);
     if (!next.length) return;
     setZones(next);
     setLockedZoneIds([]);
@@ -456,6 +462,7 @@ export default function useEstimate() {
     apsProjectSnapshots,
     apsImportStatuses,
     recalculatedArea,
+    protectedAreaMeta,
     systemResults,
     totals,
     zoneDistribution,

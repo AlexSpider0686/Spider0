@@ -646,6 +646,56 @@ select {
   display: block;
 }
 
+.protected-area-explain {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.protected-area-explain-text {
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+}
+
+.protected-area-popover {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 6px);
+  width: min(520px, 86vw);
+  max-height: min(360px, 70vh);
+  overflow-y: auto;
+  border: 1px solid rgba(141, 163, 196, 0.32);
+  border-radius: 10px;
+  background: rgba(233, 244, 255, 0.95);
+  backdrop-filter: blur(8px);
+  box-shadow: var(--shadow);
+  padding: 8px;
+  display: none;
+  z-index: 8;
+}
+
+.protected-area-popover p {
+  margin: 0 0 6px;
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.protected-area-popover p:last-child {
+  margin-bottom: 0;
+}
+
+.protected-area-explain:hover .protected-area-popover,
+.protected-area-explain:focus-within .protected-area-popover {
+  display: block;
+}
+
 .object-type-wrap {
   position: relative;
   display: grid;
