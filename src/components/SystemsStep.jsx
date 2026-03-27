@@ -60,6 +60,85 @@ function defaultManualDraft() {
   };
 }
 
+function formatMultiplier(value) {
+  return `x${num(value || 0, 2)}`;
+}
+
+function renderWorkCostPopover(result) {
+  const laborDetails = result?.laborDetails;
+  if (!laborDetails?.unitRates || !laborDetails?.workBreakdown) {
+    return <span className="pricing-chip-popover">Детализация расчета работ появится после формирования итогового расчета системы.</span>;
+  }
+
+  const rates = laborDetails.unitRates;
+  const breakdown = laborDetails.workBreakdown;
+  const charges = laborDetails.workChargesBeforeRegion || {};
+  const regionalFactor = Math.max(toNumber(breakdown.regionalFactor, 1), 0.0001);
+  const workAfterConditions = toNumber(result?.laborBase, 0) / regionalFactor;
+
+  return (
+    <span className="pricing-chip-popover work-cost-popover">
+      <span className="work-cost-popover__section">
+        <strong>Как считается стоимость работ</strong>
+        <span>СМР+ПНР рассчитываются по внутренней модели единичных расценок для выбранного типа системы.</span>
+      </span>
+
+      <span className="work-cost-popover__section">
+        <strong>Базовые единичные расценки</strong>
+        <span>Монтаж основного элемента: {rub(rates.mountPrimary)}</span>
+        <span>ПНР основного элемента: {rub(rates.pnrPrimary)}</span>
+        <span>Монтаж контроллера/узла: {rub(rates.controllerMount)}</span>
+        <span>ПНР активного элемента: {rub(rates.pnrActiveElement)}</span>
+        <span>Прокладка кабеля за 1 м: {rub(rates.cablePerMeter)}</span>
+        <span>КНС за 1 м: {rub(rates.knsPerMeter)}</span>
+        <span>Интеграция за 1 точку: {rub(rates.integrationPoint)}</span>
+      </span>
+
+      <span className="work-cost-popover__section">
+        <strong>Какие объемы попали в расчет</strong>
+        <span>Основные элементы: {num(breakdown.primaryUnits, 0)} шт.</span>
+        <span>Контроллеры/узлы: {num(breakdown.controllerUnits, 0)} шт.</span>
+        <span>Активные элементы для ПНР: {num(breakdown.activeElements, 0)} шт.</span>
+        <span>Точки интеграции: {num(breakdown.integrationPoints, 0)} шт.</span>
+        <span>Кабель: {num(breakdown.cableLengthM, 0)} м</span>
+        <span>КНС: {num(breakdown.knsLengthM, 0)} м</span>
+      </span>
+
+      <span className="work-cost-popover__section">
+        <strong>Базовая стоимость работ</strong>
+        <span>СМР база: {rub(breakdown.smrBase)}</span>
+        <span>ПНР база: {rub(breakdown.pnrBase)}</span>
+        <span>Интеграция: {rub(breakdown.integrationBase)}</span>
+        <span>КНС: {rub(breakdown.knsBase)}</span>
+        <span>Итого базовая стоимость: {rub(result?.workBase || breakdown.computedWorkBase)}</span>
+      </span>
+
+      <span className="work-cost-popover__section">
+        <strong>Коэффициенты</strong>
+        <span>Условия монтажа: {formatMultiplier(breakdown.conditionFactor)}</span>
+        <span>Эксплуатируемое здание: {formatMultiplier(breakdown.exploitedFactor)}</span>
+        <span>Региональный коэффициент: {formatMultiplier(breakdown.regionalFactor)}</span>
+        <span>После условий, до региона: {rub(workAfterConditions)}</span>
+      </span>
+
+      <span className="work-cost-popover__section">
+        <strong>Начисления на работы</strong>
+        <span>Накладные: {rub(charges.overhead || 0)}</span>
+        <span>Страховые начисления: {rub(charges.payrollTaxes || 0)}</span>
+        <span>Эксплуатация ресурсов: {rub(charges.utilization || 0)}</span>
+        <span>СИЗ и расходники: {rub(charges.ppe || 0)}</span>
+        <span>Административные: {rub(charges.admin || 0)}</span>
+        <span>До применения региона: {rub(laborDetails.workTotalBeforeRegion || 0)}</span>
+      </span>
+
+      <span className="work-cost-popover__section work-cost-popover__section--accent">
+        <strong>Итог</strong>
+        <span>Итоговая стоимость работ (СМР+ПНР): {rub(result?.workTotal || 0)}</span>
+      </span>
+    </span>
+  );
+}
+
 export default function SystemsStep({
   systems,
   addSystem,
@@ -254,7 +333,10 @@ export default function SystemsStep({
                       <strong>{rub(result?.equipmentCost || 0)}</strong>
                     </div>
                     <div>
-                      <span>Работы (СМР+ПНР)</span>
+                      <span className="pricing-chip-tooltip">
+                        <span>Стоимость работ (СМР+ПНР)</span>
+                        {renderWorkCostPopover(result)}
+                      </span>
                       <strong>{rub(result?.workTotal || 0)}</strong>
                     </div>
                     <div>

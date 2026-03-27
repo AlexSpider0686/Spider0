@@ -1203,6 +1203,35 @@ select {
   transform: translateY(0);
 }
 
+.work-cost-popover {
+  min-width: 320px;
+  max-width: min(460px, 78vw);
+  display: grid;
+  gap: 10px;
+  white-space: normal;
+}
+
+.work-cost-popover__section {
+  display: grid;
+  gap: 4px;
+}
+
+.work-cost-popover__section strong {
+  color: #ffffff;
+  font-size: 12px;
+}
+
+.work-cost-popover__section span {
+  color: #d7e6ff;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.work-cost-popover__section--accent {
+  padding-top: 8px;
+  border-top: 1px solid rgba(226, 236, 255, 0.16);
+}
+
 .equipment-config {
   border: 1px solid rgba(141, 163, 196, 0.22);
   border-radius: 8px;

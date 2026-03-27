@@ -454,6 +454,12 @@ export function calculateSystemWithBreakdown(
     executionDurationDays: laborModel.executionDays,
     executionDurationMonths: laborModel.executionMonths,
     designHours: laborModel.designHours,
+    laborDetails: {
+      unitRates: laborModel.unitRates,
+      workBreakdown: laborModel.workBreakdown,
+      workChargesBeforeRegion: laborModel.workChargesBeforeRegion,
+      workTotalBeforeRegion: laborModel.workTotalBeforeRegion,
+    },
     designBase,
     designCharges,
     designTotal,
