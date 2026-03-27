@@ -330,6 +330,24 @@ select {
   white-space: nowrap;
 }
 
+.ai-survey-modal__footer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 14px;
+  padding-bottom: 4px;
+  background: linear-gradient(180deg, rgba(240, 247, 255, 0), rgba(240, 247, 255, 0.96) 32%);
+  border-top: 1px solid rgba(141, 163, 196, 0.24);
+}
+
+.ai-survey-modal__footer .hint-inline {
+  max-width: 720px;
+}
+
 @keyframes sky-pan {
   0% {
     transform: translate3d(-4%, -2%, 0) scale(1);
@@ -2035,6 +2053,11 @@ tbody tr:hover {
 
   .ai-survey-modal__header {
     flex-direction: column;
+  }
+
+  .ai-survey-modal__footer {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .grid-two,

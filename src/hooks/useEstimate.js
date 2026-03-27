@@ -56,6 +56,9 @@ export default function useEstimate() {
     surveyStartedAt: null,
     answers: {},
     photoAnalyses: {},
+    appliedAnswers: {},
+    appliedPhotoAnalyses: {},
+    appliedAt: null,
     specOverrides: {},
   });
   const [addressVerification, setAddressVerification] = useState({
@@ -86,6 +89,10 @@ export default function useEstimate() {
     () => calculateAiSurveyCompletion(aiSurveyPlan, technicalSolution.answers),
     [aiSurveyPlan, technicalSolution.answers]
   );
+  const appliedAiSurveyCompletion = useMemo(
+    () => calculateAiSurveyCompletion(aiSurveyPlan, technicalSolution.appliedAnswers),
+    [aiSurveyPlan, technicalSolution.appliedAnswers]
+  );
   const technicalRecommendations = useMemo(
     () =>
       buildAiTechnicalRecommendations({
@@ -93,11 +100,11 @@ export default function useEstimate() {
         systemResults,
         objectData,
         zones,
-        surveyAnswers: technicalSolution.answers,
+        surveyAnswers: technicalSolution.appliedAnswers,
         apsProjectSnapshots,
         specOverrides: technicalSolution.specOverrides,
       }),
-    [systems, systemResults, objectData, zones, technicalSolution.answers, technicalSolution.specOverrides, apsProjectSnapshots]
+    [systems, systemResults, objectData, zones, technicalSolution.appliedAnswers, technicalSolution.specOverrides, apsProjectSnapshots]
   );
   const inputValidation = useMemo(
     () =>
@@ -683,6 +690,19 @@ export default function useEstimate() {
     }));
   };
 
+  const applyAiSurveyData = () => {
+    if ((aiSurveyCompletion?.percent || 0) < 100) return false;
+
+    setTechnicalSolution((prev) => ({
+      ...prev,
+      appliedAnswers: { ...prev.answers },
+      appliedPhotoAnalyses: { ...prev.photoAnalyses },
+      appliedAt: new Date().toISOString(),
+    }));
+
+    return true;
+  };
+
   return {
     step,
     setStep,
@@ -706,6 +726,7 @@ export default function useEstimate() {
     technicalSolution,
     aiSurveyPlan,
     aiSurveyCompletion,
+    appliedAiSurveyCompletion,
     technicalRecommendations,
     VENDOR_EQUIPMENT,
     updateObject,
@@ -732,6 +753,7 @@ export default function useEstimate() {
     startAiSurvey,
     updateAiSurveyAnswer,
     analyzeAiSurveyPhoto,
+    applyAiSurveyData,
     updateTechnicalSpecOverride,
     exportEstimate,
     exportEstimateCsv,

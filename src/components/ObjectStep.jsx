@@ -125,9 +125,11 @@ export default function ObjectStep({
   technicalSolution,
   aiSurveyPlan,
   aiSurveyCompletion,
+  appliedAiSurveyCompletion,
   startAiSurvey,
   updateAiSurveyAnswer,
   analyzeAiSurveyPhoto,
+  applyAiSurveyData,
 }) {
   const [regionQuery, setRegionQuery] = useState(objectData.regionName || "");
   const [surveyModalOpen, setSurveyModalOpen] = useState(false);
@@ -149,6 +151,11 @@ export default function ObjectStep({
   const handleOpenSurvey = () => {
     const started = technicalSolution?.surveyStartedAt ? true : startAiSurvey();
     if (started) setSurveyModalOpen(true);
+  };
+
+  const handleApplySurvey = () => {
+    const applied = applyAiSurveyData();
+    if (applied) setSurveyModalOpen(false);
   };
 
   return (
@@ -500,12 +507,16 @@ export default function ObjectStep({
             <strong>{aiSurveyCompletion?.percent || 0}%</strong>
           </div>
           <div className="metric-card">
+            <span>Загружено в платформу</span>
+            <strong>{appliedAiSurveyCompletion?.percent || 0}%</strong>
+          </div>
+          <div className="metric-card">
             <span>Систем в обследовании</span>
             <strong>{num(aiSurveyPlan?.activeSystems?.length || 0, 0)}</strong>
           </div>
           <div className="metric-card">
             <span>Статус модуля</span>
-            <strong>{technicalSolution?.surveyStartedAt ? "Окно доступно" : "Не запускалось"}</strong>
+            <strong>{technicalSolution?.appliedAt ? "Данные загружены" : technicalSolution?.surveyStartedAt ? "Черновик заполнения" : "Не запускалось"}</strong>
           </div>
         </div>
 
@@ -587,6 +598,12 @@ export default function ObjectStep({
                   <span>
                     С чек-листа исключены системы с РД: {aiSurveyPlan.skippedSystems.map((code) => systemNames[code] || code).join(", ")}.
                   </span>
+                </div>
+              ) : null}
+              {technicalSolution?.appliedAt ? (
+                <div>
+                  <CheckCircle2 size={16} />
+                  <span>Последняя загрузка данных из окна обследования уже выполнена, и эти данные участвуют в дальнейших алгоритмах платформы.</span>
                 </div>
               ) : null}
             </div>
@@ -694,6 +711,21 @@ export default function ObjectStep({
                 </div>
               </div>
             ) : null}
+
+            <div className="ai-survey-modal__footer">
+              <div className="hint-inline">
+                Дальнейшие алгоритмы платформы используют только загруженные данные обследования. Пока кнопка не нажата, информация остается черновиком внутри окна.
+              </div>
+              <button
+                className="primary-btn"
+                type="button"
+                onClick={handleApplySurvey}
+                disabled={(aiSurveyCompletion?.percent || 0) < 100}
+              >
+                <CheckCircle2 size={16} />
+                Загрузить данные
+              </button>
+            </div>
           </div>
         </div>
       ) : null}
