@@ -618,6 +618,8 @@ select {
   left: 0;
   top: calc(100% + 6px);
   width: min(460px, 82vw);
+  max-height: min(360px, 70vh);
+  overflow-y: auto;
   border: 1px solid rgba(141, 163, 196, 0.32);
   border-radius: 10px;
   background: rgba(233, 244, 255, 0.9);
