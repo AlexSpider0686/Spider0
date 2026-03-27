@@ -42,73 +42,10 @@ select {
   position: relative;
   padding: 18px 22px 32px;
   min-height: 100vh;
-}
-
-.bg-video-layer {
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  overflow: hidden;
-  pointer-events: none;
   background:
-    radial-gradient(circle at 20% 15%, rgba(27, 91, 157, 0.22), transparent 40%),
-    radial-gradient(circle at 80% 20%, rgba(22, 146, 188, 0.2), transparent 38%),
-    linear-gradient(180deg, #eaf1fb 0%, #e4edf8 100%);
-}
-
-.bg-video-layer::before {
-  content: "";
-  position: absolute;
-  inset: -20%;
-  z-index: 3;
-  background:
-    radial-gradient(circle at 15% 20%, rgba(16, 149, 165, 0.3), transparent 35%),
-    radial-gradient(circle at 75% 30%, rgba(53, 122, 189, 0.24), transparent 35%),
-    radial-gradient(circle at 55% 75%, rgba(106, 70, 199, 0.18), transparent 40%);
-  animation: sky-pan 32s linear infinite alternate;
-}
-
-.bg-video-layer::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 4;
-  background:
-    radial-gradient(circle at 15% 15%, rgba(255, 255, 255, 0.22), transparent 38%),
-    radial-gradient(circle at 85% 65%, rgba(126, 167, 230, 0.22), transparent 36%),
-    rgba(233, 241, 252, 0.62);
-  animation: mist-drift 26s ease-in-out infinite alternate;
-}
-
-.bg-video-layer video {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  filter: saturate(0.95) contrast(0.95) brightness(1.05);
-  transform: scale(1.04);
-  opacity: 0;
-  transition: opacity 0.45s ease;
-}
-
-.bg-video-layer video.is-ready {
-  opacity: 0.78;
-}
-
-.bg-video-fallback {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  width: 100%;
-  height: 100%;
-  background:
-    radial-gradient(circle at 22% 18%, rgba(47, 127, 241, 0.28), transparent 38%),
-    radial-gradient(circle at 78% 26%, rgba(20, 154, 203, 0.24), transparent 34%),
-    linear-gradient(160deg, rgba(226, 237, 251, 0.92), rgba(210, 226, 247, 0.92));
-  animation: sky-pan 24s linear infinite alternate;
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.14), transparent 34%),
+    radial-gradient(circle at top right, rgba(23, 169, 215, 0.1), transparent 28%),
+    linear-gradient(180deg, #f4f8ff 0%, #edf3fb 42%, #e8eef8 100%);
 }
 
 @keyframes sky-pan {
@@ -165,7 +102,7 @@ select {
 .app-wrap.locked {
   pointer-events: none;
   user-select: none;
-  opacity: 0.38;
+  opacity: 0.72;
   filter: none;
 }
 
@@ -183,17 +120,18 @@ select {
   content: "";
   position: absolute;
   inset: 0;
-  background: rgba(229, 238, 250, 0.74);
+  background: rgba(229, 238, 250, 0.88);
 }
 
 .auth-card {
   position: relative;
+  z-index: 1;
   width: min(560px, 94vw);
   border-radius: 16px;
   padding: 18px;
   border: 1px solid rgba(141, 163, 196, 0.4);
   box-shadow: 0 16px 36px rgba(37, 73, 121, 0.22);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(238, 247, 255, 0.95));
+  background: #ffffff;
 }
 
 .auth-kicker {
@@ -299,11 +237,10 @@ select {
 .panel,
 .system-card,
 .metric-card {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(246, 250, 255, 0.93));
+  background: #ffffff;
   border: 1px solid var(--line);
   box-shadow: var(--shadow);
   border-radius: 14px;
-  backdrop-filter: blur(8px);
 }
 
 .hero-card,

@@ -9,7 +9,7 @@ import CostBreakdownStep from "./CostBreakdownStep";
 import CalculationLogicStep from "./CalculationLogicStep";
 import Summary from "./Summary";
 import AuthGate from "./AuthGate";
-import { BUILD_LABEL, BUILD_NUMBER } from "../config/estimateConfig";
+import { BUILD_NUMBER } from "../config/estimateConfig";
 import { isStoredAuthTokenValid } from "../lib/authApi";
 
 const BACKGROUND_VIDEO_URLS = ["/assets/background/city-loop.mp4"];
@@ -79,15 +79,13 @@ export default function EstimatorApp() {
         ) : null}
       </div>
 
-      <div className="build-badge" title={BUILD_NUMBER}>
-        Версия системы: {BUILD_LABEL}
-      </div>
+      <div className="build-badge">Сборка: {BUILD_NUMBER}</div>
 
       <div className={`app-wrap ${authorized ? "" : "locked"}`} aria-hidden={!authorized}>
         <header className="hero-card">
           <div>
             <div className="hero-kicker">SmetaCore</div>
-            <h1>SmetaCore - предварительный расчет бюджета систем безопасности</h1>
+            <h1>SmetaCore — предварительный расчет бюджета систем безопасности</h1>
             <p>С автоматическим формированием сметы и коммерческого предложения</p>
           </div>
           <button className="primary-btn" onClick={vm.exportEstimate} type="button">

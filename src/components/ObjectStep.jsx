@@ -52,7 +52,6 @@ export default function ObjectStep({
   objectData,
   zones,
   recalculatedArea,
-  protectedAreaMeta,
   zonePreset,
   setZonePreset,
   lockedZoneIds,
@@ -70,10 +69,6 @@ export default function ObjectStep({
   const [regionQuery, setRegionQuery] = useState(objectData.regionName || "");
   const regionItems = useMemo(() => searchRegions(regionQuery).slice(0, 20), [regionQuery]);
   const selectedObjectType = OBJECT_TYPES.find((item) => item.value === objectData.objectType);
-  const selectedBuildingStatus = BUILDING_STATUS_OPTIONS.find(
-    (item) => item.value === (objectData.buildingStatus || "operational")
-  );
-
   return (
     <section className="panel">
       <div className="panel-header">
@@ -148,53 +143,28 @@ export default function ObjectStep({
 
         <div className="input-card">
           <div className="label-with-tooltip">
-            <label htmlFor="protected-zone-area">Защищаемая площадь, м²</label>
+            <label htmlFor="protected-zone-area">Защищаемая площадь зон, м²</label>
             <span
               className="label-tooltip-help"
               tabIndex={0}
               role="button"
-              title="Пояснение к защищаемой площади"
-              aria-label="Пояснение к защищаемой площади"
+              title="Пояснение к защищаемой площади зон"
+              aria-label="Пояснение к защищаемой площади зон"
             >
               ?
             </span>
             <div className="label-tooltip-popover" role="tooltip">
               <p>
-                <strong>Поле рассчитывается автоматически</strong> по типу объекта, этажности, подземным этажам, статусу здания и общей площади.
+                <strong>Площадь по объекту</strong> - вся площадь здания или комплекса, даже если часть помещений не оснащается
+                системами.
               </p>
               <p>
-                <strong>Зачем нужно:</strong> это базовая площадь для шаблонов зон и укрупненного расчета систем и сметы.
+                <strong>Защищаемая площадь зон</strong> - сумма только тех зон, где реально размещаются и рассчитываются средства
+                безопасности.
               </p>
             </div>
           </div>
           <input id="protected-zone-area" type="number" value={recalculatedArea} readOnly />
-          <small className="hint-inline">Авторасчет: {num((protectedAreaMeta?.protectionShare || 0) * 100, 1)}% от площади объекта.</small>
-          <div className="protected-area-explain">
-            <span className="protected-area-explain-text">
-              Формула: {selectedObjectType?.label || "Объект"} + {objectData.floors} надз. / {objectData.basementFloors} подз. +{" "}
-              {(selectedBuildingStatus?.label || "").toLowerCase()}
-            </span>
-            <span
-              className="label-tooltip-help"
-              tabIndex={0}
-              role="button"
-              title="Логика расчета защищаемой площади"
-              aria-label="Логика расчета защищаемой площади"
-            >
-              ?
-            </span>
-            <div className="protected-area-popover" role="tooltip">
-              <p>
-                <strong>Итоговая логика:</strong> защищаемая площадь = общая площадь x {num((protectedAreaMeta?.protectionShare || 0) * 100, 1)}%.
-              </p>
-              {(protectedAreaMeta?.breakdown || []).map((item) => (
-                <p key={item.key}>
-                  <strong>{item.label}:</strong> {item.value >= 0 ? "+" : ""}
-                  {num(item.value * 100, 1)}%. {item.reason}
-                </p>
-              ))}
-            </div>
-          </div>
         </div>
 
         <div className="input-card">
@@ -312,14 +282,14 @@ export default function ObjectStep({
           <button className="ghost-btn" type="button" onClick={() => applyZonePreset(zonePreset)}>
             Применить пресет
           </button>
-          <button className="ghost-btn" type="button" onClick={() => setZones((prev) => normalizeZoneAreas(prev, recalculatedArea))}>
+          <button className="ghost-btn" type="button" onClick={() => setZones((prev) => normalizeZoneAreas(prev, objectData.totalArea))}>
             Нормализовать
           </button>
         </div>
 
         <div className="slider-stack">
           {zones.map((zone) => {
-            const zonePercent = recalculatedArea > 0 ? (toNumber(zone.area) / toNumber(recalculatedArea, 1)) * 100 : 0;
+            const zonePercent = objectData.totalArea > 0 ? (toNumber(zone.area) / toNumber(objectData.totalArea, 1)) * 100 : 0;
             const isLocked = lockedZoneIds.includes(zone.id);
             return (
               <div className="slider-card" key={`share-${zone.id}`}>
@@ -377,7 +347,7 @@ export default function ObjectStep({
             );
           })}
           <div className="slider-total">
-            Сумма процентов: <strong>{num(getZonePercentSum(zones, recalculatedArea), 1)}%</strong>
+            Сумма процентов: <strong>{num(getZonePercentSum(zones, objectData.totalArea), 1)}%</strong>
             {!zoneDistribution.isValid ? <span className="warn-inline"> Проверь распределение (должно быть 100%).</span> : null}
           </div>
         </div>
