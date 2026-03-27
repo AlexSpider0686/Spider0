@@ -181,7 +181,7 @@ export function HomePage() {
             <button className="btn btn--primary" onClick={() => setAuthOpen(true)}>
               Приступить к расчету
             </button>
-            <a className="btn btn--ghost-light" href="#positioning">
+            <a className="btn btn--ghost-light" href="#comparison">
               Почему это работает
             </a>
             <a className="btn btn--ghost-light" href="#calculation-logic">
@@ -205,7 +205,7 @@ export function HomePage() {
         </div>
       </section>
 
-      <section className="section section--dark" id="positioning">
+      <section className="section section--dark" id="comparison">
         <div className="container">
           <SectionHeader eyebrow="Позиционирование" title="Почему SmetaCore нужен рынку прямо сейчас">
             На рынке РФ много либо тяжелых сметных систем, либо локальных таблиц. Ниша быстрого браузерного пресейл-движка
