@@ -118,6 +118,9 @@ export default function ObjectStep({
             {!String(objectData.objectLabel || "").trim() ? (
               <small className="warn-inline">Чтобы найти фото именно здания, заполните поле "Название объекта / арендатора".</small>
             ) : null}
+            <small className="hint-inline">
+              Если открытые источники не дают надёжного совпадения, система специально оставляет карту точки, а не показывает чужое здание.
+            </small>
           </div>
           <div
             className={`address-status ${
