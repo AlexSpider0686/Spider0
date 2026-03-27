@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, Lock, Unlock, Search } from "lucide-react";
-import { OBJECT_TYPES } from "../config/estimateConfig";
+import { Plus, Trash2, Lock, Unlock, Search, ClipboardList, Camera, CheckCircle2 } from "lucide-react";
+import { OBJECT_TYPES, SYSTEM_TYPES } from "../config/estimateConfig";
 import { BUILDING_STATUS_OPTIONS } from "../config/costModelConfig";
 import { searchRegions } from "../config/regionsConfig";
 import { ZONE_PRESET_DETAILS, ZONE_PRESETS, ZONE_TYPES } from "../config/zonesConfig";
@@ -48,10 +48,62 @@ const OBJECT_TYPE_IMAGE_FALLBACKS = {
   energy: makeFallbackImage("#5d7b8a", "#24445e", "#7adf72"),
 };
 
+function renderChecklistInput(question, value, onChange) {
+  if (question.type === "boolean") {
+    return (
+      <div className="ai-checklist-bool">
+        <button type="button" className={`chip-btn ${value === true ? "active" : ""}`} onClick={() => onChange(true)}>
+          Да
+        </button>
+        <button type="button" className={`chip-btn ${value === false ? "active" : ""}`} onClick={() => onChange(false)}>
+          Нет
+        </button>
+      </div>
+    );
+  }
+
+  if (question.type === "number") {
+    return (
+      <input
+        type="number"
+        min={question.min ?? 0}
+        max={question.max ?? undefined}
+        value={value ?? ""}
+        placeholder={question.placeholder || "Введите значение"}
+        onChange={(event) => onChange(toNumber(event.target.value))}
+      />
+    );
+  }
+
+  if (question.type === "multiselect") {
+    const selected = Array.isArray(value) ? value : [];
+    return (
+      <div className="ai-checklist-chips">
+        {(question.options || []).map((option) => {
+          const active = selected.includes(option);
+          return (
+            <button
+              key={option}
+              type="button"
+              className={`chip-btn ${active ? "active" : ""}`}
+              onClick={() => onChange(active ? selected.filter((item) => item !== option) : [...selected, option])}
+            >
+              {option}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
+  return <input value={value ?? ""} onChange={(event) => onChange(event.target.value)} />;
+}
+
 export default function ObjectStep({
   objectData,
   addressVerification,
   zones,
+  systems,
   recalculatedArea,
   protectedAreaMeta,
   zonePreset,
@@ -68,10 +120,26 @@ export default function ObjectStep({
   updateZoneShare,
   applyZonePreset,
   setZones,
+  toggleSystemRegistry,
+  updateSystemWorkingDocs,
+  technicalSolution,
+  aiSurveyPlan,
+  aiSurveyCompletion,
+  startAiSurvey,
+  updateAiSurveyAnswer,
+  analyzeAiSurveyPhoto,
 }) {
   const [regionQuery, setRegionQuery] = useState(objectData.regionName || "");
   const regionItems = useMemo(() => searchRegions(regionQuery).slice(0, 20), [regionQuery]);
   const selectedObjectType = OBJECT_TYPES.find((item) => item.value === objectData.objectType);
+  const activeSystemTypes = new Set((systems || []).map((item) => item.type));
+  const systemNames = useMemo(
+    () =>
+      Object.fromEntries(
+        SYSTEM_TYPES.map((item) => [item.code, item.shortName || item.name])
+      ),
+    []
+  );
 
   useEffect(() => {
     setRegionQuery(objectData.regionName || "");
@@ -401,6 +469,211 @@ export default function ObjectStep({
           <div className="hint-inline" style={{ display: "block", marginTop: 6 }}>
             {inputValidation.warnings.join(" ")}
           </div>
+        ) : null}
+      </div>
+
+      <div className="subpanel ai-survey-panel">
+        <div className="subpanel-header">
+          <div>
+            <h3>AI-Техническое решение: обследование объекта</h3>
+            <p>Сначала фиксируем состав систем и наличие РД, затем запускаем адаптивное обследование по объекту, зонам и выбранным системам.</p>
+          </div>
+          <button
+            className="primary-btn"
+            type="button"
+            onClick={startAiSurvey}
+            disabled={!aiSurveyPlan?.readiness?.isReady}
+          >
+            <ClipboardList size={16} />
+            AI-Обследование
+          </button>
+        </div>
+
+        <div className="ai-survey-summary-grid">
+          <div className="metric-card">
+            <span>UUID проекта</span>
+            <strong>{objectData.projectUuid}</strong>
+          </div>
+          <div className="metric-card">
+            <span>UUID объекта</span>
+            <strong>{objectData.objectUuid}</strong>
+          </div>
+          <div className="metric-card">
+            <span>Расчетное время обследования</span>
+            <strong>{num(aiSurveyPlan?.estimatedHours || 0, 1)} ч</strong>
+          </div>
+          <div className="metric-card">
+            <span>Заполнение чек-листа</span>
+            <strong>{aiSurveyCompletion?.percent || 0}%</strong>
+          </div>
+        </div>
+
+        <div className="ai-system-registry">
+          <div className="calc-explain">
+            <h4>Реестр инженерных систем</h4>
+            <p className="hint-inline">
+              Выберите, какие системы входят в объект. Если по системе уже есть РД, чек-лист по ней не формируется, а AI-модуль использует ее как уточняющий контур.
+            </p>
+          </div>
+
+          <div className="ai-system-registry__grid">
+            {SYSTEM_TYPES.map((systemType) => {
+              const enabled = activeSystemTypes.has(systemType.code);
+              const currentSystem = (systems || []).find((item) => item.type === systemType.code);
+              return (
+                <div key={systemType.code} className={`ai-system-registry__item ${enabled ? "active" : ""}`}>
+                  <label className="ai-system-toggle">
+                    <input
+                      type="checkbox"
+                      checked={enabled}
+                      onChange={(event) => toggleSystemRegistry(systemType.code, event.target.checked)}
+                    />
+                    <span>
+                      <strong>{systemType.name}</strong>
+                      <small>{enabled ? "Система включена в проект" : "Система пока не выбрана"}</small>
+                    </span>
+                  </label>
+
+                  <label className={`ai-working-docs ${enabled ? "" : "disabled"}`}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(currentSystem?.hasWorkingDocs)}
+                      onChange={(event) => updateSystemWorkingDocs(currentSystem?.id, event.target.checked)}
+                      disabled={!enabled || !currentSystem?.id}
+                    />
+                    <span>Наличие РД (проекта)</span>
+                  </label>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className={`address-status ${aiSurveyPlan?.readiness?.isReady ? "success" : "error"}`}>
+          {aiSurveyPlan?.readiness?.isReady
+            ? "Обязательные данные заполнены. Можно запускать AI-обследование."
+            : "AI-Обследование будет активировано после 100% заполнения обязательных полей."}
+        </div>
+        {!aiSurveyPlan?.readiness?.isReady ? (
+          <div className="ai-readiness-list">
+            {(aiSurveyPlan?.readiness?.issues || []).map((issue) => (
+              <div key={issue} className="warn-inline ai-readiness-item">
+                {issue}
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {technicalSolution?.surveyStartedAt ? (
+          <>
+            <div className="ai-checklist-sections">
+              {(aiSurveyPlan?.sections || []).map((section) => (
+                <div className="calc-explain ai-checklist-section" key={section.id}>
+                  <div className="ai-checklist-section__head">
+                    <div>
+                      <h4>{section.title}</h4>
+                      <p className="hint-inline">{section.description}</p>
+                    </div>
+                    <span className="pricing-source-chip muted">
+                      {section.questions.length} вопросов
+                    </span>
+                  </div>
+
+                  <div className="ai-checklist-grid">
+                    {section.questions.map((question) => (
+                      <div className="input-card ai-checklist-question" key={question.id}>
+                        <label>
+                          {question.label}
+                          {question.aiAutofill ? <span className="ai-inline-mark">AI</span> : null}
+                        </label>
+                        {renderChecklistInput(question, technicalSolution?.answers?.[question.id], (value) =>
+                          updateAiSurveyAnswer(question.id, value)
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {(aiSurveyPlan?.photoPrompts || []).length ? (
+              <div className="calc-explain ai-photo-prompt-block">
+                <h4>Интеллектуальная фотофиксация</h4>
+                <p className="hint-inline">
+                  AI-подсказки формируются по зонам. Загрузите фото плана или поверхностей, и система попытается автоматически заполнить связанные пункты чек-листа.
+                </p>
+                <div className="ai-photo-prompt-grid">
+                  {aiSurveyPlan.photoPrompts.map((prompt) => {
+                    const analysis = technicalSolution?.photoAnalyses?.[prompt.id];
+                    return (
+                      <div className="ai-photo-card" key={prompt.id}>
+                        <div className="ai-photo-card__head">
+                          <div>
+                            <strong>{prompt.title}</strong>
+                            <span>{prompt.hint}</span>
+                          </div>
+                          <label className="ghost-btn file-upload-btn" htmlFor={`ai-photo-${prompt.id}`}>
+                            <Camera size={14} /> Загрузить фото
+                          </label>
+                          <input
+                            id={`ai-photo-${prompt.id}`}
+                            className="file-upload-input"
+                            type="file"
+                            accept="image/*"
+                            onChange={async (event) => {
+                              const file = event.target.files?.[0];
+                              if (!file) return;
+                              try {
+                                await analyzeAiSurveyPhoto(prompt, file);
+                              } catch {
+                                // Сообщение показывается в analysis.summary
+                              } finally {
+                                event.target.value = "";
+                              }
+                            }}
+                          />
+                        </div>
+
+                        <div className={`address-status ${analysis?.state === "success" ? "success" : analysis?.state === "error" ? "error" : ""}`}>
+                          {analysis?.summary || "Пока фото не загружено. Используйте подсказку справа, чтобы заполнить AI-поля быстрее."}
+                        </div>
+
+                        {analysis?.detections?.length ? (
+                          <div className="ai-detection-list">
+                            {analysis.detections.map((item) => (
+                              <span className="pricing-source-chip ok" key={`${prompt.id}-${item}`}>
+                                {item}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="calc-explain ai-checklist-footer">
+              <h4>Статус этапа</h4>
+              <div className="ai-summary-list">
+                <div>
+                  <CheckCircle2 size={16} />
+                  <span>
+                    Опросник охватывает объект, {zones.length} зон и системы: {(aiSurveyPlan?.activeSystems || []).map((code) => systemNames[code] || code).join(", ") || "не выбраны"}.
+                  </span>
+                </div>
+                {(aiSurveyPlan?.skippedSystems || []).length ? (
+                  <div>
+                    <CheckCircle2 size={16} />
+                    <span>
+                      С чек-листа исключены системы с РД: {aiSurveyPlan.skippedSystems.map((code) => systemNames[code] || code).join(", ")}.
+                    </span>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </>
         ) : null}
       </div>
     </section>

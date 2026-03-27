@@ -1,0 +1,169 @@
+function num(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function firstAnswer(answers, key, fallback = []) {
+  const value = answers?.[key];
+  if (Array.isArray(value)) return value;
+  if (value === null || value === undefined || value === "") return fallback;
+  return [value];
+}
+
+function buildStatusMaterials(systemType, objectData, markerUnits, answers, zones) {
+  const materialRows = [];
+  const floors = Math.max(num(objectData?.floors, 1), 1);
+  const totalZoneFloors = Math.max((zones || []).reduce((sum, zone) => sum + Math.max(num(zone?.floors, 0), 0), 0), floors);
+  const finishSensitive = answers["operational-finish-sensitive"] === true;
+  const cableReservePercent = Math.max(num(answers["object-cable-reserve"], 10), 0);
+
+  materialRows.push({
+    key: `${systemType}-reserve`,
+    name: "Запас кабеля и расходных материалов",
+    qty: Math.max(Math.round(markerUnits * (1 + cableReservePercent / 100)), 1),
+    unit: "усл. ед.",
+    basis: `Запас ${cableReservePercent}% от базового объема системы`,
+  });
+
+  materialRows.push({
+    key: `${systemType}-riser`,
+    name: "Материалы для вертикальных трасс и промежуточных узлов",
+    qty: Math.max(Math.ceil(totalZoneFloors * 1.2), 1),
+    unit: "компл.",
+    basis: `Этажность и вертикальные переходы: ${totalZoneFloors} этажных уровней`,
+  });
+
+  if (objectData?.buildingStatus === "construction") {
+    materialRows.push({
+      key: `${systemType}-rough-fasteners`,
+      name: "Крепеж и закладные для строящегося объекта",
+      qty: Math.max(Math.ceil(markerUnits * 0.8), 1),
+      unit: "шт",
+      basis: "Подготовка трасс и крепежа на стадии стройки",
+    });
+  } else {
+    materialRows.push({
+      key: `${systemType}-finish-fasteners`,
+      name: "Крепеж и декоративные элементы для готовой отделки",
+      qty: Math.max(Math.ceil(markerUnits * (finishSensitive ? 1.15 : 0.9)), 1),
+      unit: "шт",
+      basis: finishSensitive ? "Монтаж без повреждения чистовой отделки" : "Действующий объект без жестких отделочных ограничений",
+    });
+  }
+
+  return materialRows;
+}
+
+function buildZoneMaterials(systemType, zones, answers) {
+  return (zones || []).flatMap((zone) => {
+    const wallMaterials = firstAnswer(answers, `zone-${zone.id}-wall-material`, []);
+    const ceilingTypes = firstAnswer(answers, `zone-${zone.id}-ceiling-type`, []);
+    const rows = [];
+
+    if (wallMaterials.includes("Бетон")) {
+      rows.push({
+        key: `${systemType}-zone-${zone.id}-anchors`,
+        name: `Анкерный крепеж для зоны "${zone.name}"`,
+        qty: Math.max(Math.ceil(num(zone.area) / 18), 1),
+        unit: "шт",
+        basis: "Бетонные основания по фотофиксации / чек-листу",
+      });
+    }
+
+    if (ceilingTypes.includes("Армстронг") || ceilingTypes.includes("Грильято")) {
+      rows.push({
+        key: `${systemType}-zone-${zone.id}-suspension`,
+        name: `Подвесы и элементы скрытого монтажа для зоны "${zone.name}"`,
+        qty: Math.max(Math.ceil(num(zone.area) / 22), 1),
+        unit: "шт",
+        basis: "Подвесной потолок по результатам обследования",
+      });
+    }
+
+    return rows;
+  });
+}
+
+function buildBaseSpecRows(systemType, result, apsSnapshot) {
+  if (systemType === "aps" && apsSnapshot?.active && Array.isArray(apsSnapshot.items) && apsSnapshot.items.length) {
+    return apsSnapshot.items.slice(0, 12).map((item, index) => ({
+      key: item.id || `${systemType}-pdf-${index + 1}`,
+      name: item.model ? `${item.name} (${item.model})` : item.name,
+      qty: Math.max(num(item.qty, 0), 0),
+      unit: item.unit || "шт",
+      basis: item.positionNumber ? `Позиция ${item.positionNumber} из проектной спецификации` : "Проектная спецификация APS",
+    }));
+  }
+
+  const bom = Array.isArray(result?.bom) ? result.bom : [];
+  if (bom.length) {
+    return bom.slice(0, 10).map((item, index) => ({
+      key: item.code || `${systemType}-bom-${index + 1}`,
+      name: item.name,
+      qty: Math.max(num(item.qty, 0), 0),
+      unit: "шт",
+      basis: "Расчетный BOM системы",
+    }));
+  }
+
+  const keyEquipment = Array.isArray(result?.equipmentData?.keyEquipment) ? result.equipmentData.keyEquipment : [];
+  return keyEquipment.slice(0, 8).map((item, index) => ({
+    key: item.code || `${systemType}-key-${index + 1}`,
+    name: item.label || item.name || `Позиция ${index + 1}`,
+    qty: Math.max(num(item.qty, result?.units || 0), 0),
+    unit: "шт",
+    basis: "Ключевое оборудование по конфигуратору системы",
+  }));
+}
+
+export function buildAiTechnicalRecommendations({
+  systems,
+  systemResults,
+  objectData,
+  zones,
+  surveyAnswers,
+  apsProjectSnapshots,
+  specOverrides,
+}) {
+  return (systems || []).map((system, index) => {
+    const result = systemResults?.[index];
+    const markerUnits = Math.max(num(result?.unitWorkMarker?.qty, result?.units), 1);
+    const baseRows = buildBaseSpecRows(system.type, result, apsProjectSnapshots?.[system.id]);
+    const materialRows = [
+      ...buildStatusMaterials(system.type, objectData, markerUnits, surveyAnswers, zones),
+      ...buildZoneMaterials(system.type, zones, surveyAnswers),
+    ];
+    const combinedRows = [...baseRows, ...materialRows].map((row) => {
+      const override = specOverrides?.[system.id]?.[row.key] || {};
+      return {
+        ...row,
+        qty: override.qty !== undefined ? Math.max(num(override.qty, row.qty), 0) : row.qty,
+      };
+    });
+
+    const integrationCount = num(surveyAnswers?.[`system-${system.id}-integration-count`], result?.unitWorkMarker?.qty ? 1 : 0);
+    const lowCurrentRooms = num(surveyAnswers?.["object-low-current-rooms"], 0);
+    const readinessScoreBase = 66 + (system.hasWorkingDocs ? 16 : 0) + (integrationCount > 0 ? 6 : 0) + (lowCurrentRooms > 0 ? 4 : 0);
+
+    return {
+      systemId: system.id,
+      systemType: system.type,
+      hasWorkingDocs: Boolean(system.hasWorkingDocs),
+      readinessScore: Math.min(readinessScoreBase, 98),
+      specRows: combinedRows,
+      summary: [
+        `Площадь и зонирование учтены через расчетные объемы системы: ${Math.round(num(result?.units, markerUnits))} базовых единиц.`,
+        `Этажность и вертикальные переходы учтены через дополнительные материалы и узлы: ${Math.max(num(objectData?.floors, 1), 1)} этажей.`,
+        system.hasWorkingDocs
+          ? "По системе отмечено наличие РД, поэтому AI-обследование используется как уточняющий, а не базовый контур."
+          : "По системе нет РД, поэтому AI-обследование напрямую влияет на формирование техрешения.",
+      ],
+      influences: [
+        { label: "Площадь и зоны", value: `${Math.round(num(objectData?.totalArea, 0))} м² / ${zones?.length || 0} зон` },
+        { label: "Статус объекта", value: objectData?.buildingStatus === "construction" ? "Строящийся" : "Действующий" },
+        { label: "Интеграция", value: `${integrationCount} точек` },
+        { label: "Слаботочные узлы", value: `${lowCurrentRooms} помещений` },
+      ],
+    };
+  });
+}

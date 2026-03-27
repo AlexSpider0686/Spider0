@@ -201,6 +201,7 @@ export const DEFAULT_SYSTEM = (id, type = "sot") => ({
   vendor: (VENDORS[type] || ["Базовый"])[0],
   baseVendor: (VENDORS[type] || ["Базовый"])[0],
   customVendorIndex: 1,
+  hasWorkingDocs: false,
   equipmentProfiles: getDefaultEquipmentProfiles(type),
   selectedEquipmentParams: {},
   note: "",

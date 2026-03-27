@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Plus, Trash2, Shield, FileUp, RefreshCcw, Eye, EyeOff } from "lucide-react";
+import { Plus, Trash2, Shield, FileUp, RefreshCcw, Eye, EyeOff, CheckCircle2 } from "lucide-react";
 import { SYSTEM_TYPES, VENDORS } from "../config/estimateConfig";
 import { getManufacturerSource, getVendorByName } from "../config/vendorsConfig";
 import { num, rub, toNumber } from "../lib/estimate";
@@ -155,6 +155,8 @@ export default function SystemsStep({
   removeApsProjectItemById,
   apsProjectSnapshots,
   apsImportStatuses,
+  technicalRecommendations,
+  updateTechnicalSpecOverride,
 }) {
   const usedTypeMap = new Map(systems.map((item) => [item.id, item.type]));
   const [manualDraftBySystem, setManualDraftBySystem] = useState({});
@@ -214,6 +216,7 @@ export default function SystemsStep({
           const keyEquipment = result?.equipmentData?.keyEquipment || [];
           const apsSnapshot = apsProjectSnapshots?.[system.id];
           const apsStatus = apsImportStatuses?.[system.id];
+          const technicalRecommendation = (technicalRecommendations || []).find((item) => item.systemId === system.id);
           const unitAuditRows = (apsSnapshot?.items || []).filter((item) => (item?.unitAudit?.status || "unknown") !== "match");
           const manufacturerSource = getManufacturerSource(system.type, system.vendor);
           const manufacturerWebsite = manufacturerSource?.website || "";
@@ -849,6 +852,78 @@ export default function SystemsStep({
                   </div>
                 </div>
               </div>
+
+              {technicalRecommendation ? (
+                <div className="calc-explain ai-configurator-card">
+                  <div className="ai-configurator-card__head">
+                    <div>
+                      <h4>AI-Конфигуратор технического решения</h4>
+                      <p className="hint-inline">
+                        Спецификация собрана по данным вкладки "Объект", зонированию, этажности, статусу здания, ответам обследования и проектным данным.
+                      </p>
+                    </div>
+                    <div className="ai-configurator-badges">
+                      <span className="pricing-source-chip ok">Готовность: {num(technicalRecommendation.readinessScore, 0)}%</span>
+                      <span className={`pricing-source-chip ${technicalRecommendation.hasWorkingDocs ? "muted" : "warn"}`}>
+                        {technicalRecommendation.hasWorkingDocs ? "Есть РД" : "Без РД"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="ai-configurator-influences">
+                    {(technicalRecommendation.influences || []).map((item) => (
+                      <div className="metric-card" key={`${system.id}-${item.label}`}>
+                        <span>{item.label}</span>
+                        <strong>{item.value}</strong>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="ai-summary-list">
+                    {(technicalRecommendation.summary || []).map((item) => (
+                      <div key={`${system.id}-${item}`}>
+                        <CheckCircle2 size={16} />
+                        <span>{item}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="table-wrap compact ai-configurator-table">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Позиция</th>
+                          <th>Основание</th>
+                          <th>Кол-во</th>
+                          <th>Ед. изм</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(technicalRecommendation.specRows || []).map((row) => (
+                          <tr key={`${system.id}-${row.key}`}>
+                            <td>{row.name}</td>
+                            <td>{row.basis}</td>
+                            <td>
+                              <input
+                                type="number"
+                                min="0"
+                                step="1"
+                                value={row.qty}
+                                onChange={(event) =>
+                                  updateTechnicalSpecOverride(system.id, row.key, {
+                                    qty: Math.max(toNumber(event.target.value, row.qty), 0),
+                                  })
+                                }
+                              />
+                            </td>
+                            <td>{row.unit}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : null}
 
               <div className="action-cell">
                 <button className="danger-btn" type="button" onClick={() => removeSystem(system.id)} disabled={systems.length <= 1}>

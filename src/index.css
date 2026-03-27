@@ -117,6 +117,168 @@ select {
   animation: sky-pan 24s linear infinite alternate;
 }
 
+.ai-survey-summary-grid,
+.ai-configurator-influences {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ai-system-registry__grid,
+.ai-photo-prompt-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ai-system-registry__item,
+.ai-photo-card {
+  border: 1px solid rgba(141, 163, 196, 0.28);
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: var(--shadow-soft);
+}
+
+.ai-system-registry__item.active {
+  border-color: rgba(47, 127, 241, 0.42);
+  background: linear-gradient(180deg, rgba(244, 250, 255, 0.95), rgba(236, 244, 255, 0.88));
+}
+
+.ai-system-toggle,
+.ai-working-docs {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.ai-system-toggle strong,
+.ai-photo-card__head strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.ai-system-toggle small,
+.ai-photo-card__head span,
+.ai-inline-mark {
+  color: var(--muted);
+}
+
+.ai-working-docs {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(141, 163, 196, 0.22);
+}
+
+.ai-working-docs.disabled {
+  opacity: 0.55;
+}
+
+.ai-readiness-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.ai-readiness-item {
+  display: block;
+}
+
+.ai-checklist-sections {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.ai-checklist-section__head,
+.ai-configurator-card__head,
+.ai-photo-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ai-checklist-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.ai-checklist-question label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.ai-inline-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(47, 127, 241, 0.12);
+  color: #195fc5;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ai-checklist-bool,
+.ai-checklist-chips,
+.ai-detection-list,
+.ai-configurator-badges,
+.ai-summary-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip-btn {
+  border: 1px solid rgba(141, 163, 196, 0.34);
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 999px;
+  padding: 8px 12px;
+  color: var(--text);
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.chip-btn.active {
+  background: linear-gradient(180deg, #2f7ff1, #17a9d7);
+  border-color: transparent;
+  color: #fff;
+}
+
+.ai-photo-prompt-block,
+.ai-configurator-card {
+  margin-top: 14px;
+}
+
+.ai-summary-list {
+  margin-top: 12px;
+  display: grid;
+}
+
+.ai-summary-list > div {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.ai-summary-list svg {
+  color: #1f8f5f;
+  margin-top: 2px;
+  flex: 0 0 auto;
+}
+
+.ai-configurator-table input {
+  width: 90px;
+}
+
 @keyframes sky-pan {
   0% {
     transform: translate3d(-4%, -2%, 0) scale(1);
@@ -1768,6 +1930,14 @@ tbody tr:hover {
   .logic-system-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .ai-survey-summary-grid,
+  .ai-configurator-influences,
+  .ai-checklist-grid,
+  .ai-system-registry__grid,
+  .ai-photo-prompt-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 1100px) {
@@ -1806,6 +1976,8 @@ tbody tr:hover {
   .grid-three,
   .zone-grid,
   .summary-grid,
+  .ai-survey-summary-grid,
+  .ai-configurator-influences,
   .object-top-grid,
   .object-photo-gallery,
   .system-main-grid,
@@ -1814,6 +1986,9 @@ tbody tr:hover {
     .system-control-grid,
     .vendor-hint-mid,
     .manual-item-grid,
+  .ai-checklist-grid,
+  .ai-system-registry__grid,
+  .ai-photo-prompt-grid,
   .region-select-grid,
   .logic-grid,
   .logic-system-metrics,

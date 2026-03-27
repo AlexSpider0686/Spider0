@@ -10,6 +10,10 @@ import { validateEstimateInput } from "../lib/input-normalization";
 import { appendManualApsProjectItem, recalculateApsProjectSnapshot, removeApsProjectItem } from "../lib/apsProjectEstimate";
 import { calculateProtectedArea } from "../lib/protectedArea";
 import { verifyObjectAddress as verifyObjectAddressOnline } from "../lib/addressVerification";
+import { createProjectIdentity } from "../lib/projectIdentity";
+import { analyzeInspectionPhoto } from "../lib/aiPhotoInspection";
+import { buildAiSurveyPlan, calculateAiSurveyCompletion } from "../lib/aiTechnicalChecklist";
+import { buildAiTechnicalRecommendations } from "../lib/aiTechnicalConfigurator";
 
 function removeById(mapObject, id) {
   if (!(id in mapObject)) return mapObject;
@@ -19,8 +23,10 @@ function removeById(mapObject, id) {
 }
 
 export default function useEstimate() {
+  const initialIdentityRef = useRef(createProjectIdentity());
   const [step, setStep] = useState(0);
   const [objectData, setObjectData] = useState({
+    ...initialIdentityRef.current,
     projectName: "Объект 1",
     address: "",
     objectType: "public",
@@ -46,6 +52,12 @@ export default function useEstimate() {
   const [vendorPriceSnapshots, setVendorPriceSnapshots] = useState({});
   const [apsProjectSnapshots, setApsProjectSnapshots] = useState({});
   const [apsImportStatuses, setApsImportStatuses] = useState({});
+  const [technicalSolution, setTechnicalSolution] = useState({
+    surveyStartedAt: null,
+    answers: {},
+    photoAnalyses: {},
+    specOverrides: {},
+  });
   const [addressVerification, setAddressVerification] = useState({
     state: "idle",
     message: "Введите адрес объекта и запустите онлайн-проверку.",
@@ -60,6 +72,33 @@ export default function useEstimate() {
     [systems, zones, budget, objectData, vendorPriceSnapshots, apsProjectSnapshots]
   );
   const zoneDistribution = useMemo(() => validateZoneDistribution(zones, recalculatedArea), [zones, recalculatedArea]);
+  const aiSurveyPlan = useMemo(
+    () =>
+      buildAiSurveyPlan({
+        objectData,
+        zones,
+        systems,
+        protectedArea: recalculatedArea,
+      }),
+    [objectData, zones, systems, recalculatedArea]
+  );
+  const aiSurveyCompletion = useMemo(
+    () => calculateAiSurveyCompletion(aiSurveyPlan, technicalSolution.answers),
+    [aiSurveyPlan, technicalSolution.answers]
+  );
+  const technicalRecommendations = useMemo(
+    () =>
+      buildAiTechnicalRecommendations({
+        systems,
+        systemResults,
+        objectData,
+        zones,
+        surveyAnswers: technicalSolution.answers,
+        apsProjectSnapshots,
+        specOverrides: technicalSolution.specOverrides,
+      }),
+    [systems, systemResults, objectData, zones, technicalSolution.answers, technicalSolution.specOverrides, apsProjectSnapshots]
+  );
   const inputValidation = useMemo(
     () =>
       validateEstimateInput({
@@ -188,6 +227,24 @@ export default function useEstimate() {
       if (!nextType) return prev;
       return [...prev, DEFAULT_SYSTEM(Date.now(), nextType)];
     });
+
+  const toggleSystemRegistry = (type, enabled) => {
+    if (enabled) {
+      setSystems((prev) => {
+        if (prev.some((system) => system.type === type)) return prev;
+        return [...prev, DEFAULT_SYSTEM(Date.now(), type)];
+      });
+      return;
+    }
+
+    const targetSystem = systems.find((system) => system.type === type);
+    if (!targetSystem || systems.length <= 1) return;
+    removeSystem(targetSystem.id);
+  };
+
+  const updateSystemWorkingDocs = (systemId, hasWorkingDocs) => {
+    setSystems((prev) => prev.map((system) => (system.id === systemId ? { ...system, hasWorkingDocs: Boolean(hasWorkingDocs) } : system)));
+  };
 
   const removeSystem = (id) => {
     setSystems((prev) => (prev.length <= 1 ? prev : prev.filter((system) => system.id !== id)));
@@ -527,6 +584,105 @@ export default function useEstimate() {
     downloadCsv(`${objectData.projectName || "estimate"}.csv`, rows);
   };
 
+  const startAiSurvey = () => {
+    if (!aiSurveyPlan.readiness.isReady) return false;
+    setTechnicalSolution((prev) => ({
+      ...prev,
+      surveyStartedAt: prev.surveyStartedAt || new Date().toISOString(),
+    }));
+    return true;
+  };
+
+  const updateAiSurveyAnswer = (questionId, value) => {
+    setTechnicalSolution((prev) => ({
+      ...prev,
+      answers: {
+        ...prev.answers,
+        [questionId]: value,
+      },
+    }));
+  };
+
+  const analyzeAiSurveyPhoto = async (prompt, file) => {
+    if (!prompt || !file) return null;
+
+    setTechnicalSolution((prev) => ({
+      ...prev,
+      photoAnalyses: {
+        ...prev.photoAnalyses,
+        [prompt.id]: {
+          state: "loading",
+          fileName: file.name,
+          summary: "Идет AI-анализ фото...",
+        },
+      },
+    }));
+
+    try {
+      const result = await analyzeInspectionPhoto({
+        file,
+        prompt,
+        objectData,
+        zones,
+      });
+
+      setTechnicalSolution((prev) => {
+        const nextAnswers = { ...prev.answers };
+        for (const suggestion of result?.suggestedAnswers || []) {
+          nextAnswers[suggestion.questionId] = suggestion.value;
+        }
+
+        return {
+          ...prev,
+          answers: nextAnswers,
+          photoAnalyses: {
+            ...prev.photoAnalyses,
+            [prompt.id]: {
+              state: "success",
+              fileName: file.name,
+              summary: result.summary,
+              confidence: result.confidence,
+              detections: result.detections || [],
+              suggestedAnswers: result.suggestedAnswers || [],
+            },
+          },
+        };
+      });
+
+      return result;
+    } catch (error) {
+      setTechnicalSolution((prev) => ({
+        ...prev,
+        photoAnalyses: {
+          ...prev.photoAnalyses,
+          [prompt.id]: {
+            state: "error",
+            fileName: file.name,
+            summary: error?.message || "Не удалось обработать фото.",
+            detections: [],
+          },
+        },
+      }));
+      throw error;
+    }
+  };
+
+  const updateTechnicalSpecOverride = (systemId, rowKey, patch = {}) => {
+    setTechnicalSolution((prev) => ({
+      ...prev,
+      specOverrides: {
+        ...prev.specOverrides,
+        [systemId]: {
+          ...(prev.specOverrides?.[systemId] || {}),
+          [rowKey]: {
+            ...(prev.specOverrides?.[systemId]?.[rowKey] || {}),
+            ...patch,
+          },
+        },
+      },
+    }));
+  };
+
   return {
     step,
     setStep,
@@ -547,6 +703,10 @@ export default function useEstimate() {
     totals,
     zoneDistribution,
     inputValidation,
+    technicalSolution,
+    aiSurveyPlan,
+    aiSurveyCompletion,
+    technicalRecommendations,
     VENDOR_EQUIPMENT,
     updateObject,
     verifyObjectAddress,
@@ -557,6 +717,8 @@ export default function useEstimate() {
     toggleZoneLock,
     applyZonePreset,
     updateSystem,
+    toggleSystemRegistry,
+    updateSystemWorkingDocs,
     addSystem,
     removeSystem,
     updateSystemEquipmentProfile,
@@ -567,6 +729,10 @@ export default function useEstimate() {
     updateApsProjectItem,
     addApsProjectItem,
     removeApsProjectItemById,
+    startAiSurvey,
+    updateAiSurveyAnswer,
+    analyzeAiSurveyPhoto,
+    updateTechnicalSpecOverride,
     exportEstimate,
     exportEstimateCsv,
     setZones,
