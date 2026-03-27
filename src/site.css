@@ -418,7 +418,8 @@ html {
 .app-shell .growth-list li {
   position: relative;
   padding-left: 24px;
-  color: #d7e7f7;
+  color: #33506d;
+  font-weight: 600;
   line-height: 1.6;
 }
 
@@ -436,8 +437,9 @@ html {
 .app-shell .spotlight-card {
   padding: 30px;
   border-radius: 32px;
-  background: linear-gradient(160deg, rgba(91, 208, 255, 0.12), rgba(139, 102, 255, 0.1));
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: linear-gradient(160deg, rgba(91, 208, 255, 0.18), rgba(139, 102, 255, 0.14), rgba(255, 255, 255, 0.82));
+  border: 1px solid rgba(23, 77, 126, 0.12);
+  box-shadow: 0 18px 34px rgba(44, 82, 130, 0.12);
   transition: transform 0.24s ease, border-color 0.24s ease;
 }
 
@@ -450,11 +452,23 @@ html {
   font-size: 28px;
   line-height: 1.15;
   margin: 18px 0 14px;
+  color: #102a43;
 }
 
 .app-shell .spotlight-card p {
-  color: #d4e5f6;
+  color: #4b647d;
   line-height: 1.65;
+  font-weight: 500;
+}
+
+.app-shell .spotlight-card .btn--primary {
+  box-shadow: 0 10px 24px rgba(65, 174, 228, 0.24);
+}
+
+.app-shell .section--light .spotlight-card__eyebrow {
+  color: #6b86a1;
+  background: rgba(255, 255, 255, 0.55);
+  border-color: rgba(62, 113, 167, 0.14);
 }
 
 .app-shell .logic-sequence {
