@@ -231,7 +231,7 @@ html {
 .app-shell .hero__grid {
   margin-top: 48px;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 16px;
   animation: fade-up 1s ease forwards;
 }
@@ -256,6 +256,10 @@ html {
 
 .app-shell .metric-card:nth-child(4) {
   animation-delay: 2.4s;
+}
+
+.app-shell .metric-card:nth-child(5) {
+  animation-delay: 3.2s;
 }
 
 .app-shell .metric-card:hover {
