@@ -7,6 +7,59 @@ function hasSystem(systems, type) {
   return (systems || []).some((item) => item.type === type);
 }
 
+function getAreaTimeFactor(area) {
+  if (area >= 100000) return 2.8;
+  if (area >= 50000) return 2.2;
+  if (area >= 20000) return 1.5;
+  if (area >= 10000) return 1.15;
+  if (area >= 5000) return 0.95;
+  return 0.7;
+}
+
+function estimateSurveyHours({ objectData, zones, surveySystems, sections, photoPrompts, objectArea }) {
+  const zoneCount = zones?.length || 0;
+  const floors = Math.max(num(objectData?.floors, 1), 1);
+  const operational = objectData?.buildingStatus === "operational";
+  const systemsWithPlans = surveySystems.filter((system) => ["aps", "soue", "sots"].includes(system.type)).length;
+  const totalQuestions = sections.reduce((sum, section) => sum + (section.questions?.length || 0), 0);
+  const totalZoneArea = Math.max((zones || []).reduce((sum, zone) => sum + num(zone?.area, 0), 0), objectArea);
+  const avgZoneArea = zoneCount ? totalZoneArea / zoneCount : objectArea;
+  const uniqueFloorLevels = new Set((zones || []).map((zone) => `${num(zone?.floors, 1)}`)).size;
+
+  const baseline = operational ? 1.3 : 1.0;
+  const areaFactor = getAreaTimeFactor(objectArea);
+  const zoneFactor = zoneCount * 0.32;
+  const floorFactor = Math.max(0, floors - 1) * 0.18 + Math.max(0, uniqueFloorLevels - 1) * 0.08;
+  const systemsFactor = surveySystems.reduce((sum, system) => {
+    if (system.type === "aps") return sum + 0.65;
+    if (system.type === "soue") return sum + 0.55;
+    if (system.type === "sots") return sum + 0.5;
+    return sum + 0.35;
+  }, 0);
+  const questionFactor = totalQuestions * 0.045;
+  const photoFactor =
+    photoPrompts.filter((prompt) => prompt.type === "surface_scan").length * 0.12 +
+    photoPrompts.filter((prompt) => prompt.type === "evacuation_plan").length * 0.22;
+  const planRecognitionFactor = systemsWithPlans * 0.3 + photoPrompts.filter((prompt) => prompt.type === "evacuation_plan").length * 0.1;
+  const accessFactor = operational ? 0.45 : 0.18;
+  const sizeDispersionFactor = avgZoneArea >= 2500 ? 0.2 : avgZoneArea <= 600 ? 0.08 : 0.14;
+
+  return Number(
+    (
+      baseline +
+      areaFactor +
+      zoneFactor +
+      floorFactor +
+      systemsFactor +
+      questionFactor +
+      photoFactor +
+      planRecognitionFactor +
+      accessFactor +
+      sizeDispersionFactor
+    ).toFixed(1)
+  );
+}
+
 function createQuestion({
   id,
   sectionId,
@@ -69,16 +122,6 @@ export function buildAiSurveyPlan({ objectData, zones, systems, protectedArea })
   const photoPrompts = [];
 
   const objectArea = num(objectData?.totalArea);
-  const areaFactor = objectArea >= 50000 ? 2.2 : objectArea >= 20000 ? 1.5 : objectArea >= 10000 ? 1.15 : 0.8;
-  const estimatedHours = Number(
-    (
-      1.4 +
-      (zones?.length || 0) * 0.45 +
-      surveySystems.length * 0.55 +
-      areaFactor +
-      (objectData?.buildingStatus === "operational" ? 0.6 : 0.3)
-    ).toFixed(1)
-  );
 
   const objectSectionId = "object-baseline";
   const objectQuestions = [];
@@ -340,6 +383,14 @@ export function buildAiSurveyPlan({ objectData, zones, systems, protectedArea })
   });
 
   const allQuestions = sections.flatMap((section) => section.questions);
+  const estimatedHours = estimateSurveyHours({
+    objectData,
+    zones,
+    surveySystems,
+    sections,
+    photoPrompts,
+    objectArea,
+  });
 
   return {
     estimatedHours,
