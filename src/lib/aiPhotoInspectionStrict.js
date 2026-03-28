@@ -1,5 +1,6 @@
 import { withAiRetry } from "./aiRetry";
 import { MIN_ACCEPTABLE_PLAN_QUALITY, recognizeEvacuationPlanLayout } from "./evacuationPlanRecognition";
+import { extractDeepPlanVision } from "./planDeepVision";
 
 function normalizeText(value) {
   return String(value || "")
@@ -579,6 +580,11 @@ async function executeAnalysis({ file, prompt, zones, systems, objectData, photo
       };
     }
 
+    const deepVision = await extractDeepPlanVision({
+      file,
+      objectAreaHint: zones?.find((item) => String(item?.id) === String(prompt?.zoneId))?.area || objectData?.totalArea || 0,
+    });
+
     const planRecognition = recognizeEvacuationPlanLayout({
       prompt,
       zones,
@@ -587,6 +593,7 @@ async function executeAnalysis({ file, prompt, zones, systems, objectData, photo
       objectData,
       floorIndex,
       relatedPhotoAnalyses: photoAnalyses,
+      deepVision,
     });
 
     if ((planRecognition?.captureQuality?.score || 0) < MIN_ACCEPTABLE_PLAN_QUALITY) {
@@ -616,6 +623,8 @@ async function executeAnalysis({ file, prompt, zones, systems, objectData, photo
         `Качество съемки: ${planRecognition.captureQuality.label}`,
         `Эвакуационных выходов/маршрутов: ~${planRecognition.egressCount}`,
         `Оценочная площадь этажа: ${planRecognition.geometry?.floorAreaEstimated || 0} м²`,
+        `OCR-блоков: ${planRecognition.deepVision?.textBlocks?.length || 0}`,
+        `Сегментация: помещений ${planRecognition.deepVision?.segmentation?.roomCount || 0}, коридоров ${planRecognition.deepVision?.segmentation?.corridorCount || 0}`,
         ...planRecognition.systems.map((item) => `${item.systemLabel}: выделено ${item.zoneCount} ${item.zoneTerm}`),
       ],
       suggestedAnswers: prompt.targetQuestionIds.map((questionId) => ({ questionId, value: true })),

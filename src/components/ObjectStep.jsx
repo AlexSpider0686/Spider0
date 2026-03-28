@@ -771,6 +771,30 @@ export default function ObjectStep({
                             </div>
                           ) : null}
 
+                          {analysis?.planRecognition?.deepVision ? (
+                            <div className="ai-summary-list" style={{ marginTop: 10 }}>
+                              <div>
+                                <CheckCircle2 size={16} />
+                                <span>
+                                  Deep OCR/segmentation: текстовых блоков {analysis.planRecognition.deepVision.textBlocks?.length || 0}, помещений{" "}
+                                  {analysis.planRecognition.deepVision.segmentation?.roomCount || 0}, коридоров{" "}
+                                  {analysis.planRecognition.deepVision.segmentation?.corridorCount || 0}, лестничных клеток{" "}
+                                  {analysis.planRecognition.deepVision.segmentation?.stairCount || 0}.
+                                </span>
+                              </div>
+                              <div>
+                                <CheckCircle2 size={16} />
+                                <span>
+                                  Масштаб плана:{" "}
+                                  {analysis.planRecognition.deepVision.scaleHint?.drawingScale
+                                    ? `1:${analysis.planRecognition.deepVision.scaleHint.drawingScale}`
+                                    : "не найден автоматически"}
+                                  . OCR-уверенность: {analysis.planRecognition.deepVision.quality?.ocrConfidence || 0}.
+                                </span>
+                              </div>
+                            </div>
+                          ) : null}
+
                           {analysis?.planRecognition?.systems?.length ? (
                             <div className="ai-summary-list" style={{ marginTop: 10 }}>
                               <div>

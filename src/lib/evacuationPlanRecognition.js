@@ -35,7 +35,20 @@ function getZoneRiskWeight(zoneType) {
   }
 }
 
-function classifyLayout(meta) {
+function classifyLayout(meta, deepVision = null) {
+  const segmentation = deepVision?.segmentation;
+  if (segmentation) {
+    if (segmentation.corridorCount >= Math.max(segmentation.roomCount * 0.45, 2)) {
+      return { type: "Коридорная", code: "corridor", confidence: 0.82 };
+    }
+    if (segmentation.roomCount >= 5) {
+      return { type: "Ячеистая", code: "cell", confidence: 0.84 };
+    }
+    if (segmentation.roomCount <= 2 && segmentation.corridorCount === 0) {
+      return { type: "Открытая", code: "open", confidence: 0.72 };
+    }
+  }
+
   const middle = meta?.features?.middleRegion;
   const top = meta?.features?.topRegion;
   if (!middle || !top) {
@@ -82,7 +95,7 @@ function buildQualityImprovements(meta) {
   return improvements;
 }
 
-function assessCaptureQuality(meta) {
+function assessCaptureQuality(meta, deepVision = null) {
   const top = meta?.features?.topRegion;
   const middle = meta?.features?.middleRegion;
   const width = num(meta?.width, 0);
@@ -124,6 +137,15 @@ function assessCaptureQuality(meta) {
     notes.push("Контраст низкий, часть линий может теряться.");
   }
 
+  if ((deepVision?.quality?.segmentationConfidence || 0) >= 0.72) {
+    score += 0.1;
+    notes.push("Deep segmentation выделила стены, помещения и коридоры.");
+  }
+  if ((deepVision?.quality?.ocrConfidence || 0) >= 0.58) {
+    score += 0.06;
+    notes.push("OCR-блоки подписей плана распознаны с приемлемой уверенностью.");
+  }
+
   score = clamp(score, 0.18, 0.96);
   const roundedScore = Number(score.toFixed(2));
 
@@ -136,30 +158,40 @@ function assessCaptureQuality(meta) {
   };
 }
 
-function derivePlanSignals(meta, layout, zone, objectData) {
+function derivePlanSignals(meta, layout, zone, objectData, deepVision = null) {
   const middle = meta?.features?.middleRegion;
   const top = meta?.features?.topRegion;
   const area = Math.max(num(zone?.area, num(objectData?.totalArea, 0)), 0);
   const floors = Math.max(num(zone?.floors, objectData?.floors || 1), 1);
+  const segmentation = deepVision?.segmentation;
+  const layoutCode =
+    layout?.code ||
+    (middle?.edgeDensity > 0.24 && middle?.verticalEdgeDensity > 0.05 && middle?.horizontalEdgeDensity > 0.05
+      ? "cell"
+      : middle?.horizontalEdgeDensity > middle?.verticalEdgeDensity * 1.25 && (top?.brightness || 0) > 150
+        ? "corridor"
+        : middle?.edgeDensity < 0.16 && (middle?.contrast || 0) < 34
+          ? "open"
+          : "mixed");
 
   const roomCellEstimate = clamp(
-    Math.round(area / (layout.type === "Ячеистая" ? 220 : layout.type === "Коридорная" ? 320 : 450)) +
-      (layout.type === "Ячеистая" ? 2 : 0) +
+    Math.round(segmentation?.roomCount || area / (layoutCode === "cell" ? 220 : layoutCode === "corridor" ? 320 : 450)) +
+      (layoutCode === "cell" ? 2 : 0) +
       ((middle?.verticalEdgeDensity || 0) > 0.06 ? 1 : 0),
     1,
     24
   );
 
   const corridorSegmentEstimate = clamp(
-    Math.round(area / (layout.type === "Коридорная" ? 900 : 1400)) +
-      (layout.type === "Коридорная" ? 1 : 0) +
+    Math.round(segmentation?.corridorCount || area / (layoutCode === "corridor" ? 900 : 1400)) +
+      (layoutCode === "corridor" ? 1 : 0) +
       ((middle?.horizontalEdgeDensity || 0) > 0.07 ? 1 : 0),
     1,
     10
   );
 
   const stairEstimate = clamp(
-    Math.round(floors / 2) +
+    Math.round(segmentation?.stairCount || floors / 2) +
       (floors > 3 ? 1 : 0) +
       ((top?.brightness || 0) > 165 && (middle?.contrast || 0) > 32 ? 1 : 0),
     1,
@@ -177,12 +209,14 @@ function derivePlanSignals(meta, layout, zone, objectData) {
     corridorSegmentEstimate,
     stairEstimate,
     isolatedBlockEstimate,
+    ocrLabelCount: (deepVision?.textBlocks || []).length,
+    labeledRoomCount: (segmentation?.labeledRooms || []).length,
   };
 }
 
-function estimateEgressCount(zone, layoutType, planSignals) {
+function estimateEgressCount(zone, layoutType, planSignals, deepVision = null) {
   const area = num(zone?.area, 0);
-  let count = area >= 2500 ? 3 : area >= 900 ? 2 : 1;
+  let count = deepVision?.segmentation?.egressCount || (area >= 2500 ? 3 : area >= 900 ? 2 : 1);
   if (layoutType === "Коридорная") count += 1;
   if (zone?.floors > 1) count += 1;
   if (planSignals?.stairEstimate > 2) count += 1;
@@ -280,19 +314,43 @@ function getSurfaceDerivedScale(relatedPhotoAnalyses, zoneId) {
   return { factor: 1.03, source: "surface-photo-balanced" };
 }
 
-function estimatePlanGeometry({ zone, objectData, layoutType, captureQuality, planSignals, floorIndex, expectedFloorCount, relatedPhotoAnalyses }) {
+function estimatePlanGeometry({
+  zone,
+  objectData,
+  layoutType,
+  captureQuality,
+  planSignals,
+  floorIndex,
+  expectedFloorCount,
+  relatedPhotoAnalyses,
+  deepVision,
+}) {
   const zoneArea = Math.max(num(zone?.area, num(objectData?.totalArea, 0)), 0);
   const floorCount = Math.max(expectedFloorCount || num(zone?.floors, objectData?.floors || 1), 1);
   const perFloorBaseArea = zoneArea > 0 ? zoneArea / floorCount : Math.max(num(objectData?.totalArea, 0) / floorCount, 0);
-  const layoutFactor = layoutType === "Коридорная" ? 1.04 : layoutType === "Ячеистая" ? 0.98 : 1;
-  const qualityFactor = captureQuality.score >= 0.84 ? 1.01 : captureQuality.score >= MIN_ACCEPTABLE_PLAN_QUALITY ? 0.97 : 0.92;
+  const segmentation = deepVision?.segmentation;
+  const layoutTypeCode =
+    null ||
+    (planSignals.corridorSegmentEstimate >= Math.max(planSignals.roomCellEstimate * 0.45, 2) ? "corridor" : planSignals.roomCellEstimate >= 5 ? "cell" : "mixed");
+  const layoutFactor = layoutTypeCode === "corridor" ? 1.04 : layoutTypeCode === "cell" ? 0.98 : 1;
+  const qualityFactor = captureQuality.score >= MIN_ACCEPTABLE_PLAN_QUALITY ? 0.97 : 0.92;
   const surfaceScale = getSurfaceDerivedScale(relatedPhotoAnalyses, zone?.id);
-  const estimatedFloorArea = Math.max(perFloorBaseArea * layoutFactor * qualityFactor * surfaceScale.factor, 0);
+  const deepVisionArea = num(deepVision?.scaleHint?.areaLabelM2, 0) || num(segmentation?.averageRoomAreaM2, 0) * Math.max(segmentation?.roomCount || 0, 0);
+  const estimatedFloorArea = Math.max((deepVisionArea > 0 ? deepVisionArea : perFloorBaseArea) * layoutFactor * qualityFactor * surfaceScale.factor, 0);
   const areaDeviationPercent = perFloorBaseArea > 0 ? ((estimatedFloorArea - perFloorBaseArea) / perFloorBaseArea) * 100 : 0;
-  const representativeLength = Math.sqrt(Math.max(estimatedFloorArea, 1)) * (layoutType === "Коридорная" ? 1.7 : 1.35);
-  const representativeWidth = Math.max(estimatedFloorArea / Math.max(representativeLength, 1), 1);
-  const averageRoomArea = estimatedFloorArea / Math.max(planSignals.roomCellEstimate, 1);
-  const corridorLength = representativeLength * (layoutType === "Коридорная" ? 0.72 : 0.42);
+  const representativeLength =
+    num(segmentation?.metersPerPixel, 0) > 0
+      ? (deepVision.width || 1) * segmentation.metersPerPixel
+      : Math.sqrt(Math.max(estimatedFloorArea, 1)) * (layoutTypeCode === "corridor" ? 1.7 : 1.35);
+  const representativeWidth =
+    num(segmentation?.metersPerPixel, 0) > 0
+      ? (deepVision.height || 1) * segmentation.metersPerPixel
+      : Math.max(estimatedFloorArea / Math.max(representativeLength, 1), 1);
+  const averageRoomArea = segmentation?.averageRoomAreaM2 || estimatedFloorArea / Math.max(planSignals.roomCellEstimate, 1);
+  const corridorLength =
+    segmentation?.corridorCount > 0
+      ? representativeLength * clamp(segmentation.corridorCount / Math.max(planSignals.roomCellEstimate, 1), 0.32, 0.82)
+      : representativeLength * (layoutTypeCode === "corridor" ? 0.72 : 0.42);
 
   return {
     floorIndex,
@@ -305,6 +363,8 @@ function estimatePlanGeometry({ zone, objectData, layoutType, captureQuality, pl
     averageRoomAreaM2: Number(averageRoomArea.toFixed(1)),
     corridorLengthM: Number(corridorLength.toFixed(1)),
     scaleSource: surfaceScale.source,
+    ocrScaleDetected: deepVision?.scaleHint?.drawingScale || null,
+    detectedLabels: (segmentation?.labeledRooms || []).slice(0, 8),
   };
 }
 
@@ -328,33 +388,43 @@ function buildZoneLabels(systemType, zoneName, count, layoutType, floorIndex = n
   }));
 }
 
-function buildMethodNotes(systemType, finalDecision, planSignals, fallbackCount, egressCount, geometry) {
+function buildMethodNotes(systemType, finalDecision, planSignals, fallbackCount, egressCount, geometry, deepVision = null) {
   const zoneWord = systemType === "aps" ? "ЗКСПС" : systemType === "soue" ? "зон оповещения" : "охранных зон";
-  return [
+  const notes = [
     `Расчет по планировке: помещения ${planSignals.roomCellEstimate}, коридоры ${planSignals.corridorSegmentEstimate}, лестничные клетки ${planSignals.stairEstimate}.`,
     `Перепроверка по объекту и fallback-алгоритму: ${fallbackCount} ${zoneWord}.`,
     `Эвакуационные маршруты/выходы: ~${egressCount}. Итоговый источник: ${finalDecision.source}.`,
-    `Оценка геометрии плана: длина около ${geometry.representativeLengthM} м, ширина около ${geometry.representativeWidthM} м, площадь этажа около ${geometry.floorAreaEstimated} м².`,
+    `Оценка геометрии плана: длина около ${geometry.representativeLengthM} м, ширина около ${geometry.representativeWidthM} м, площадь этажа около ${geometry.floorAreaEstimated} м?.`,
   ];
+
+  if (deepVision?.textBlocks?.length) {
+    notes.push(
+      `OCR/segmentation: текстовых блоков ${deepVision.textBlocks.length}, подписанных помещений ${deepVision.segmentation?.labeledRooms?.length || 0}, масштаб ${
+        deepVision.scaleHint?.drawingScale ? `1:${deepVision.scaleHint.drawingScale}` : "не найден"
+      }.`
+    );
+  }
+
+  return notes;
 }
 
 function createRecognitionWarning(message, severity = "warning") {
   return { message, severity };
 }
 
-export function recognizeEvacuationPlanLayout({ prompt, zones, systems, meta, objectData, floorIndex = 1, expectedFloorCount = null, relatedPhotoAnalyses = {} }) {
+export function recognizeEvacuationPlanLayout({ prompt, zones, systems, meta, objectData, floorIndex = 1, expectedFloorCount = null, relatedPhotoAnalyses = {}, deepVision = null }) {
   const zone = (zones || []).find((item) => String(item?.id) === String(prompt?.zoneId)) || null;
   const activeSystems = (systems || []).filter((system) => ["aps", "soue", "sots"].includes(system?.type));
-  const layout = classifyLayout(meta);
-  const capture = assessCaptureQuality(meta);
+  const layout = classifyLayout(meta, deepVision);
+  const capture = assessCaptureQuality(meta, deepVision);
   const normalizedExpectedFloorCount = Math.max(expectedFloorCount || num(zone?.floors, objectData?.floors || 1), 1);
   const zoneForFloor = {
     ...zone,
     area: Math.max(num(zone?.area, num(objectData?.totalArea, 0)) / normalizedExpectedFloorCount, 0),
     floors: 1,
   };
-  const planSignals = derivePlanSignals(meta, layout, zoneForFloor, objectData);
-  const egressCount = estimateEgressCount(zoneForFloor, layout.type, planSignals);
+  const planSignals = derivePlanSignals(meta, layout, zoneForFloor, objectData, deepVision);
+  const egressCount = estimateEgressCount(zoneForFloor, layout.type, planSignals, deepVision);
   const geometry = estimatePlanGeometry({
     zone,
     objectData,
@@ -364,6 +434,7 @@ export function recognizeEvacuationPlanLayout({ prompt, zones, systems, meta, ob
     floorIndex,
     expectedFloorCount: normalizedExpectedFloorCount,
     relatedPhotoAnalyses,
+    deepVision,
   });
 
   const warnings = [];
@@ -398,7 +469,7 @@ export function recognizeEvacuationPlanLayout({ prompt, zones, systems, meta, ob
       confidence: finalDecision.confidence,
       validationSource: finalDecision.source,
       crossCheckDeviation: finalDecision.deviation,
-      notes: buildMethodNotes(system.type, finalDecision, planSignals, fallbackCount, egressCount, geometry),
+      notes: buildMethodNotes(system.type, finalDecision, planSignals, fallbackCount, egressCount, geometry, deepVision),
       zones: buildZoneLabels(system.type, zone?.name || "Зона", finalDecision.finalCount, layout.type, floorIndex),
     };
   });
@@ -415,6 +486,14 @@ export function recognizeEvacuationPlanLayout({ prompt, zones, systems, meta, ob
     planSignals,
     geometry,
     egressCount,
+    deepVision: deepVision
+      ? {
+          textBlocks: deepVision.textBlocks || [],
+          segmentation: deepVision.segmentation || null,
+          quality: deepVision.quality || null,
+          scaleHint: deepVision.scaleHint || null,
+        }
+      : null,
     totalDerivedZones: recognizedSystems.reduce((sum, item) => sum + item.zoneCount, 0),
     warnings,
     systems: recognizedSystems,
@@ -607,7 +686,7 @@ export function calculateZoneModelWithoutPlans({ systemType, objectData, zones =
       stairEstimate: clamp(Math.round(Math.max(num(zone?.floors, objectData?.floors || 1), 1) / 2), 1, 3),
       isolatedBlockEstimate: clamp(Math.round(num(zone?.area, 0) / 1800), 1, 5),
     };
-    const egressCount = estimateEgressCount(zone, layoutType, planSignals);
+    const egressCount = estimateEgressCount(zone, layoutType, planSignals, null);
     const planBasedCount = calculatePlanBasedZoneCount(systemType, planSignals, egressCount, zone, objectData);
     const finalDecision = crossCheckCounts({
       primaryCount: planBasedCount,
