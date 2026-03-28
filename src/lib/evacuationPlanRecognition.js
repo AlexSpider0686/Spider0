@@ -3,7 +3,7 @@ function num(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-const MIN_ACCEPTABLE_PLAN_QUALITY = 0.7;
+const MIN_ACCEPTABLE_PLAN_QUALITY = 0.5;
 
 const SYSTEM_LABELS = {
   aps: "АПС",
@@ -129,7 +129,7 @@ function assessCaptureQuality(meta) {
 
   return {
     score: roundedScore,
-    label: roundedScore >= 0.84 ? "Высокое" : roundedScore >= MIN_ACCEPTABLE_PLAN_QUALITY ? "Достаточное" : roundedScore >= 0.56 ? "Пограничное" : "Низкое",
+    label: roundedScore >= 0.84 ? "Высокое" : roundedScore >= MIN_ACCEPTABLE_PLAN_QUALITY ? "Достаточное" : roundedScore >= 0.4 ? "Пограничное" : "Низкое",
     accepted: roundedScore >= MIN_ACCEPTABLE_PLAN_QUALITY,
     notes,
     improvements: buildQualityImprovements(meta),
@@ -370,7 +370,7 @@ export function recognizeEvacuationPlanLayout({ prompt, zones, systems, meta, ob
   if (!capture.accepted) {
     warnings.push(
       createRecognitionWarning(
-        `Снимок плана имеет пригодность ${Math.round(capture.score * 100)}%. Ниже порога 70%, поэтому он не должен участвовать в расчетах до пересъемки.`,
+        `Снимок плана имеет пригодность ${Math.round(capture.score * 100)}%. Ниже порога 50%, поэтому он не должен участвовать в расчетах до пересъемки.`,
         "error"
       )
     );

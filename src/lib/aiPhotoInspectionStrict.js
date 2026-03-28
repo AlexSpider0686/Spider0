@@ -593,7 +593,7 @@ async function executeAnalysis({ file, prompt, zones, systems, objectData, photo
       return {
         accepted: false,
         confidence: Math.min(0.69, planRecognition.captureQuality?.score || 0.4),
-        summary: `Фото плана отклонено: пригодность ${Math.round((planRecognition.captureQuality?.score || 0) * 100)}%, а требуется не ниже 70%.`,
+        summary: `Фото плана отклонено: пригодность ${Math.round((planRecognition.captureQuality?.score || 0) * 100)}%, а требуется не ниже 50%.`,
         detections: [
           `Пригодность снимка: ${Math.round((planRecognition.captureQuality?.score || 0) * 100)}%`,
           ...(planRecognition.captureQuality?.improvements || []).slice(0, 4),
