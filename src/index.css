@@ -419,19 +419,6 @@ select {
   color: #173a60;
 }
 
-body.ai-survey-open .bg-video-layer::before,
-body.ai-survey-open .bg-video-layer::after,
-body.ai-survey-open .bg-video-fallback,
-body.ai-survey-open .bg-video-layer video {
-  animation: none !important;
-  transform: none !important;
-  filter: none !important;
-}
-
-body.ai-survey-open .bg-video-layer video {
-  opacity: 0 !important;
-}
-
 body.ai-survey-open .primary-btn,
 body.ai-survey-open .ghost-btn,
 body.ai-survey-open .danger-btn,
