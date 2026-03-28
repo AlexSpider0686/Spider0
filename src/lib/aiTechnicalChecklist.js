@@ -294,7 +294,10 @@ export function buildAiSurveyPlan({ objectData, zones, systems, protectedArea })
           group: "system",
           systemType: system.type,
           type: "number",
-          label: `Сколько самостоятельных зон оповещения/контроля нужно по ${system.type.toUpperCase()}?`,
+          label:
+            system.type === "aps"
+              ? "Сколько самостоятельных ЗКСПС требуется по АПС?"
+              : `Сколько самостоятельных зон оповещения нужно по ${system.type.toUpperCase()}?`,
           placeholder: "1",
         })
       );

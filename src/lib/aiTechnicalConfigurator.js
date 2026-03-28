@@ -1,3 +1,5 @@
+import { calculateZoneModelWithoutPlans } from "./evacuationPlanRecognition";
+
 function num(value, fallback = 0) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -27,6 +29,8 @@ function collectRecognizedPlanData(photoAnalyses, systemType) {
       acc.totalZones += num(systemPlan.zoneCount, 0);
       acc.layoutTypes.add(planRecognition.layoutType || "Смешанная");
       acc.zoneNames.push(...(systemPlan.zones || []).map((zone) => zone.name));
+      acc.validationSources.add(systemPlan.validationSource || "unknown");
+      acc.notes.push(...(systemPlan.notes || []));
       return acc;
     },
     {
@@ -34,6 +38,8 @@ function collectRecognizedPlanData(photoAnalyses, systemType) {
       totalZones: 0,
       layoutTypes: new Set(),
       zoneNames: [],
+      validationSources: new Set(),
+      notes: [],
     }
   );
 }
@@ -48,7 +54,7 @@ function buildPlanSpecRows(systemType, recognizedPlanData) {
       ? "Зональное деление СОУЭ по планировкам"
       : systemType === "sots"
         ? "Охранные зоны СОТС по планировкам"
-        : "Зоны контроля АПС по планировкам";
+        : "ЗКСПС АПС по планировкам";
 
   return [
     {
@@ -56,7 +62,7 @@ function buildPlanSpecRows(systemType, recognizedPlanData) {
       name: rowName,
       qty: recognizedPlanData.totalZones,
       unit: "зон",
-      basis: `Определено по распознаванию планов эвакуации: ${recognizedPlanData.planCount} план(ов), типы планировки: ${Array.from(
+      basis: `Определено по распознаванию и перепроверке планов эвакуации: ${recognizedPlanData.planCount} план(ов), типы планировки: ${Array.from(
         recognizedPlanData.layoutTypes
       ).join(", ")}`,
     },
@@ -195,10 +201,29 @@ export function buildAiTechnicalRecommendations({
     const markerUnits = Math.max(num(result?.unitWorkMarker?.qty, result?.units), 1);
     const baseRows = buildBaseSpecRows(system.type, result, apsProjectSnapshots?.[system.id]);
     const recognizedPlanData = collectRecognizedPlanData(photoAnalyses, system.type);
+    const fallbackZoneModel =
+      recognizedPlanData.totalZones > 0 || !["aps", "soue", "sots"].includes(system.type)
+        ? null
+        : calculateZoneModelWithoutPlans({
+            systemType: system.type,
+            objectData,
+            zones,
+          });
+    const effectiveZoneData = fallbackZoneModel
+      ? {
+          ...recognizedPlanData,
+          totalZones: fallbackZoneModel.totalZones,
+          zoneNames: fallbackZoneModel.zoneNames,
+          validationSources: fallbackZoneModel.validationSources,
+          notes: fallbackZoneModel.notes,
+          layoutTypes: fallbackZoneModel.layoutTypes,
+          planCount: fallbackZoneModel.planCount,
+        }
+      : recognizedPlanData;
     const materialRows = [
       ...buildStatusMaterials(system.type, objectData, markerUnits, surveyAnswers, zones),
       ...buildZoneMaterials(system.type, zones, surveyAnswers),
-      ...buildPlanSpecRows(system.type, recognizedPlanData),
+      ...buildPlanSpecRows(system.type, effectiveZoneData),
     ];
     const combinedRows = [...baseRows, ...materialRows].map((row) => {
       const override = specOverrides?.[system.id]?.[row.key] || {};
@@ -228,22 +253,25 @@ export function buildAiTechnicalRecommendations({
         system.hasWorkingDocs
           ? "По системе отмечено наличие РД, поэтому AI-обследование используется как уточняющий, а не базовый контур."
           : "По системе нет РД, поэтому AI-обследование напрямую влияет на формирование техрешения.",
-        recognizedPlanData.totalZones > 0
-          ? `По планам эвакуации распознано ${recognizedPlanData.totalZones} зон для ${system.type.toUpperCase()} (${recognizedPlanData.planCount} план(ов), типы планировки: ${Array.from(
-              recognizedPlanData.layoutTypes
-            ).join(", ")}).`
-          : "Данные распознавания планировок по этой системе пока не загружены.",
+        effectiveZoneData.totalZones > 0
+          ? `По планам эвакуации и перепроверке распознано ${effectiveZoneData.totalZones} ${
+              system.type === "aps" ? "ЗКСПС" : system.type === "soue" ? "зон оповещения" : "охранных зон"
+            } для ${system.type.toUpperCase()} (${effectiveZoneData.planCount} план(ов), типы планировки: ${Array.from(
+              effectiveZoneData.layoutTypes
+            ).join(", ")}, источники: ${Array.from(effectiveZoneData.validationSources).join(", ")}).`
+          : `Планы по ${system.type.toUpperCase()} не загружены или недостаточно надежны, поэтому используется fallback-алгоритм с перепроверкой по данным объекта.`,
+        ...(effectiveZoneData.notes || []).slice(0, 2),
       ],
       influences: [
         { label: "Площадь и зоны", value: `${Math.round(num(objectData?.totalArea, 0))} м² / ${zones?.length || 0} зон` },
         { label: "Статус объекта", value: objectData?.buildingStatus === "construction" ? "Строящийся" : "Действующий" },
         { label: "Интеграция", value: `${integrationCount} точек` },
         { label: "Слаботочные узлы", value: `${lowCurrentRooms} помещений` },
-        ...(recognizedPlanData.totalZones > 0
-          ? [{ label: "Зоны по планам", value: `${recognizedPlanData.totalZones} зон` }]
+        ...(effectiveZoneData.totalZones > 0
+          ? [{ label: system.type === "aps" ? "ЗКСПС" : "Зоны по расчету", value: `${effectiveZoneData.totalZones} зон` }]
           : []),
       ],
-      recognizedPlanData,
+      recognizedPlanData: effectiveZoneData,
     };
   });
 }

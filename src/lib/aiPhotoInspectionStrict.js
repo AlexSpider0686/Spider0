@@ -552,10 +552,10 @@ function buildSurfaceSummary(wallMaterial, ceilingType, heightEstimate) {
 
 function buildPlanRecognitionSummary(planRecognition) {
   const zoneSummaries = (planRecognition?.systems || [])
-    .map((item) => `${item.systemLabel}: ${item.zoneCount} зон`)
+    .map((item) => `${item.systemLabel}: ${item.zoneCount} ${item.zoneTerm}`)
     .join(", ");
 
-  return `План эвакуации распознан. Планировка: ${planRecognition.layoutType.toLowerCase()}, оценка качества съемки: ${planRecognition.captureQuality.label.toLowerCase()}, выделены зоны для техрешения (${zoneSummaries}).`;
+  return `План эвакуации распознан. Планировка: ${planRecognition.layoutType.toLowerCase()}, оценка качества съемки: ${planRecognition.captureQuality.label.toLowerCase()}, зоны определены дифференцированно и перепроверены по данным объекта (${zoneSummaries}).`;
 }
 
 async function executeAnalysis({ file, prompt, zones, systems }) {
@@ -579,6 +579,7 @@ async function executeAnalysis({ file, prompt, zones, systems }) {
       zones,
       systems,
       meta,
+      objectData,
     });
 
     return {
@@ -590,7 +591,7 @@ async function executeAnalysis({ file, prompt, zones, systems }) {
         `Планировка: ${planRecognition.layoutType}`,
         `Качество съемки: ${planRecognition.captureQuality.label}`,
         `Эвакуационных выходов/маршрутов: ~${planRecognition.egressCount}`,
-        ...planRecognition.systems.map((item) => `${item.systemLabel}: выделено ${item.zoneCount} зон`),
+        ...planRecognition.systems.map((item) => `${item.systemLabel}: выделено ${item.zoneCount} ${item.zoneTerm}`),
       ],
       suggestedAnswers: prompt.targetQuestionIds.map((questionId) => ({ questionId, value: true })),
       planRecognition,
