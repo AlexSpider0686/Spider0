@@ -706,7 +706,9 @@ export default function ObjectStep({
                           </div>
 
                           {analysis?.state === "loading" ? (
-                            <div className="hint-inline ai-photo-card__loading">РРґРµС‚ AI-Р°РЅР°Р»РёР· С„РѕС‚Рѕ. РћРєРЅРѕ РѕР±СЃР»РµРґРѕРІР°РЅРёСЏ РѕСЃС‚Р°РµС‚СЃСЏ РѕС‚РєСЂС‹С‚С‹Рј, Р° РІРІРµРґРµРЅРЅС‹Рµ РѕС‚РІРµС‚С‹ РЅРµ С‚РµСЂСЏСЋС‚СЃСЏ.</div>
+                            <div className="hint-inline ai-photo-card__loading">
+                              Идет AI-анализ фото. Окно обследования остается открытым, а уже введенные ответы не теряются.
+                            </div>
                           ) : null}
 
                           {analysis?.detections?.length ? (
