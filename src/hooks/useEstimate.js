@@ -11,7 +11,7 @@ import { appendManualApsProjectItem, recalculateApsProjectSnapshot, removeApsPro
 import { calculateProtectedArea } from "../lib/protectedArea";
 import { verifyObjectAddress as verifyObjectAddressOnline } from "../lib/addressVerification";
 import { createProjectIdentity } from "../lib/projectIdentity";
-import { analyzeInspectionPhoto } from "../lib/aiPhotoInspection";
+import { analyzeInspectionPhoto } from "../lib/aiPhotoInspectionStrict";
 import { buildAiSurveyPlan, calculateAiSurveyCompletion } from "../lib/aiTechnicalChecklist";
 import { buildAiTechnicalRecommendations } from "../lib/aiTechnicalConfigurator";
 import { buildAiProjectRisks } from "../lib/aiProjectRiskEngine";
@@ -72,8 +72,8 @@ export default function useEstimate() {
   const protectedAreaMeta = useMemo(() => calculateProtectedArea(objectData), [objectData]);
   const recalculatedArea = protectedAreaMeta.protectedAreaM2;
   const { systemsDetailed: systemResults, totals } = useMemo(
-    () => calculateEstimateEngine(systems, zones, budget, objectData, vendorPriceSnapshots, apsProjectSnapshots),
-    [systems, zones, budget, objectData, vendorPriceSnapshots, apsProjectSnapshots]
+    () => calculateEstimateEngine(systems, zones, budget, objectData, vendorPriceSnapshots, apsProjectSnapshots, technicalSolution.appliedAnswers),
+    [systems, zones, budget, objectData, vendorPriceSnapshots, apsProjectSnapshots, technicalSolution.appliedAnswers]
   );
   const zoneDistribution = useMemo(() => validateZoneDistribution(zones, recalculatedArea), [zones, recalculatedArea]);
   const aiSurveyPlan = useMemo(
