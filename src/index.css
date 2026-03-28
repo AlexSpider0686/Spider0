@@ -210,6 +210,12 @@ select {
   margin-left: auto;
 }
 
+.ai-photo-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .ai-checklist-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -222,6 +228,14 @@ select {
   align-items: center;
   gap: 6px;
   margin-bottom: 8px;
+}
+
+.ai-checklist-question.disabled {
+  opacity: 0.62;
+}
+
+.ai-checklist-question.disabled input {
+  background: rgba(226, 232, 240, 0.55);
 }
 
 .ai-inline-mark {
@@ -699,7 +713,7 @@ body.ai-survey-open .object-photo-card {
   background: linear-gradient(180deg, #ffffff, #eef6ff);
   color: var(--text);
   border-radius: 10px;
-  padding: 6px 9px;
+  padding: 6px 8px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -747,7 +761,7 @@ body.ai-survey-open .object-photo-card {
   cursor: pointer;
   transition: 0.2s ease;
   box-shadow: var(--shadow-soft);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   line-height: 1.1;
 }

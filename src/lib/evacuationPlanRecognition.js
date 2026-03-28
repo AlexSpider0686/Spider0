@@ -412,6 +412,65 @@ function createRecognitionWarning(message, severity = "warning") {
   return { message, severity };
 }
 
+function normalizeFloorToken(value) {
+  if (!value && value !== 0) return null;
+  return String(value).trim().toLowerCase();
+}
+
+function detectFloorFromTextBlocks(textBlocks = []) {
+  const joined = textBlocks
+    .map((block) => String(block?.text || ""))
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+
+  if (!joined) return null;
+
+  if (/подвал|подзем/i.test(joined)) {
+    return { floorIndex: 0, floorLabel: "подземный / подвал" };
+  }
+
+  const patterns = [
+    /(\d+)\s*(?:-|‑)?\s*(?:й|ый|ой)?\s*этаж/u,
+    /этаж\s*№?\s*(\d+)/u,
+    /план\s*(\d+)\s*(?:-|‑)?\s*(?:го|й)?\s*этажа/u,
+    /план\s*этажа\s*№?\s*(\d+)/u,
+  ];
+
+  for (const pattern of patterns) {
+    const match = joined.match(pattern);
+    if (match) {
+      const floorIndex = num(match[1], null);
+      if (Number.isFinite(floorIndex)) {
+        return { floorIndex, floorLabel: `${floorIndex} этаж` };
+      }
+    }
+  }
+
+  return null;
+}
+
+function buildRecognitionFingerprint(recognition) {
+  const geometry = recognition?.geometry || {};
+  const signals = recognition?.planSignals || {};
+  const segmentation = recognition?.deepVision?.segmentation || {};
+  const labels = (recognition?.deepVision?.segmentation?.labeledRooms || [])
+    .slice(0, 5)
+    .map((item) => String(item?.label || "").toLowerCase())
+    .sort()
+    .join("|");
+
+  return [
+    Math.round(num(geometry.floorAreaEstimated, 0)),
+    num(signals.roomCellEstimate, 0),
+    num(signals.corridorSegmentEstimate, 0),
+    num(signals.stairEstimate, 0),
+    num(segmentation.roomCount, 0),
+    num(segmentation.corridorCount, 0),
+    labels,
+  ].join(":");
+}
+
 export function recognizeEvacuationPlanLayout({ prompt, zones, systems, meta, objectData, floorIndex = 1, expectedFloorCount = null, relatedPhotoAnalyses = {}, deepVision = null }) {
   const zone = (zones || []).find((item) => String(item?.id) === String(prompt?.zoneId)) || null;
   const activeSystems = (systems || []).filter((system) => ["aps", "soue", "sots"].includes(system?.type));
@@ -479,6 +538,7 @@ export function recognizeEvacuationPlanLayout({ prompt, zones, systems, meta, ob
     zoneId: zone?.id ?? prompt?.zoneId ?? null,
     zoneName: zone?.name || prompt?.zoneName || "Зона",
     floorIndex,
+    floorLabel: detectFloorFromTextBlocks(deepVision?.textBlocks || [])?.floorLabel || `${floorIndex} этаж`,
     expectedFloorCount: normalizedExpectedFloorCount,
     layoutType: layout.type,
     layoutConfidence: layout.confidence,
@@ -513,6 +573,7 @@ function mergeSystemRecognitions(systemType, systemPlans, floorSummaries, expect
     systemLabel: SYSTEM_LABELS[systemType] || String(systemType || "").toUpperCase(),
     zoneTerm,
     zoneCount,
+    averageZonesPerFloor: Number((averageDetectedZones || fallbackAverage || zoneCount || 0).toFixed(1)),
     detectedZoneCount: totalDetectedZones,
     forecastZoneCount: forecastZones,
     planBasedCount: systemPlans.reduce((sum, item) => sum + num(item.planBasedCount, 0), 0),
@@ -572,12 +633,40 @@ function buildAreaComparison(floorRecognitions, zone, objectData, expectedFloorC
 }
 
 export function aggregatePlanRecognitions({ recognitions = [], prompt, zones, systems, objectData }) {
-  const acceptedRecognitions = (recognitions || []).filter((item) => item?.accepted !== false);
+  const rawAcceptedRecognitions = (recognitions || []).filter((item) => item?.accepted !== false);
   const zone = (zones || []).find((item) => String(item?.id) === String(prompt?.zoneId)) || null;
   const expectedFloorCount = Math.max(num(zone?.floors, objectData?.floors || 1), 1);
+  const warnings = [];
+  const seenFloorKeys = new Set();
+  const seenFingerprints = new Set();
+  const acceptedRecognitions = [];
+
+  rawAcceptedRecognitions.forEach((recognition, index) => {
+    const floorHint = detectFloorFromTextBlocks(recognition?.deepVision?.textBlocks || []);
+    const floorKey = normalizeFloorToken(floorHint?.floorLabel || floorHint?.floorIndex);
+    const fingerprint = buildRecognitionFingerprint(recognition);
+
+    if (floorKey && seenFloorKeys.has(floorKey)) {
+      warnings.push(createRecognitionWarning(`Обнаружен дубликат плана для "${floorHint.floorLabel}". В расчет он не принят.`, "warning"));
+      return;
+    }
+
+    if (!floorKey && seenFingerprints.has(fingerprint)) {
+      warnings.push(createRecognitionWarning(`Обнаружен повторный снимок одного и того же плана. Дубликат исключен из расчета.`, "warning"));
+      return;
+    }
+
+    if (floorKey) seenFloorKeys.add(floorKey);
+    seenFingerprints.add(fingerprint);
+    acceptedRecognitions.push({
+      ...recognition,
+      floorIndex: floorHint?.floorIndex ?? recognition?.floorIndex ?? index + 1,
+      floorLabel: floorHint?.floorLabel || recognition?.floorLabel || `${index + 1} этаж`,
+    });
+  });
+
   const uploadedPlans = acceptedRecognitions.length;
   const forecastedFloors = Math.max(expectedFloorCount - uploadedPlans, 0);
-  const warnings = [];
 
   if (uploadedPlans !== expectedFloorCount) {
     warnings.push(
@@ -591,6 +680,7 @@ export function aggregatePlanRecognitions({ recognitions = [], prompt, zones, sy
   const floorSummaries = acceptedRecognitions.map((recognition, index) => ({
     ...recognition,
     floorIndex: recognition.floorIndex || index + 1,
+    floorLabel: recognition.floorLabel || `${recognition.floorIndex || index + 1} этаж`,
   }));
 
   const activeSystems = (systems || []).filter((system) => ["aps", "soue", "sots"].includes(system?.type));

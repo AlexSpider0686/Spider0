@@ -536,10 +536,10 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
 
   const pptx = new PptxGenJS();
   pptx.layout = "LAYOUT_WIDE";
-  pptx.author = "Smeta.Core™";
-  pptx.company = "Smeta.Core™";
+  pptx.author = "Project.Core™";
+  pptx.company = "Project.Core™";
   pptx.subject = "Предварительный расчет бюджета систем безопасности";
-  pptx.title = "Smeta.Core™ — Экспорт ТКП";
+  pptx.title = "Project.Core™ — Экспорт ТКП";
   pptx.lang = "ru-RU";
 
   const slide1 = pptx.addSlide();

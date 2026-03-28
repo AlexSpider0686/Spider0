@@ -27,9 +27,9 @@ const PLAYER_MAX_WIDTH_RATIO = 0.88;
 const PROMO_SCENES: PromoScene[] = [
   {
     id: "intro",
-    title: "Smeta.Core",
+    title: "Project.Core",
     subtitle: "Предварительный бюджет по системам безопасности за 5-10 минут",
-    voice: "Smeta.Core собирает предварительный бюджет по системам безопасности за 5-10 минут.",
+    voice: "Project.Core собирает предварительный бюджет по системам безопасности за 5-10 минут.",
     duration: 4.6,
     accent: ["#6de2ff", "#0e79b2"],
   },
@@ -224,7 +224,7 @@ function renderScene(ctx: CanvasRenderingContext2D, width: number, height: numbe
 
   ctx.fillStyle = "#9fdfff";
   ctx.font = "700 16px Manrope, sans-serif";
-  ctx.fillText("Smeta.Core Promo Reel", width * 0.1, height * 0.16);
+  ctx.fillText("Project.Core Promo Reel", width * 0.1, height * 0.16);
 
   ctx.fillStyle = "#ffffff";
   ctx.font = "800 44px Manrope, sans-serif";

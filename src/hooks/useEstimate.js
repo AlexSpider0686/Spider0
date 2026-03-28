@@ -644,13 +644,21 @@ export default function useEstimate() {
   };
 
   const updateAiSurveyAnswer = (questionId, value) => {
-    setTechnicalSolution((prev) => ({
-      ...prev,
-      answers: {
+    setTechnicalSolution((prev) => {
+      const nextAnswers = {
         ...prev.answers,
         [questionId]: value,
-      },
-    }));
+      };
+
+      if (questionId.endsWith("-mount-height-limit-enabled") && value !== true) {
+        delete nextAnswers[questionId.replace("-mount-height-limit-enabled", "-mount-height-limit")];
+      }
+
+      return {
+        ...prev,
+        answers: nextAnswers,
+      };
+    });
   };
 
   const analyzeAiSurveyPhoto = async (prompt, fileInput) => {
@@ -743,7 +751,8 @@ export default function useEstimate() {
             acceptedFiles.length > 0 ? prompt.targetQuestionIds.map((questionId) => ({ questionId, value: true })) : [],
           planRecognition: aggregatedPlanRecognition,
           fileResults: perFileResults.map((item, index) => ({
-            floorIndex: index + 1,
+            floorIndex: item?.planRecognition?.floorIndex || index + 1,
+            floorLabel: item?.planRecognition?.floorLabel || null,
             fileName: files[index]?.name,
             accepted: item?.accepted !== false,
             summary: item?.summary,
@@ -778,6 +787,7 @@ export default function useEstimate() {
               fileResults: result?.fileResults || [],
               promptType: prompt.type,
               zoneId: prompt.zoneId,
+              sourceFiles: files,
               estimatedCeilingHeight: result?.estimatedCeilingHeight ?? null,
               estimatedCeilingHeightConfidence: result?.estimatedCeilingHeightConfidence ?? null,
             },
@@ -798,11 +808,18 @@ export default function useEstimate() {
             detections: [],
             promptType: prompt?.type,
             zoneId: prompt?.zoneId,
+            sourceFiles: files,
           },
         },
       }));
       throw error;
     }
+  };
+
+  const refreshAiSurveyPhoto = async (prompt) => {
+    const cachedFiles = technicalSolution?.photoAnalyses?.[prompt?.id]?.sourceFiles || [];
+    if (!prompt || !cachedFiles.length) return null;
+    return analyzeAiSurveyPhoto(prompt, cachedFiles);
   };
 
   const updateTechnicalSpecOverride = (systemId, rowKey, patch = {}) => {
@@ -908,6 +925,7 @@ export default function useEstimate() {
     startAiSurvey,
     updateAiSurveyAnswer,
     analyzeAiSurveyPhoto,
+    refreshAiSurveyPhoto,
     applyAiSurveyData,
     resetAiSurveySection,
     updateTechnicalSpecOverride,

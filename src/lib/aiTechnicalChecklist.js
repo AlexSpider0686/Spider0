@@ -8,12 +8,12 @@ function hasSystem(systems, type) {
 }
 
 function getAreaTimeFactor(area) {
-  if (area >= 100000) return 2.8;
-  if (area >= 50000) return 2.2;
-  if (area >= 20000) return 1.5;
-  if (area >= 10000) return 1.15;
-  if (area >= 5000) return 0.95;
-  return 0.7;
+  if (area >= 100000) return 72;
+  if (area >= 50000) return 54;
+  if (area >= 20000) return 38;
+  if (area >= 10000) return 27;
+  if (area >= 5000) return 18;
+  return 10;
 }
 
 function estimateSurveyHours({ objectData, zones, surveySystems, sections, photoPrompts, objectArea }) {
@@ -21,43 +21,41 @@ function estimateSurveyHours({ objectData, zones, surveySystems, sections, photo
   const floors = Math.max(num(objectData?.floors, 1), 1);
   const operational = objectData?.buildingStatus === "operational";
   const systemsWithPlans = surveySystems.filter((system) => ["aps", "soue", "sots"].includes(system.type)).length;
-  const totalQuestions = sections.reduce((sum, section) => sum + (section.questions?.length || 0), 0);
-  const totalZoneArea = Math.max((zones || []).reduce((sum, zone) => sum + num(zone?.area, 0), 0), objectArea);
-  const avgZoneArea = zoneCount ? totalZoneArea / zoneCount : objectArea;
-  const uniqueFloorLevels = new Set((zones || []).map((zone) => `${num(zone?.floors, 1)}`)).size;
-
-  const baseline = operational ? 1.3 : 1.0;
-  const areaFactor = getAreaTimeFactor(objectArea);
-  const zoneFactor = zoneCount * 0.32;
-  const floorFactor = Math.max(0, floors - 1) * 0.18 + Math.max(0, uniqueFloorLevels - 1) * 0.08;
-  const systemsFactor = surveySystems.reduce((sum, system) => {
-    if (system.type === "aps") return sum + 0.65;
-    if (system.type === "soue") return sum + 0.55;
-    if (system.type === "sots") return sum + 0.5;
-    return sum + 0.35;
-  }, 0);
-  const questionFactor = totalQuestions * 0.045;
-  const photoFactor =
-    photoPrompts.filter((prompt) => prompt.type === "surface_scan").length * 0.12 +
-    photoPrompts.filter((prompt) => prompt.type === "evacuation_plan").length * 0.22;
-  const planRecognitionFactor = systemsWithPlans * 0.3 + photoPrompts.filter((prompt) => prompt.type === "evacuation_plan").length * 0.1;
-  const accessFactor = operational ? 0.45 : 0.18;
-  const sizeDispersionFactor = avgZoneArea >= 2500 ? 0.2 : avgZoneArea <= 600 ? 0.08 : 0.14;
-
-  return Number(
-    (
-      baseline +
-      areaFactor +
-      zoneFactor +
-      floorFactor +
-      systemsFactor +
-      questionFactor +
-      photoFactor +
-      planRecognitionFactor +
-      accessFactor +
-      sizeDispersionFactor
-    ).toFixed(1)
+  const totalQuestions = sections.reduce(
+    (sum, section) =>
+      sum +
+      (section.questions || []).reduce((sectionSum, question) => {
+        if (question.required === false) return sectionSum;
+        if (question.type === "multiselect") return sectionSum + 2.4;
+        if (question.type === "number") return sectionSum + 1.7;
+        if (question.type === "boolean") return sectionSum + 1.1;
+        return sectionSum + 1.4;
+      }, 0),
+    0
   );
+  const averageZoneArea = zoneCount ? objectArea / Math.max(zoneCount, 1) : objectArea;
+  const zoneComplexityFactor = averageZoneArea > 3500 ? 0.92 : averageZoneArea < 700 ? 1.12 : 1;
+  const uniqueFloorLevels = new Set((zones || []).map((zone) => `${num(zone?.floors, 1)}`)).size;
+  const systemMinutes = surveySystems.reduce((sum, system) => {
+    if (system.type === "aps") return sum + 26;
+    if (system.type === "soue") return sum + 22;
+    if (system.type === "sots") return sum + 20;
+    if (system.type === "sot") return sum + 18;
+    if (system.type === "skud") return sum + 18;
+    return sum + 16;
+  }, 0);
+  const photoMinutes =
+    photoPrompts.filter((prompt) => prompt.type === "surface_scan").length * 6 +
+    photoPrompts.filter((prompt) => prompt.type === "evacuation_plan").length * 8;
+  const floorMinutes = Math.max(0, floors - 1) * 5 + Math.max(0, uniqueFloorLevels - 1) * 2;
+  const planMinutes = systemsWithPlans * 9;
+  const accessMinutes = operational ? 14 : 8;
+  const baselineMinutes = 22;
+  const totalMinutes =
+    (baselineMinutes + getAreaTimeFactor(objectArea) + zoneCount * 5 + floorMinutes + systemMinutes + totalQuestions + photoMinutes + planMinutes + accessMinutes) *
+    zoneComplexityFactor;
+
+  return Number((Math.max(totalMinutes, 35) / 60).toFixed(1));
 }
 
 function createQuestion({
@@ -74,6 +72,7 @@ function createQuestion({
   aiAutofill = false,
   min = 0,
   max = null,
+  enabledByQuestionId = null,
 }) {
   return {
     id,
@@ -89,6 +88,7 @@ function createQuestion({
     aiAutofill,
     min,
     max,
+    enabledByQuestionId,
   };
 }
 
@@ -228,6 +228,15 @@ export function buildAiSurveyPlan({ objectData, zones, systems, protectedArea })
         max: 18,
       }),
       createQuestion({
+        id: `zone-${zone.id}-mount-height-limit-enabled`,
+        sectionId: zoneSectionId,
+        group: "zone",
+        zoneId: zone.id,
+        type: "boolean",
+        label: `Есть ли в зоне "${zoneTitle}" ограничение по высоте сложного монтажа?`,
+        required: false,
+      }),
+      createQuestion({
         id: `zone-${zone.id}-mount-height-limit`,
         sectionId: zoneSectionId,
         group: "zone",
@@ -235,6 +244,8 @@ export function buildAiSurveyPlan({ objectData, zones, systems, protectedArea })
         type: "number",
         label: `Максимальная высота сложного монтажа в зоне "${zoneTitle}", м`,
         placeholder: "0",
+        required: false,
+        enabledByQuestionId: `zone-${zone.id}-mount-height-limit-enabled`,
       }),
       createQuestion({
         id: `zone-${zone.id}-finish-limitations`,
@@ -409,7 +420,13 @@ export function calculateAiSurveyCompletion(plan, answers = {}) {
     return { total: 0, completed: 0, percent: 100 };
   }
 
-  const completed = questions.filter((question) => {
+  const requiredQuestions = questions.filter((question) => {
+    if (question.required === false) return false;
+    if (question.enabledByQuestionId) return answers?.[question.enabledByQuestionId] === true;
+    return true;
+  });
+
+  const completed = requiredQuestions.filter((question) => {
     const value = answers?.[question.id];
     if (question.type === "number") return value !== "" && value !== null && value !== undefined;
     if (question.type === "boolean") return typeof value === "boolean";
@@ -418,8 +435,8 @@ export function calculateAiSurveyCompletion(plan, answers = {}) {
   }).length;
 
   return {
-    total: questions.length,
+    total: requiredQuestions.length,
     completed,
-    percent: Math.round((completed / questions.length) * 100),
+    percent: requiredQuestions.length ? Math.round((completed / requiredQuestions.length) * 100) : 100,
   };
 }

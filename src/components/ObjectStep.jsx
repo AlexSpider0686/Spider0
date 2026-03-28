@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, Lock, Unlock, Search, ClipboardList, Camera, CheckCircle2, X } from "lucide-react";
+import { Plus, Trash2, Lock, Unlock, Search, ClipboardList, Camera, CheckCircle2, RefreshCcw, X } from "lucide-react";
 import { OBJECT_TYPES, SYSTEM_TYPES } from "../config/estimateConfig";
 import { BUILDING_STATUS_OPTIONS } from "../config/costModelConfig";
 import { searchRegions } from "../config/regionsConfig";
@@ -48,14 +48,15 @@ const OBJECT_TYPE_IMAGE_FALLBACKS = {
   energy: makeFallbackImage("#5d7b8a", "#24445e", "#7adf72"),
 };
 
-function renderChecklistInput(question, value, onChange) {
+function renderChecklistInput(question, value, onChange, options = {}) {
+  const disabled = options.disabled === true;
   if (question.type === "boolean") {
     return (
       <div className="ai-checklist-bool">
-        <button type="button" className={`chip-btn ${value === true ? "active" : ""}`} onClick={() => onChange(true)}>
+        <button type="button" className={`chip-btn ${value === true ? "active" : ""}`} onClick={() => onChange(true)} disabled={disabled}>
           Да
         </button>
-        <button type="button" className={`chip-btn ${value === false ? "active" : ""}`} onClick={() => onChange(false)}>
+        <button type="button" className={`chip-btn ${value === false ? "active" : ""}`} onClick={() => onChange(false)} disabled={disabled}>
           Нет
         </button>
       </div>
@@ -70,6 +71,7 @@ function renderChecklistInput(question, value, onChange) {
         max={question.max ?? undefined}
         value={value ?? ""}
         placeholder={question.placeholder || "Введите значение"}
+        disabled={disabled}
         onChange={(event) => onChange(toNumber(event.target.value))}
       />
     );
@@ -86,6 +88,7 @@ function renderChecklistInput(question, value, onChange) {
               key={option}
               type="button"
               className={`chip-btn ${active ? "active" : ""}`}
+              disabled={disabled}
               onClick={() => onChange(active ? selected.filter((item) => item !== option) : [...selected, option])}
             >
               {option}
@@ -96,7 +99,7 @@ function renderChecklistInput(question, value, onChange) {
     );
   }
 
-  return <input value={value ?? ""} onChange={(event) => onChange(event.target.value)} />;
+  return <input value={value ?? ""} disabled={disabled} onChange={(event) => onChange(event.target.value)} />;
 }
 
 export default function ObjectStep({
@@ -129,6 +132,7 @@ export default function ObjectStep({
   startAiSurvey,
   updateAiSurveyAnswer,
   analyzeAiSurveyPhoto,
+  refreshAiSurveyPhoto,
   applyAiSurveyData,
   resetAiSurveySection,
 }) {
@@ -200,6 +204,11 @@ export default function ObjectStep({
         setSurveyRefreshTick((prev) => prev + 1);
       });
     }
+  };
+
+  const isQuestionEnabled = (question) => {
+    if (!question?.enabledByQuestionId) return true;
+    return technicalSolution?.answers?.[question.enabledByQuestionId] === true;
   };
 
   return (
@@ -694,22 +703,28 @@ export default function ObjectStep({
                       <span className="pricing-source-chip muted">{section.questions.length} вопросов</span>
                       <button className="ghost-btn ai-checklist-reset-btn" type="button" onClick={() => handleResetSurveySection(section)}>
                         <Trash2 size={14} />
-                        РЎР±СЂРѕСЃ
+                        Сброс
                       </button>
                     </div>
 
                     <div className="ai-checklist-grid">
-                      {section.questions.map((question) => (
-                        <div className="input-card ai-checklist-question" key={question.id}>
-                          <label>
-                            {question.label}
-                            {question.aiAutofill ? <span className="ai-inline-mark">AI</span> : null}
-                          </label>
-                          {renderChecklistInput(question, technicalSolution?.answers?.[question.id], (value) =>
-                            updateAiSurveyAnswer(question.id, value)
-                          )}
-                        </div>
-                      ))}
+                      {section.questions.map((question) => {
+                        const enabled = isQuestionEnabled(question);
+                        return (
+                          <div className={`input-card ai-checklist-question ${enabled ? "" : "disabled"}`} key={question.id}>
+                            <label>
+                              {question.label}
+                              {question.aiAutofill ? <span className="ai-inline-mark">AI</span> : null}
+                            </label>
+                            {renderChecklistInput(
+                              question,
+                              technicalSolution?.answers?.[question.id],
+                              (value) => updateAiSurveyAnswer(question.id, value),
+                              { disabled: !enabled }
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 ))}
@@ -734,6 +749,23 @@ export default function ObjectStep({
                             <label className="ghost-btn file-upload-btn" htmlFor={`ai-photo-${prompt.id}`}>
                               <Camera size={14} /> Загрузить фото
                             </label>
+                            <button
+                              className="ghost-btn ai-photo-refresh-btn"
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  await refreshAiSurveyPhoto(prompt);
+                                } catch {
+                                } finally {
+                                  window.requestAnimationFrame(() => {
+                                    setSurveyRefreshTick((prev) => prev + 1);
+                                  });
+                                }
+                              }}
+                              disabled={!analysis?.sourceFiles?.length}
+                            >
+                              <RefreshCcw size={14} /> Обновить
+                            </button>
                             <input
                               id={`ai-photo-${prompt.id}`}
                               className="file-upload-input"
@@ -845,8 +877,8 @@ export default function ObjectStep({
                                   <div key={`${prompt.id}-${systemPlan.systemType}-headline`}>
                                     <CheckCircle2 size={16} />
                                     <span>
-                                      {systemPlan.systemLabel}: определено {systemPlan.zoneCount} {systemPlan.zoneTerm}
-                                      {systemPlan.forecastZoneCount ? `, из них прогноз ${systemPlan.forecastZoneCount}` : ""}.
+                                      {systemPlan.systemLabel}: в среднем {systemPlan.averageZonesPerFloor || systemPlan.zoneCount} {systemPlan.zoneTerm} на этаж
+                                      {systemPlan.forecastZoneCount ? `, прогноз по недостающим этажам ${systemPlan.forecastZoneCount}` : ""}.
                                     </span>
                                   </div>
                                 );
@@ -869,7 +901,7 @@ export default function ObjectStep({
                                 <div key={`${prompt.id}-${fileResult.floorIndex}-${fileResult.fileName}`}>
                                   <CheckCircle2 size={16} />
                                   <span>
-                                    Этаж/план {fileResult.floorIndex}: {fileResult.fileName} -{" "}
+                                    {fileResult.floorLabel || `Этаж/план ${fileResult.floorIndex}`}: {fileResult.fileName} -{" "}
                                     {fileResult.accepted ? "принят" : "отклонен"}.
                                   </span>
                                 </div>

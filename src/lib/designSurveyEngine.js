@@ -118,6 +118,20 @@ export function calculateDesignSurveyAdjustment({
     drivers.push("Ограничения по зонам обследования учтены в проектной трудоемкости.");
   }
 
+  const mountHeightLimits = sumZoneMetric(zones, (zone) => {
+    if (!answerBool(answers, `zone-${zone.id}-mount-height-limit-enabled`)) return 0;
+    return answerNumber(answers, `zone-${zone.id}-mount-height-limit`, 0);
+  });
+  if (mountHeightLimits > 0) {
+    const avgEnabledLimit = mountHeightLimits / Math.max(sumZoneMetric(zones, (zone) => (answerBool(answers, `zone-${zone.id}-mount-height-limit-enabled`) ? 1 : 0)), 1);
+    const delta = clamp(Math.max(avgEnabledLimit - 3.5, 0) * 0.025, 0, 0.18);
+    if (delta > 0) {
+      designHoursMultiplier += delta;
+      complexityMultiplier += delta * 0.7;
+      drivers.push(`Указана зона со сложным монтажом по высоте до ${avgEnabledLimit.toFixed(1)} м.`);
+    }
+  }
+
   const routeComplexity = answerList(answers, `system-${system.id}-route-complexity`).filter((item) => item !== "Типовые условия").length;
   if (routeComplexity > 0) {
     const delta = clamp(routeComplexity * 0.04, 0, 0.16);

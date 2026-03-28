@@ -30,11 +30,11 @@ export default function EstimatorApp() {
   const steps = [
     { key: "object", label: "Объект", icon: Building2 },
     { key: "systems", label: "Системы", icon: Layers },
+    { key: "logic", label: "Логика расчета", icon: FileText },
     { key: "design", label: "Проектирование", icon: Ruler },
     { key: "budget", label: "Бюджет", icon: Wallet },
     { key: "breakdown", label: "Стоимость проекта", icon: PieChart },
     { key: "risks", label: "AI-риски проекта", icon: ShieldAlert },
-    { key: "logic", label: "Логика расчета", icon: FileText },
   ];
 
   const currentVideoUrl = useMemo(() => BACKGROUND_VIDEO_URLS[Math.min(videoIndex, BACKGROUND_VIDEO_URLS.length - 1)], [videoIndex]);
@@ -86,8 +86,8 @@ export default function EstimatorApp() {
       <div className={`app-wrap ${authorized ? "" : "locked"}`} aria-hidden={!authorized}>
         <header className="hero-card">
           <div>
-            <div className="hero-kicker">Smeta.Core™</div>
-            <h1>Smeta.Core™ — предварительный расчет бюджета систем безопасности</h1>
+            <div className="hero-kicker">Project.Core™</div>
+            <h1>Project.Core™ — предварительный расчет бюджета систем безопасности</h1>
             <p>С AI-аудитом цен и трудозатрат, рыночной верификацией и защитой от недооценки бюджета.</p>
           </div>
           <button className="primary-btn" onClick={vm.exportEstimate} type="button">

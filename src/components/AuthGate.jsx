@@ -159,7 +159,7 @@ export default function AuthGate({ onAuthorized }) {
   return (
     <div className="auth-overlay">
       <section className="auth-card">
-        <div className="auth-kicker">Smeta.Core™</div>
+        <div className="auth-kicker">Project.Core™</div>
         <h2>Вход по почте</h2>
         <p>Для запуска системы введите email и подтвердите шестизначный код.</p>
 
