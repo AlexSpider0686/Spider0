@@ -133,6 +133,7 @@ export default function ObjectStep({
 }) {
   const [regionQuery, setRegionQuery] = useState(objectData.regionName || "");
   const [surveyModalOpen, setSurveyModalOpen] = useState(false);
+  const [surveyRefreshTick, setSurveyRefreshTick] = useState(0);
   const regionItems = useMemo(() => searchRegions(regionQuery).slice(0, 20), [regionQuery]);
   const selectedObjectType = OBJECT_TYPES.find((item) => item.value === objectData.objectType);
   const activeSystemTypes = new Set((systems || []).map((item) => item.type));
@@ -642,6 +643,7 @@ export default function ObjectStep({
           <div className="ai-survey-modal__backdrop" />
           <div
             className="ai-survey-modal__card"
+            data-refresh-tick={surveyRefreshTick % 2}
             onClick={(event) => event.stopPropagation()}
             onMouseDown={(event) => event.stopPropagation()}
           >
@@ -657,7 +659,7 @@ export default function ObjectStep({
               </button>
             </div>
 
-            <div className="ai-survey-modal__body">
+            <div className="ai-survey-modal__body" data-refresh-tick={surveyRefreshTick % 2}>
               <div className="ai-checklist-sections">
                 {(aiSurveyPlan?.sections || []).map((section) => (
                   <div className="calc-explain ai-checklist-section" key={section.id}>
@@ -718,6 +720,9 @@ export default function ObjectStep({
                                 } catch {
                                 } finally {
                                   event.target.value = "";
+                                  window.requestAnimationFrame(() => {
+                                    setSurveyRefreshTick((prev) => prev + 1);
+                                  });
                                 }
                               }}
                             />
