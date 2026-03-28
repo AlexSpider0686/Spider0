@@ -148,6 +148,14 @@ export default function ObjectStep({
     setRegionQuery(objectData.regionName || "");
   }, [objectData.regionName]);
 
+  useEffect(() => {
+    if (typeof document === "undefined") return undefined;
+    document.body.classList.toggle("ai-survey-open", surveyModalOpen);
+    return () => {
+      document.body.classList.remove("ai-survey-open");
+    };
+  }, [surveyModalOpen]);
+
   const handleOpenSurvey = () => {
     const started = technicalSolution?.surveyStartedAt ? true : startAiSurvey();
     if (started) setSurveyModalOpen(true);

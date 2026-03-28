@@ -292,8 +292,8 @@ select {
 .ai-survey-modal__backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(217, 229, 246, 0.72);
-  pointer-events: none;
+  background: rgba(226, 236, 248, 0.9);
+  pointer-events: auto;
 }
 
 .ai-survey-modal__card {
@@ -310,6 +310,10 @@ select {
   box-shadow: 0 22px 56px rgba(37, 73, 121, 0.22);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(245, 250, 255, 0.98));
   color: #173a60;
+  isolation: isolate;
+  contain: layout paint;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .ai-survey-modal__header {
@@ -385,6 +389,30 @@ select {
 .ai-survey-modal .input-card strong,
 .ai-survey-modal .ai-photo-card__head strong {
   color: #173a60;
+}
+
+body.ai-survey-open .bg-video-layer::before,
+body.ai-survey-open .bg-video-layer::after,
+body.ai-survey-open .bg-video-fallback,
+body.ai-survey-open .bg-video-layer video {
+  animation: none !important;
+  transform: none !important;
+  filter: none !important;
+}
+
+body.ai-survey-open .bg-video-layer video {
+  opacity: 0.2 !important;
+}
+
+body.ai-survey-open .primary-btn,
+body.ai-survey-open .ghost-btn,
+body.ai-survey-open .danger-btn,
+body.ai-survey-open .step-chip,
+body.ai-survey-open .lock-btn,
+body.ai-survey-open .region-option,
+body.ai-survey-open .file-upload-btn,
+body.ai-survey-open .object-photo-card {
+  animation: none !important;
 }
 
 @keyframes sky-pan {
