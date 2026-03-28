@@ -24,6 +24,23 @@ function removeById(mapObject, id) {
   return next;
 }
 
+function removeManyByIds(mapObject, ids = []) {
+  if (!mapObject || !ids.length) return mapObject || {};
+  const next = { ...mapObject };
+  let changed = false;
+  ids.forEach((id) => {
+    if (id in next) {
+      delete next[id];
+      changed = true;
+    }
+  });
+  return changed ? next : mapObject;
+}
+
+function hasKeys(value) {
+  return Boolean(value && Object.keys(value).length);
+}
+
 export default function useEstimate() {
   const initialIdentityRef = useRef(createProjectIdentity());
   const [step, setStep] = useState(0);
@@ -817,6 +834,29 @@ export default function useEstimate() {
     return true;
   };
 
+  const resetAiSurveySection = (sectionId, questionIds = [], photoPromptIds = []) => {
+    if (!sectionId) return false;
+
+    setTechnicalSolution((prev) => {
+      const nextAnswers = removeManyByIds(prev.answers, questionIds);
+      const nextPhotoAnalyses = removeManyByIds(prev.photoAnalyses, photoPromptIds);
+      const nextAppliedAnswers = removeManyByIds(prev.appliedAnswers, questionIds);
+      const nextAppliedPhotoAnalyses = removeManyByIds(prev.appliedPhotoAnalyses, photoPromptIds);
+      const hasAppliedData = hasKeys(nextAppliedAnswers) || hasKeys(nextAppliedPhotoAnalyses);
+
+      return {
+        ...prev,
+        answers: nextAnswers,
+        photoAnalyses: nextPhotoAnalyses,
+        appliedAnswers: nextAppliedAnswers,
+        appliedPhotoAnalyses: nextAppliedPhotoAnalyses,
+        appliedAt: hasAppliedData ? new Date().toISOString() : null,
+      };
+    });
+
+    return true;
+  };
+
   return {
     step,
     setStep,
@@ -869,6 +909,7 @@ export default function useEstimate() {
     updateAiSurveyAnswer,
     analyzeAiSurveyPhoto,
     applyAiSurveyData,
+    resetAiSurveySection,
     updateTechnicalSpecOverride,
     exportEstimate,
     exportEstimateCsv,

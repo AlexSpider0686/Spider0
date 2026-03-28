@@ -130,6 +130,7 @@ export default function ObjectStep({
   updateAiSurveyAnswer,
   analyzeAiSurveyPhoto,
   applyAiSurveyData,
+  resetAiSurveySection,
 }) {
   const [regionQuery, setRegionQuery] = useState(objectData.regionName || "");
   const [surveyModalOpen, setSurveyModalOpen] = useState(false);
@@ -144,6 +145,25 @@ export default function ObjectStep({
       ),
     []
   );
+  const photoPromptIdsBySection = useMemo(() => {
+    const promptMap = {};
+
+    (aiSurveyPlan?.sections || []).forEach((section) => {
+      const zoneIds = new Set(section.questions.map((question) => question.zoneId).filter(Boolean));
+      const systemTypes = new Set(section.questions.map((question) => question.systemType).filter(Boolean));
+
+      promptMap[section.id] = (aiSurveyPlan?.photoPrompts || [])
+        .filter((prompt) => {
+          if (prompt.sectionId && prompt.sectionId === section.id) return true;
+          if (prompt.zoneId && zoneIds.has(prompt.zoneId)) return true;
+          if (prompt.systemType && systemTypes.has(prompt.systemType)) return true;
+          return false;
+        })
+        .map((prompt) => prompt.id);
+    });
+
+    return promptMap;
+  }, [aiSurveyPlan]);
 
   useEffect(() => {
     setRegionQuery(objectData.regionName || "");
@@ -169,6 +189,17 @@ export default function ObjectStep({
 
   const handleSurveyModalClose = () => {
     setSurveyModalOpen(false);
+  };
+
+  const handleResetSurveySection = (section) => {
+    const questionIds = (section?.questions || []).map((question) => question.id);
+    const photoPromptIds = photoPromptIdsBySection[section.id] || [];
+    const didReset = resetAiSurveySection?.(section.id, questionIds, photoPromptIds);
+    if (didReset) {
+      window.requestAnimationFrame(() => {
+        setSurveyRefreshTick((prev) => prev + 1);
+      });
+    }
   };
 
   return (
@@ -661,6 +692,10 @@ export default function ObjectStep({
                         <p className="hint-inline">{section.description}</p>
                       </div>
                       <span className="pricing-source-chip muted">{section.questions.length} вопросов</span>
+                      <button className="ghost-btn ai-checklist-reset-btn" type="button" onClick={() => handleResetSurveySection(section)}>
+                        <Trash2 size={14} />
+                        РЎР±СЂРѕСЃ
+                      </button>
                     </div>
 
                     <div className="ai-checklist-grid">

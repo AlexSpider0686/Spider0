@@ -199,6 +199,17 @@ select {
   gap: 12px;
 }
 
+.ai-checklist-section__head {
+  flex-wrap: wrap;
+}
+
+.ai-checklist-reset-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
 .ai-checklist-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
