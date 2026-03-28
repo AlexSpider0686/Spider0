@@ -10,6 +10,7 @@ import { calculateLaborCost } from "../labor-cost-engine";
 import { classifyObject } from "../object-classifier";
 import { estimateSystemQuantities } from "../system-estimator";
 import { classifyZonesForSystem } from "../zone-classifier";
+import { calculateDesignSurveyAdjustment, hasProjectForSystem } from "../designSurveyEngine";
 
 function getSystemName(systemType) {
   return SYSTEM_TYPES.find((item) => item.code === systemType)?.name || systemType;
@@ -262,7 +263,8 @@ export function calculateSystemWithBreakdown(
   objectData = {},
   marketSnapshot = null,
   projectSnapshot = null,
-  allSystems = []
+  allSystems = [],
+  surveyAnswers = {}
 ) {
   const normalizedInput = normalizeEstimateInput({
     system,
@@ -323,6 +325,15 @@ export function calculateSystemWithBreakdown(
     regionCoef: normalizedInput.objectData.regionCoef,
   });
 
+  const designAdjustment = calculateDesignSurveyAdjustment({
+    system,
+    objectData: normalizedInput.objectData,
+    zones: normalizedInput.zones,
+    surveyAnswers,
+    projectSnapshot,
+  });
+  const projectInPlace = hasProjectForSystem(system, projectSnapshot);
+
   let laborModel = calculateLaborCost({
     systemType: system.type,
     quantities,
@@ -330,9 +341,12 @@ export function calculateSystemWithBreakdown(
     knsModel,
     budget: normalizedInput.budget,
     coefficientLayer: coefficients,
-    designHours: quantities.designHoursBase + cableModel.cableLengthM * 0.0038,
-    designComplexityFactor: objectClassification.designComplexityIndex,
+    designHours: projectInPlace ? 0 : (quantities.designHoursBase + cableModel.cableLengthM * 0.0038) * designAdjustment.designHoursMultiplier,
+    designComplexityFactor: projectInPlace
+      ? 1
+      : objectClassification.designComplexityIndex * designAdjustment.complexityMultiplier,
     projectMode: projectOverrides.projectMode,
+    skipDesignPricing: projectInPlace,
     ...projectOverrides.laborOverride,
   });
 
@@ -358,9 +372,9 @@ export function calculateSystemWithBreakdown(
   const laborBase = laborModel.workAfterConditions * regionalCoef;
   const workTotal = laborModel.workTotal;
   const workCharges = Math.max(workTotal - laborBase, 0);
-  const designBase = laborModel.designAfterConditions * regionalCoef;
-  const designTotal = laborModel.designTotal;
-  const designCharges = Math.max(designTotal - designBase, 0);
+  const designBase = projectInPlace ? 0 : laborModel.designAfterConditions * regionalCoef;
+  const designTotal = projectInPlace ? 0 : laborModel.designTotal;
+  const designCharges = projectInPlace ? 0 : Math.max(designTotal - designBase, 0);
 
   const directCost = materialsBase + workTotal + designTotal;
   const profit = directCost * (toNumber(normalizedInput.budget.profitabilityPercent, 0) / 100);
@@ -433,6 +447,13 @@ export function calculateSystemWithBreakdown(
     vendor: system.vendor,
     estimateMode: projectOverrides.projectMode ? "project_pdf" : "model",
     projectSpecFileName: projectOverrides.equipmentOverride.fileName || "",
+    projectInPlace,
+    designSkipped: projectInPlace,
+    designStatus: projectInPlace ? "skipped_project_in_place" : "calculated",
+    designStatusNote: projectInPlace ? "Стоимость не рассчитывается, проект в наличии." : designAdjustment.note,
+    designSurveyDrivers: designAdjustment.drivers,
+    designHoursMultiplier: designAdjustment.designHoursMultiplier,
+    designComplexityMultiplier: designAdjustment.complexityMultiplier,
     cable: cableModel.cableLengthM,
     knsLength: knsModel.knsLengthM,
     trayLength: knsModel.trayLengthM,
@@ -466,8 +487,8 @@ export function calculateSystemWithBreakdown(
     designBase,
     designCharges,
     designTotal,
-    designDurationMonths: laborModel.designMonths,
-    designTeamSize: laborModel.teamSize,
+    designDurationMonths: projectInPlace ? 0 : laborModel.designMonths,
+    designTeamSize: projectInPlace ? 0 : laborModel.teamSize,
     unitWorkMarker: {
       key: quantities.primaryUnitKey,
       label: quantities.markerLabel || "Стоимость 1 единицы",
@@ -479,11 +500,11 @@ export function calculateSystemWithBreakdown(
     payrollTaxes: laborModel.workChargesBeforeRegion.payrollTaxes * regionalCoef,
     utilization: laborModel.workChargesBeforeRegion.utilization * regionalCoef,
     admin: laborModel.workChargesBeforeRegion.admin * regionalCoef,
-    designOverhead: laborModel.designChargesBeforeRegion.overhead * regionalCoef,
-    designPpe: laborModel.designChargesBeforeRegion.ppe * regionalCoef,
-    designPayrollTaxes: laborModel.designChargesBeforeRegion.payrollTaxes * regionalCoef,
-    designUtilization: laborModel.designChargesBeforeRegion.utilization * regionalCoef,
-    designAdmin: laborModel.designChargesBeforeRegion.admin * regionalCoef,
+    designOverhead: projectInPlace ? 0 : laborModel.designChargesBeforeRegion.overhead * regionalCoef,
+    designPpe: projectInPlace ? 0 : laborModel.designChargesBeforeRegion.ppe * regionalCoef,
+    designPayrollTaxes: projectInPlace ? 0 : laborModel.designChargesBeforeRegion.payrollTaxes * regionalCoef,
+    designUtilization: projectInPlace ? 0 : laborModel.designChargesBeforeRegion.utilization * regionalCoef,
+    designAdmin: projectInPlace ? 0 : laborModel.designChargesBeforeRegion.admin * regionalCoef,
     profit,
     vat,
     total,
@@ -521,6 +542,7 @@ export function calculateSystemWithBreakdown(
         activeElements: quantities.activeElements,
         integrationPoints: quantities.integrationPoints,
       },
+      designAdjustment,
     },
   };
 

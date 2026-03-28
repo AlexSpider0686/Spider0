@@ -7,7 +7,21 @@ function hasSystem(systems, type) {
   return (systems || []).some((item) => item.type === type);
 }
 
-function createQuestion({ id, sectionId, group = "global", systemType = null, zoneId = null, type, label, required = true, options = [], placeholder = "", aiAutofill = false, min = 0, max = null }) {
+function createQuestion({
+  id,
+  sectionId,
+  group = "global",
+  systemType = null,
+  zoneId = null,
+  type,
+  label,
+  required = true,
+  options = [],
+  placeholder = "",
+  aiAutofill = false,
+  min = 0,
+  max = null,
+}) {
   return {
     id,
     sectionId,
@@ -120,7 +134,7 @@ export function buildAiSurveyPlan({ objectData, zones, systems, protectedArea })
       id: "object-cable-reserve",
       sectionId: objectSectionId,
       type: "number",
-      label: "Какой процент запаса кабеля требуется закладывать дополнительно?",
+      label: "Какой процент дополнительного запаса кабеля требуется закладывать?",
       placeholder: "10",
       min: 0,
       max: 100,
@@ -164,7 +178,7 @@ export function buildAiSurveyPlan({ objectData, zones, systems, protectedArea })
         group: "zone",
         zoneId: zone.id,
         type: "number",
-        label: `\u0412\u044b\u0441\u043e\u0442\u0430 \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f \u0432 \u0437\u043e\u043d\u0435 "${zoneTitle}", \u043c`,
+        label: `Высота помещения в зоне "${zoneTitle}", м`,
         placeholder: "3.2",
         aiAutofill: true,
         min: 2,
@@ -190,7 +204,7 @@ export function buildAiSurveyPlan({ objectData, zones, systems, protectedArea })
       }),
     ];
 
-    if (hasSystem(surveySystems, "aps") || hasSystem(surveySystems, "soue")) {
+    if (hasSystem(surveySystems, "aps") || hasSystem(surveySystems, "soue") || hasSystem(surveySystems, "sots")) {
       zoneQuestions.push(
         createQuestion({
           id: `zone-${zone.id}-evacuation-plan`,
@@ -198,7 +212,7 @@ export function buildAiSurveyPlan({ objectData, zones, systems, protectedArea })
           group: "zone",
           zoneId: zone.id,
           type: "boolean",
-          label: `Удалось ли подтвердить наличие плана эвакуации или маршрутов выхода для зоны "${zoneTitle}"?`,
+          label: `Удалось ли получить читаемый план эвакуации или планировку для зоны "${zoneTitle}"?`,
           aiAutofill: true,
         })
       );
@@ -207,8 +221,9 @@ export function buildAiSurveyPlan({ objectData, zones, systems, protectedArea })
         zoneId: zone.id,
         zoneName: zoneTitle,
         type: "evacuation_plan",
-        title: `Фото плана эвакуации: ${zoneTitle}`,
-        hint: "Снимите план эвакуации, табличку маршрута выхода или схему пожарного раздела крупным планом.",
+        title: `Фото плана эвакуации / планировки: ${zoneTitle}`,
+        hint:
+          "Снимите план эвакуации или схему планировки с расстояния примерно 0.7-1.5 м, держите камеру почти параллельно плоскости плана без сильного наклона, захватите лист целиком, избегайте бликов и размытия.",
         targetQuestionIds: [`zone-${zone.id}-evacuation-plan`],
       });
     }
@@ -251,6 +266,23 @@ export function buildAiSurveyPlan({ objectData, zones, systems, protectedArea })
         type: "number",
         label: `Сколько точек интеграции или обмена требуется по системе ${system.type.toUpperCase()}?`,
         placeholder: "0",
+      }),
+      createQuestion({
+        id: `system-${system.id}-coordination-zones`,
+        sectionId: systemSectionId,
+        group: "system",
+        systemType: system.type,
+        type: "number",
+        label: `По скольким зонам нужна координация и привязка решений для ${system.type.toUpperCase()}?`,
+        placeholder: "0",
+      }),
+      createQuestion({
+        id: `system-${system.id}-reuse-existing-infra`,
+        sectionId: systemSectionId,
+        group: "system",
+        systemType: system.type,
+        type: "boolean",
+        label: `Есть ли по ${system.type.toUpperCase()} существующие линии, шкафы или узлы, которые нужно учесть в проекте?`,
       }),
     ];
 
@@ -299,7 +331,7 @@ export function buildAiSurveyPlan({ objectData, zones, systems, protectedArea })
     sections.push({
       id: systemSectionId,
       title: `Система: ${system.type.toUpperCase()}`,
-      description: "Система включена в обследование, потому что по ней не отмечено наличие рабочей документации.",
+      description: "Чек-лист уточняет условия, которые влияют на точность расчета проектирования именно по этой системе.",
       questions: systemQuestions,
     });
   });

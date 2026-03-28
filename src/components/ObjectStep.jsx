@@ -739,6 +739,21 @@ export default function ObjectStep({
                               ))}
                             </div>
                           ) : null}
+
+                          {analysis?.planRecognition?.systems?.length ? (
+                            <div className="ai-summary-list" style={{ marginTop: 10 }}>
+                              {analysis.planRecognition.systems.flatMap((systemPlan) =>
+                                (systemPlan.zones || []).slice(0, 3).map((zoneItem) => (
+                                  <div key={`${prompt.id}-${systemPlan.systemType}-${zoneItem.code}`}>
+                                    <CheckCircle2 size={16} />
+                                    <span>
+                                      {systemPlan.systemLabel}: {zoneItem.name}
+                                    </span>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          ) : null}
                         </div>
                       );
                     })}

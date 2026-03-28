@@ -72,6 +72,7 @@ export function calculateLaborCost({
   executionHoursOverride = null,
   designHoursOverride = null,
   projectMode = false,
+  skipDesignPricing = false,
 }) {
   const rates = LABOR_UNIT_RATES[systemType] || LABOR_UNIT_RATES.sot;
   const primaryUnits = Math.max(toNumber(quantities?.primaryUnits, 0), 0);
@@ -135,17 +136,18 @@ export function calculateLaborCost({
     budget
   );
 
-  const safeDesignHours =
-    designHoursOverride === null || designHoursOverride === undefined || designHoursOverride === ""
+  const safeDesignHours = skipDesignPricing
+    ? 0
+    : designHoursOverride === null || designHoursOverride === undefined || designHoursOverride === ""
       ? Math.max(toNumber(designHours, 0), 0)
       : Math.max(toNumber(designHoursOverride, designHours), 0);
   const designRate = toNumber(rates.designHour, 2100);
   const designConditionFactor = 1 + (conditionFactor - 1) * 0.35;
-  const designBase = safeDesignHours * designRate * Math.max(toNumber(designComplexityFactor, 1), 0.8);
-  const designAfterConditions = designBase * designConditionFactor * exploitedFactor;
-  const designChargesBeforeRegion = calcCharges(designAfterConditions, budget);
-  const designTotalBeforeRegion = designAfterConditions + designChargesBeforeRegion.total;
-  const designTotal = designTotalBeforeRegion * regionalFactor;
+  const designBase = skipDesignPricing ? 0 : safeDesignHours * designRate * Math.max(toNumber(designComplexityFactor, 1), 0.8);
+  const designAfterConditions = skipDesignPricing ? 0 : designBase * designConditionFactor * exploitedFactor;
+  const designChargesBeforeRegion = skipDesignPricing ? calcCharges(0, budget) : calcCharges(designAfterConditions, budget);
+  const designTotalBeforeRegion = skipDesignPricing ? 0 : designAfterConditions + designChargesBeforeRegion.total;
+  const designTotal = skipDesignPricing ? 0 : designTotalBeforeRegion * regionalFactor;
 
   const computedExecutionHours =
     primaryUnits * 0.3 + controllerUnits * 0.65 + cableLengthM * 0.015 + integrationPoints * 0.55 + knsWorkUnits * 0.1;
@@ -154,7 +156,7 @@ export function calculateLaborCost({
       ? Math.max(computedExecutionHours, 0)
       : Math.max(toNumber(executionHoursOverride, computedExecutionHours), 0);
   const workSchedule = estimateExecutionSchedule(safeExecutionHours);
-  const designSchedule = estimateDesignSchedule(safeDesignHours);
+  const designSchedule = skipDesignPricing ? { teamSize: 0, designMonths: 0 } : estimateDesignSchedule(safeDesignHours);
 
   const markerCostPerUnit = workTotal / markerUnits;
 

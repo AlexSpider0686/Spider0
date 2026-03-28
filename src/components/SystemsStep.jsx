@@ -888,6 +888,17 @@ export default function SystemsStep({
                     ))}
                   </div>
 
+                  {technicalRecommendation.recognizedPlanData?.zoneNames?.length ? (
+                    <div className="ai-summary-list">
+                      {technicalRecommendation.recognizedPlanData.zoneNames.slice(0, 6).map((item) => (
+                        <div key={`${system.id}-recognized-zone-${item}`}>
+                          <CheckCircle2 size={16} />
+                          <span>{item}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+
                   <div className="table-wrap compact ai-configurator-table">
                     <table>
                       <thead>

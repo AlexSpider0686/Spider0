@@ -43,7 +43,7 @@ export default function CostBreakdownStep({ systemResults, totals }) {
               <th>Материалы</th>
               <th>СМР+ПНР</th>
               <th>Проектирование</th>
-              <th>Итог</th>
+              <th>Итого</th>
               <th>Доля в бюджете</th>
             </tr>
           </thead>
@@ -54,7 +54,7 @@ export default function CostBreakdownStep({ systemResults, totals }) {
                 <td>{rub(item.equipmentCost)}</td>
                 <td>{rub(item.materialCost)}</td>
                 <td>{rub(item.workTotal)}</td>
-                <td>{rub(item.designTotal || 0)}</td>
+                <td>{item.designSkipped ? "Не рассчитывается" : rub(item.designTotal || 0)}</td>
                 <td>{rub(item.total)}</td>
                 <td>{num((item.total / Math.max(totals.total, 1)) * 100, 1)}%</td>
               </tr>
@@ -65,4 +65,3 @@ export default function CostBreakdownStep({ systemResults, totals }) {
     </section>
   );
 }
-

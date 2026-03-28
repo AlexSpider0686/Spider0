@@ -102,10 +102,20 @@ export default function useEstimate() {
         objectData,
         zones,
         surveyAnswers: technicalSolution.appliedAnswers,
+        photoAnalyses: technicalSolution.appliedPhotoAnalyses,
         apsProjectSnapshots,
         specOverrides: technicalSolution.specOverrides,
       }),
-    [systems, systemResults, objectData, zones, technicalSolution.appliedAnswers, technicalSolution.specOverrides, apsProjectSnapshots]
+    [
+      systems,
+      systemResults,
+      objectData,
+      zones,
+      technicalSolution.appliedAnswers,
+      technicalSolution.appliedPhotoAnalyses,
+      technicalSolution.specOverrides,
+      apsProjectSnapshots,
+    ]
   );
   const projectRisks = useMemo(
     () =>
@@ -646,6 +656,7 @@ export default function useEstimate() {
         prompt,
         objectData,
         zones,
+        systems,
       });
 
       setTechnicalSolution((prev) => {
@@ -669,6 +680,7 @@ export default function useEstimate() {
               detections: result.detections || [],
               suggestedAnswers: result.suggestedAnswers || [],
               accepted: result?.accepted !== false,
+              planRecognition: result?.planRecognition || null,
             },
           },
         };

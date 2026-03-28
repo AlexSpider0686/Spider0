@@ -15,6 +15,54 @@ function numericAnswer(answers, key, fallback = 0) {
   return Number.isFinite(value) ? value : fallback;
 }
 
+function collectRecognizedPlanData(photoAnalyses, systemType) {
+  return Object.values(photoAnalyses || {}).reduce(
+    (acc, analysis) => {
+      const planRecognition = analysis?.planRecognition;
+      if (!planRecognition) return acc;
+      const systemPlan = (planRecognition.systems || []).find((item) => item.systemType === systemType);
+      if (!systemPlan) return acc;
+
+      acc.planCount += 1;
+      acc.totalZones += num(systemPlan.zoneCount, 0);
+      acc.layoutTypes.add(planRecognition.layoutType || "Смешанная");
+      acc.zoneNames.push(...(systemPlan.zones || []).map((zone) => zone.name));
+      return acc;
+    },
+    {
+      planCount: 0,
+      totalZones: 0,
+      layoutTypes: new Set(),
+      zoneNames: [],
+    }
+  );
+}
+
+function buildPlanSpecRows(systemType, recognizedPlanData) {
+  if (!["aps", "soue", "sots"].includes(systemType) || recognizedPlanData.totalZones <= 0) {
+    return [];
+  }
+
+  const rowName =
+    systemType === "soue"
+      ? "Зональное деление СОУЭ по планировкам"
+      : systemType === "sots"
+        ? "Охранные зоны СОТС по планировкам"
+        : "Зоны контроля АПС по планировкам";
+
+  return [
+    {
+      key: `${systemType}-recognized-zones`,
+      name: rowName,
+      qty: recognizedPlanData.totalZones,
+      unit: "зон",
+      basis: `Определено по распознаванию планов эвакуации: ${recognizedPlanData.planCount} план(ов), типы планировки: ${Array.from(
+        recognizedPlanData.layoutTypes
+      ).join(", ")}`,
+    },
+  ];
+}
+
 function buildStatusMaterials(systemType, objectData, markerUnits, answers, zones) {
   const materialRows = [];
   const floors = Math.max(num(objectData?.floors, 1), 1);
@@ -138,6 +186,7 @@ export function buildAiTechnicalRecommendations({
   objectData,
   zones,
   surveyAnswers,
+  photoAnalyses,
   apsProjectSnapshots,
   specOverrides,
 }) {
@@ -145,9 +194,11 @@ export function buildAiTechnicalRecommendations({
     const result = systemResults?.[index];
     const markerUnits = Math.max(num(result?.unitWorkMarker?.qty, result?.units), 1);
     const baseRows = buildBaseSpecRows(system.type, result, apsProjectSnapshots?.[system.id]);
+    const recognizedPlanData = collectRecognizedPlanData(photoAnalyses, system.type);
     const materialRows = [
       ...buildStatusMaterials(system.type, objectData, markerUnits, surveyAnswers, zones),
       ...buildZoneMaterials(system.type, zones, surveyAnswers),
+      ...buildPlanSpecRows(system.type, recognizedPlanData),
     ];
     const combinedRows = [...baseRows, ...materialRows].map((row) => {
       const override = specOverrides?.[system.id]?.[row.key] || {};
@@ -177,13 +228,22 @@ export function buildAiTechnicalRecommendations({
         system.hasWorkingDocs
           ? "По системе отмечено наличие РД, поэтому AI-обследование используется как уточняющий, а не базовый контур."
           : "По системе нет РД, поэтому AI-обследование напрямую влияет на формирование техрешения.",
+        recognizedPlanData.totalZones > 0
+          ? `По планам эвакуации распознано ${recognizedPlanData.totalZones} зон для ${system.type.toUpperCase()} (${recognizedPlanData.planCount} план(ов), типы планировки: ${Array.from(
+              recognizedPlanData.layoutTypes
+            ).join(", ")}).`
+          : "Данные распознавания планировок по этой системе пока не загружены.",
       ],
       influences: [
         { label: "Площадь и зоны", value: `${Math.round(num(objectData?.totalArea, 0))} м² / ${zones?.length || 0} зон` },
         { label: "Статус объекта", value: objectData?.buildingStatus === "construction" ? "Строящийся" : "Действующий" },
         { label: "Интеграция", value: `${integrationCount} точек` },
         { label: "Слаботочные узлы", value: `${lowCurrentRooms} помещений` },
+        ...(recognizedPlanData.totalZones > 0
+          ? [{ label: "Зоны по планам", value: `${recognizedPlanData.totalZones} зон` }]
+          : []),
       ],
+      recognizedPlanData,
     };
   });
 }

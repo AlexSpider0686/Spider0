@@ -1,4 +1,5 @@
 import { withAiRetry } from "./aiRetry";
+import { recognizeEvacuationPlanLayout } from "./evacuationPlanRecognition";
 
 function normalizeText(value) {
   return String(value || "")
@@ -549,7 +550,15 @@ function buildSurfaceSummary(wallMaterial, ceilingType, heightEstimate) {
   return `Определены вероятные типы конструкций: стены — ${wallMaterial}, потолок — ${ceilingType}. Высоту помещения по этому фото лучше подтвердить вручную.`;
 }
 
-async function executeAnalysis({ file, prompt }) {
+function buildPlanRecognitionSummary(planRecognition) {
+  const zoneSummaries = (planRecognition?.systems || [])
+    .map((item) => `${item.systemLabel}: ${item.zoneCount} зон`)
+    .join(", ");
+
+  return `План эвакуации распознан. Планировка: ${planRecognition.layoutType.toLowerCase()}, оценка качества съемки: ${planRecognition.captureQuality.label.toLowerCase()}, выделены зоны для техрешения (${zoneSummaries}).`;
+}
+
+async function executeAnalysis({ file, prompt, zones, systems }) {
   const tokens = normalizeText(file?.name || "").split(/[\s._-]+/).filter(Boolean);
   const meta = await getImageMeta(file);
 
@@ -565,12 +574,26 @@ async function executeAnalysis({ file, prompt }) {
       };
     }
 
+    const planRecognition = recognizeEvacuationPlanLayout({
+      prompt,
+      zones,
+      systems,
+      meta,
+    });
+
     return {
       accepted: true,
-      confidence: 0.84,
-      summary: "Обнаружены признаки плана эвакуации или маршрутной схемы.",
-      detections: ["План эвакуации подтвержден"],
+      confidence: Math.min(0.94, 0.74 + (planRecognition.captureQuality?.score || 0) * 0.18),
+      summary: buildPlanRecognitionSummary(planRecognition),
+      detections: [
+        "План эвакуации подтвержден",
+        `Планировка: ${planRecognition.layoutType}`,
+        `Качество съемки: ${planRecognition.captureQuality.label}`,
+        `Эвакуационных выходов/маршрутов: ~${planRecognition.egressCount}`,
+        ...planRecognition.systems.map((item) => `${item.systemLabel}: выделено ${item.zoneCount} зон`),
+      ],
       suggestedAnswers: prompt.targetQuestionIds.map((questionId) => ({ questionId, value: true })),
+      planRecognition,
     };
   }
 

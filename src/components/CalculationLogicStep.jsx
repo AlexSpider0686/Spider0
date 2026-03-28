@@ -35,12 +35,13 @@ export default function CalculationLogicStep({ objectData, systems, systemResult
 
   const exploitedBuildingCoef = objectData?.buildingStatus === "operational" ? 1.2 : 1;
   const regionalCoef = Math.max(toNumber(objectData?.regionCoef, 1), 1);
-  const totalDesignHours = systemResults.reduce((sum, row) => sum + toNumber(row.designHours, 0), 0);
+  const calculatedDesignRows = systemResults.filter((row) => !row.designSkipped);
+  const totalDesignHours = calculatedDesignRows.reduce((sum, row) => sum + toNumber(row.designHours, 0), 0);
   const avgDesignTeam =
-    systemResults.length > 0
-      ? systemResults.reduce((sum, row) => sum + toNumber(row.designTeamSize, 1), 0) / systemResults.length
-      : 1;
-  const maxDesignMonths = Math.max(...systemResults.map((row) => row.designDurationMonths || 1), 1);
+    calculatedDesignRows.length > 0
+      ? calculatedDesignRows.reduce((sum, row) => sum + toNumber(row.designTeamSize, 1), 0) / calculatedDesignRows.length
+      : 0;
+  const maxDesignMonths = Math.max(...calculatedDesignRows.map((row) => row.designDurationMonths || 1), calculatedDesignRows.length ? 1 : 0);
 
   const totalWorkBase = systemResults.reduce((sum, row) => sum + toNumber(row.workBase, 0), 0);
   const totalWorkWithCharges = systemResults.reduce((sum, row) => sum + toNumber(row.workTotal, 0), 0);
@@ -49,13 +50,14 @@ export default function CalculationLogicStep({ objectData, systems, systemResult
   const totalDesign = toNumber(totals.totalDesign, 0);
   const totalProject = toNumber(totals.total, 0);
   const aiGuard = summarizeAiGuard(systemResults);
+  const skippedDesignRows = systemResults.filter((row) => row.designSkipped);
 
   return (
     <section className="panel">
       <div className="panel-header">
         <div>
           <h2>Логика расчета</h2>
-          <p>Пошагово: как платформа собирает объемы, проводит AI-аудит цен, оценивает критичные риски проекта и защищает бюджет от недооценки.</p>
+          <p>Пошагово: как платформа собирает объемы, проводит AI-аудит цен, использует AI-обследование, оценивает риски проекта и защищает бюджет от недооценки.</p>
         </div>
       </div>
 
@@ -73,9 +75,10 @@ export default function CalculationLogicStep({ objectData, systems, systemResult
         </article>
 
         <article className="logic-card">
-          <h3>3. AI-Техническое решение</h3>
-          <p>После заполнения объекта можно запустить AI-обследование. Платформа строит адаптивный чек-лист по объекту, зонам и системам без РД и сохраняет его внутри текущей сессии.</p>
-          <p>Фотоанализ помогает подтвердить материал стен, тип потолка и, если качество снимка позволяет, оценить высоту помещения. При недостаточной уверенности высота остается обязательной для ручного ввода.</p>
+          <h3>3. AI-обследование</h3>
+          <p>После заполнения объекта можно запустить AI-обследование. Платформа строит адаптивный чек-лист по объекту, зонам и системам без проекта, включая вопросы, необходимые для точного расчета стоимости проектирования.</p>
+          <p>Для СОТС, СОУЭ и АПС чек-лист обязательно собирает планы эвакуации. Платформа подсказывает, как их фотографировать: держать камеру почти параллельно плоскости схемы, брать план целиком, избегать бликов, смаза и сильного наклона.</p>
+          <p>Фотоанализ помогает подтвердить материал стен, тип потолка и, если качество снимка позволяет, оценить высоту помещения. Отдельный модуль распознавания планировок анализирует планы эвакуации, выделяет охранные зоны и зоны оповещения для СОТС, СОУЭ и АПС и передает их в техническое решение.</p>
           <p>В модуль встроена защита от ложной фотоинформации: схемы, документы и нерелевантные снимки не попадают в чек-лист и не искажают обследование.</p>
         </article>
 
@@ -88,7 +91,7 @@ export default function CalculationLogicStep({ objectData, systems, systemResult
         <article className="logic-card">
           <h3>5. Как считается стоимость работ</h3>
           <p>СМР+ПНР считаются по составу работ, а не по рублям за квадратный метр. База складывается из монтажа основных элементов, ПНР, контроллеров, кабельных работ, КНС и точек интеграции.</p>
-          <p>Единичные расценки откалиброваны в консервативном диапазоне по рынку РФ. Для защиты бюджета система применяет рыночный пол и не позволяет опустить итоговую трудовую часть ниже безопасного диапазона.</p>
+          <p>Единичные расценки откалиброваны в консервативном диапазоне по рынку РФ. Для защиты бюджета система применяет рыночный floor и не позволяет опустить итоговую трудовую часть ниже безопасного диапазона.</p>
           <p>База работ по текущему расчету: <strong>{rub(totalWorkBase)}</strong>. После начислений и коэффициентов: <strong>{rub(totalWorkWithCharges)}</strong>.</p>
         </article>
 
@@ -114,8 +117,9 @@ export default function CalculationLogicStep({ objectData, systems, systemResult
 
         <article className="logic-card">
           <h3>9. Проектирование</h3>
-          <p>Проектирование считается отдельно по каждой системе от расчетного объема и сложности. Затем применяется ставка проектирования и коэффициенты сложности, после чего проектные работы попадают в общий бюджет отдельной строкой.</p>
-          <p>Суммарно: <strong>{num(totalDesignHours, 1)} ч</strong>, средняя группа <strong>{num(avgDesignTeam, 1)} чел.</strong>, максимальный срок <strong>{num(maxDesignMonths, 0)} мес.</strong>, стоимость <strong>{rub(totalDesign)}</strong>.</p>
+          <p>Проектирование считается отдельно по каждой системе от расчетного объема и сложности. Данные объекта и AI-обследования корректируют трудоемкость: учитываются трассы, высоты, отделка, интеграции, координация по зонам и существующая инфраструктура.</p>
+          <p>Если по системе есть проект или он загружен во вкладке «Системы», стоимость проектирования по этой системе не рассчитывается, а на вкладке «Проектирование» выводится пометка «стоимость не рассчитывается, проект в наличии».</p>
+          <p>Суммарно по рассчитываемым системам: <strong>{num(totalDesignHours, 1)} ч</strong>, средняя группа <strong>{num(avgDesignTeam, 1)} чел.</strong>, максимальный срок <strong>{num(maxDesignMonths, 0)} мес.</strong>, стоимость <strong>{rub(totalDesign)}</strong>.</p>
         </article>
 
         <article className="logic-card">
@@ -126,13 +130,18 @@ export default function CalculationLogicStep({ objectData, systems, systemResult
 
         <article className="logic-card">
           <h3>11. Что происходит при изменении параметров</h3>
-          <p>Любое изменение объекта, систем, вендора, PDF-спецификации, цен, обследования или бюджета запускает пересчет: обновляются объемы, AI-аудит цен, контур рисков проекта, анти-недооценочный блок по работам и общий бюджет проекта.</p>
+          <p>Любое изменение объекта, систем, вендора, PDF-спецификации, цен, обследования или бюджета запускает пересчет: обновляются объемы, AI-аудит цен, контур рисков проекта, блок защиты от недооценки работ и общий бюджет проекта.</p>
           <div className="logic-equipment-list">
             {systemResults.map((row, index) => (
               <p key={`${row.systemType}-logic-${index}`}>
-                <strong>{row.systemName}:</strong> кабель {num(row.cable || 0, 1)} м, работы {rub(row.workTotal || 0)}, проектирование {rub(row.designTotal || 0)}, итог {rub(row.total || 0)}.
+                <strong>{row.systemName}:</strong> кабель {num(row.cable || 0, 1)} м, работы {rub(row.workTotal || 0)}, проектирование {row.designSkipped ? "не рассчитывается" : rub(row.designTotal || 0)}, итог {rub(row.total || 0)}.
               </p>
             ))}
+            {skippedDesignRows.length ? (
+              <p>
+                <strong>Системы с проектом:</strong> {skippedDesignRows.map((row) => row.systemName).join(", ")}.
+              </p>
+            ) : null}
           </div>
         </article>
       </div>
