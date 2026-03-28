@@ -1,5 +1,5 @@
 import { withAiRetry } from "./aiRetry";
-import { recognizeEvacuationPlanLayout } from "./evacuationPlanRecognition";
+import { MIN_ACCEPTABLE_PLAN_QUALITY, recognizeEvacuationPlanLayout } from "./evacuationPlanRecognition";
 
 function normalizeText(value) {
   return String(value || "")
@@ -452,10 +452,15 @@ function buildPlanRecognitionSummary(planRecognition) {
     .map((item) => `${item.systemLabel}: ${item.zoneCount} ${item.zoneTerm}`)
     .join(", ");
 
-  return `План эвакуации распознан. Планировка: ${planRecognition.layoutType.toLowerCase()}, оценка качества съемки: ${planRecognition.captureQuality.label.toLowerCase()}, зоны определены дифференцированно и перепроверены по данным объекта (${zoneSummaries}).`;
+  const areaComparison = planRecognition?.areaComparison;
+  const areaText = areaComparison
+    ? ` Сравнение площадей: введено ${areaComparison.userTotalArea} м², по планировкам/фото прогнозируется ${areaComparison.predictedTotalArea} м².`
+    : "";
+
+  return `План эвакуации распознан. Планировка: ${planRecognition.layoutType.toLowerCase()}, оценка качества съемки: ${planRecognition.captureQuality.label.toLowerCase()}, зоны определены дифференцированно и перепроверены по данным объекта (${zoneSummaries}).${areaText}`;
 }
 
-async function executeAnalysis({ file, prompt, zones, systems }) {
+async function executeAnalysis({ file, prompt, zones, systems, objectData, photoAnalyses, floorIndex }) {
   const normalizedName = normalizeText(file?.name || "");
   const tokens = normalizedName.split(/[\s._-]+/).filter(Boolean);
   const meta = await getImageMeta(file);
@@ -478,7 +483,26 @@ async function executeAnalysis({ file, prompt, zones, systems }) {
       systems,
       meta,
       objectData,
+      floorIndex,
+      relatedPhotoAnalyses: photoAnalyses,
     });
+
+    if ((planRecognition?.captureQuality?.score || 0) < MIN_ACCEPTABLE_PLAN_QUALITY) {
+      return {
+        accepted: false,
+        confidence: Math.min(0.69, planRecognition.captureQuality?.score || 0.4),
+        summary: `Фото плана отклонено: пригодность ${Math.round((planRecognition.captureQuality?.score || 0) * 100)}%, а требуется не ниже 70%.`,
+        detections: [
+          `Пригодность снимка: ${Math.round((planRecognition.captureQuality?.score || 0) * 100)}%`,
+          ...(planRecognition.captureQuality?.improvements || []).slice(0, 4),
+        ],
+        suggestedAnswers: [],
+        planRecognition: {
+          ...planRecognition,
+          accepted: false,
+        },
+      };
+    }
 
     return {
       accepted: true,
@@ -489,6 +513,7 @@ async function executeAnalysis({ file, prompt, zones, systems }) {
         `Планировка: ${planRecognition.layoutType}`,
         `Качество съемки: ${planRecognition.captureQuality.label}`,
         `Эвакуационных выходов/маршрутов: ~${planRecognition.egressCount}`,
+        `Оценочная площадь этажа: ${planRecognition.geometry?.floorAreaEstimated || 0} м²`,
         ...planRecognition.systems.map((item) => `${item.systemLabel}: выделено ${item.zoneCount} ${item.zoneTerm}`),
       ],
       suggestedAnswers: prompt.targetQuestionIds.map((questionId) => ({

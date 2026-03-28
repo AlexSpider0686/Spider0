@@ -684,7 +684,7 @@ export default function ObjectStep({
                 <div className="calc-explain ai-photo-prompt-block">
                   <h4>Интеллектуальная фотофиксация</h4>
                   <p className="hint-inline">
-                    AI-подсказки формируются по зонам. Чек-лист учитывает не только подбор решения, но и вопросы, которые нужны для точного расчета проектирования. Для СОТС, СОУЭ и АПС модуль по планам эвакуации дифференцированно определяет охранные зоны, зоны оповещения и ЗКСПС, а затем перепроверяет результат по данным объекта. Если загруженное фото не соответствует требуемому типу снимка, модуль отклоняет его и не вносит ложные данные в чек-лист. По корректному фото система может автоматически определить материал стен, тип потолка и, при достаточной уверенности, высоту помещения.
+                    AI-подсказки формируются по зонам. Для СОТС, СОУЭ и АПС можно загружать сразу группу планов эвакуации по этажам: модуль распознает их вместе, считает охранные зоны, зоны оповещения и ЗКСПС, сверяет количество планов с этажностью, а недостающие этажи достраивает прогнозом по данным объекта. Фото плана с пригодностью ниже 70% автоматически отклоняются с пояснением, что нужно исправить.
                   </p>
                   <div className="ai-photo-prompt-grid">
                     {aiSurveyPlan.photoPrompts.map((prompt) => {
@@ -704,11 +704,12 @@ export default function ObjectStep({
                               className="file-upload-input"
                               type="file"
                               accept="image/*"
+                              multiple={prompt.type === "evacuation_plan"}
                               onChange={async (event) => {
-                                const file = event.target.files?.[0];
-                                if (!file) return;
+                                const files = Array.from(event.target.files || []);
+                                if (!files.length) return;
                                 try {
-                                  await analyzeAiSurveyPhoto(prompt, file);
+                                  await analyzeAiSurveyPhoto(prompt, files);
                                 } catch {
                                 } finally {
                                   event.target.value = "";
@@ -740,18 +741,80 @@ export default function ObjectStep({
                             </div>
                           ) : null}
 
+                          {analysis?.planRecognition?.warnings?.length ? (
+                            <div className="ai-summary-list" style={{ marginTop: 10 }}>
+                              {analysis.planRecognition.warnings.map((warning) => (
+                                <div key={`${prompt.id}-${warning.message}`}>
+                                  <X size={16} />
+                                  <span>{warning.message}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+
+                          {analysis?.planRecognition?.areaComparison ? (
+                            <div className="ai-summary-list" style={{ marginTop: 10 }}>
+                              <div>
+                                <CheckCircle2 size={16} />
+                                <span>
+                                  Площадь пользователя: {analysis.planRecognition.areaComparison.userTotalArea} м². По планировкам/фото:
+                                  {" "}{analysis.planRecognition.areaComparison.predictedTotalArea} м².
+                                </span>
+                              </div>
+                              <div>
+                                <CheckCircle2 size={16} />
+                                <span>
+                                  Средняя расчетная площадь этажа: {analysis.planRecognition.areaComparison.recognizedAverageFloorArea} м².
+                                  Отклонение: {analysis.planRecognition.areaComparison.deviationPercent}%.
+                                </span>
+                              </div>
+                            </div>
+                          ) : null}
+
                           {analysis?.planRecognition?.systems?.length ? (
                             <div className="ai-summary-list" style={{ marginTop: 10 }}>
-                              {analysis.planRecognition.systems.flatMap((systemPlan) =>
-                                (systemPlan.zones || []).slice(0, 3).map((zoneItem) => (
+                              <div>
+                                <CheckCircle2 size={16} />
+                                <span>
+                                  Принято планов: {analysis.planRecognition.uploadedPlans || analysis.planRecognition.floorPlansAccepted || 0} из{" "}
+                                  {analysis.planRecognition.expectedFloorCount || 0}. Прогноз недостающих этажей:{" "}
+                                  {analysis.planRecognition.forecastedFloors || 0}.
+                                </span>
+                              </div>
+                              {analysis.planRecognition.systems.flatMap((systemPlan) => {
+                                const headline = (
+                                  <div key={`${prompt.id}-${systemPlan.systemType}-headline`}>
+                                    <CheckCircle2 size={16} />
+                                    <span>
+                                      {systemPlan.systemLabel}: определено {systemPlan.zoneCount} {systemPlan.zoneTerm}
+                                      {systemPlan.forecastZoneCount ? `, из них прогноз ${systemPlan.forecastZoneCount}` : ""}.
+                                    </span>
+                                  </div>
+                                );
+                                const preview = (systemPlan.zones || []).slice(0, 3).map((zoneItem) => (
                                   <div key={`${prompt.id}-${systemPlan.systemType}-${zoneItem.code}`}>
                                     <CheckCircle2 size={16} />
                                     <span>
                                       {systemPlan.systemLabel}: {zoneItem.name}
                                     </span>
                                   </div>
-                                ))
-                              )}
+                                ));
+                                return [headline, ...preview];
+                              })}
+                            </div>
+                          ) : null}
+
+                          {analysis?.fileResults?.length ? (
+                            <div className="ai-summary-list" style={{ marginTop: 10 }}>
+                              {analysis.fileResults.map((fileResult) => (
+                                <div key={`${prompt.id}-${fileResult.floorIndex}-${fileResult.fileName}`}>
+                                  <CheckCircle2 size={16} />
+                                  <span>
+                                    Этаж/план {fileResult.floorIndex}: {fileResult.fileName} -{" "}
+                                    {fileResult.accepted ? "принят" : "отклонен"}.
+                                  </span>
+                                </div>
+                              ))}
                             </div>
                           ) : null}
                         </div>

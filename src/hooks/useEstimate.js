@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_BUDGET, DEFAULT_SYSTEM, DEFAULT_ZONE, OBJECT_TYPES, SYSTEM_TYPES, VENDORS } from "../config/estimateConfig";
-import { buildEstimateRows, downloadCsv, toNumber } from "../lib/estimate";
+import { buildEstimateRows, downloadCsv, num, toNumber } from "../lib/estimate";
 import { calculateEstimateEngine } from "../lib/estimateEngine";
 import { buildZonesFromPreset, normalizeZoneAreas, rebalanceZoneAreasWithLocks, validateZoneDistribution } from "../lib/zoneEngine";
 import { fetchPricesByRequests, fetchVendorPrices } from "../lib/priceCollector";
@@ -15,6 +15,7 @@ import { analyzeInspectionPhoto } from "../lib/aiPhotoInspectionStrict";
 import { buildAiSurveyPlan, calculateAiSurveyCompletion } from "../lib/aiTechnicalChecklist";
 import { buildAiTechnicalRecommendations } from "../lib/aiTechnicalConfigurator";
 import { buildAiProjectRisks } from "../lib/aiProjectRiskEngine";
+import { aggregatePlanRecognitions } from "../lib/evacuationPlanRecognition";
 
 function removeById(mapObject, id) {
   if (!(id in mapObject)) return mapObject;
@@ -635,8 +636,9 @@ export default function useEstimate() {
     }));
   };
 
-  const analyzeAiSurveyPhoto = async (prompt, file) => {
-    if (!prompt || !file) return null;
+  const analyzeAiSurveyPhoto = async (prompt, fileInput) => {
+    const files = Array.isArray(fileInput) ? fileInput : Array.from(fileInput || []).filter(Boolean);
+    if (!prompt || !files.length) return null;
 
     setTechnicalSolution((prev) => ({
       ...prev,
@@ -644,20 +646,95 @@ export default function useEstimate() {
         ...prev.photoAnalyses,
         [prompt.id]: {
           state: "loading",
-          fileName: file.name,
-          summary: "Идет AI-анализ фото...",
+          fileName: files.map((file) => file.name).join(", "),
+          summary:
+            prompt.type === "evacuation_plan" && files.length > 1
+              ? "Идет AI-анализ группы планов по этажам..."
+              : "Идет AI-анализ фото...",
         },
       },
     }));
 
     try {
-      const result = await analyzeInspectionPhoto({
-        file,
-        prompt,
-        objectData,
-        zones,
-        systems,
-      });
+      const perFileResults = await Promise.all(
+        files.map((file, index) =>
+          analyzeInspectionPhoto({
+            file,
+            prompt,
+            objectData,
+            zones,
+            systems,
+            photoAnalyses: technicalSolution.photoAnalyses,
+            floorIndex: index + 1,
+          })
+        )
+      );
+
+      let result = perFileResults[0];
+      if (prompt.type === "evacuation_plan") {
+        const aggregatedPlanRecognition = aggregatePlanRecognitions({
+          recognitions: perFileResults
+            .map((item, index) =>
+              item?.planRecognition
+                ? {
+                    ...item.planRecognition,
+                    floorIndex: item.planRecognition.floorIndex || index + 1,
+                    accepted: item.accepted !== false,
+                  }
+                : null
+            )
+            .filter(Boolean),
+          prompt,
+          zones,
+          systems,
+          objectData,
+        });
+
+        const acceptedFiles = perFileResults.filter((item) => item?.accepted !== false);
+        result = {
+          accepted: acceptedFiles.length > 0,
+          confidence:
+            acceptedFiles.length > 0
+              ? Number(
+                  (
+                    acceptedFiles.reduce((sum, item) => sum + num(item?.confidence, 0), 0) /
+                    acceptedFiles.length
+                  ).toFixed(2)
+                )
+              : Number((perFileResults[0]?.confidence || 0.3).toFixed(2)),
+          summary:
+            acceptedFiles.length > 0
+              ? `Распознано ${aggregatedPlanRecognition.uploadedPlans} план(ов) из ${aggregatedPlanRecognition.expectedFloorCount}. ${aggregatedPlanRecognition.systems
+                  .map((item) => `${item.systemLabel}: ${item.zoneCount} ${item.zoneTerm}`)
+                  .join(", ")}.`
+              : perFileResults[0]?.summary || "Не удалось принять ни один план эвакуации.",
+          detections: [
+            `Загружено планов: ${files.length}`,
+            `Принято планов: ${aggregatedPlanRecognition.uploadedPlans}`,
+            `Этажей по объекту/зоне: ${aggregatedPlanRecognition.expectedFloorCount}`,
+            ...aggregatedPlanRecognition.systems.map(
+              (item) =>
+                `${item.systemLabel}: ${item.zoneCount} ${item.zoneTerm} (${item.detectedZoneCount || 0} по планам, ${
+                  item.forecastZoneCount || 0
+                } прогноз)`
+            ),
+            ...(aggregatedPlanRecognition.warnings || []).map((warning) => warning.message),
+            `Площадь пользователя: ${aggregatedPlanRecognition.areaComparison?.userTotalArea || 0} м²`,
+            `Площадь по планировкам/фото: ${aggregatedPlanRecognition.areaComparison?.predictedTotalArea || 0} м²`,
+          ],
+          suggestedAnswers:
+            acceptedFiles.length > 0 ? prompt.targetQuestionIds.map((questionId) => ({ questionId, value: true })) : [],
+          planRecognition: aggregatedPlanRecognition,
+          fileResults: perFileResults.map((item, index) => ({
+            floorIndex: index + 1,
+            fileName: files[index]?.name,
+            accepted: item?.accepted !== false,
+            summary: item?.summary,
+            detections: item?.detections || [],
+            planRecognition: item?.planRecognition || null,
+          })),
+        };
+      }
 
       setTechnicalSolution((prev) => {
         const nextAnswers = { ...prev.answers };
@@ -674,13 +751,18 @@ export default function useEstimate() {
             ...prev.photoAnalyses,
             [prompt.id]: {
               state: result?.accepted === false ? "error" : "success",
-              fileName: file.name,
+              fileName: files.map((file) => file.name).join(", "),
               summary: result.summary,
               confidence: result.confidence,
               detections: result.detections || [],
               suggestedAnswers: result.suggestedAnswers || [],
               accepted: result?.accepted !== false,
               planRecognition: result?.planRecognition || null,
+              fileResults: result?.fileResults || [],
+              promptType: prompt.type,
+              zoneId: prompt.zoneId,
+              estimatedCeilingHeight: result?.estimatedCeilingHeight ?? null,
+              estimatedCeilingHeightConfidence: result?.estimatedCeilingHeightConfidence ?? null,
             },
           },
         };
@@ -694,9 +776,11 @@ export default function useEstimate() {
           ...prev.photoAnalyses,
           [prompt.id]: {
             state: "error",
-            fileName: file.name,
+            fileName: files.map((file) => file.name).join(", "),
             summary: error?.message || "Не удалось обработать фото.",
             detections: [],
+            promptType: prompt?.type,
+            zoneId: prompt?.zoneId,
           },
         },
       }));

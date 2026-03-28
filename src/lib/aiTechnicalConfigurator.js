@@ -26,22 +26,62 @@ function collectRecognizedPlanData(photoAnalyses, systemType) {
       if (!systemPlan) return acc;
 
       acc.planCount += 1;
+      acc.uploadedPlans += num(planRecognition.uploadedPlans, planRecognition.floorPlansAccepted || 0);
+      acc.expectedFloors = Math.max(acc.expectedFloors, num(planRecognition.expectedFloorCount, 0));
+      acc.forecastedFloors += num(planRecognition.forecastedFloors, 0);
       acc.totalZones += num(systemPlan.zoneCount, 0);
       acc.layoutTypes.add(planRecognition.layoutType || "Смешанная");
       acc.zoneNames.push(...(systemPlan.zones || []).map((zone) => zone.name));
       acc.validationSources.add(systemPlan.validationSource || "unknown");
       acc.notes.push(...(systemPlan.notes || []));
+      acc.warnings.push(...((planRecognition.warnings || []).map((warning) => warning.message)));
+      if (planRecognition.areaComparison) {
+        acc.areaComparisons.push(planRecognition.areaComparison);
+      }
       return acc;
     },
     {
       planCount: 0,
+      uploadedPlans: 0,
+      expectedFloors: 0,
+      forecastedFloors: 0,
       totalZones: 0,
       layoutTypes: new Set(),
       zoneNames: [],
       validationSources: new Set(),
       notes: [],
+      warnings: [],
+      areaComparisons: [],
     }
   );
+}
+
+function summarizeAreaComparison(areaComparisons = []) {
+  if (!areaComparisons.length) return null;
+
+  const aggregate = areaComparisons.reduce(
+    (acc, item) => {
+      acc.userTotalArea += num(item.userTotalArea, 0);
+      acc.predictedTotalArea += num(item.predictedTotalArea, 0);
+      acc.recognizedAverageFloorArea += num(item.recognizedAverageFloorArea, 0);
+      return acc;
+    },
+    {
+      userTotalArea: 0,
+      predictedTotalArea: 0,
+      recognizedAverageFloorArea: 0,
+    }
+  );
+
+  const deviationPercent =
+    aggregate.userTotalArea > 0 ? ((aggregate.predictedTotalArea - aggregate.userTotalArea) / aggregate.userTotalArea) * 100 : 0;
+
+  return {
+    userTotalArea: Number(aggregate.userTotalArea.toFixed(1)),
+    predictedTotalArea: Number(aggregate.predictedTotalArea.toFixed(1)),
+    recognizedAverageFloorArea: Number((aggregate.recognizedAverageFloorArea / areaComparisons.length).toFixed(1)),
+    deviationPercent: Number(deviationPercent.toFixed(1)),
+  };
 }
 
 function buildPlanSpecRows(systemType, recognizedPlanData) {
@@ -54,7 +94,7 @@ function buildPlanSpecRows(systemType, recognizedPlanData) {
       ? "Зональное деление СОУЭ по планировкам"
       : systemType === "sots"
         ? "Охранные зоны СОТС по планировкам"
-        : "ЗКСПС АПС по планировкам";
+      : "ЗКСПС АПС по планировкам";
 
   return [
     {
@@ -64,7 +104,9 @@ function buildPlanSpecRows(systemType, recognizedPlanData) {
       unit: "зон",
       basis: `Определено по распознаванию и перепроверке планов эвакуации: ${recognizedPlanData.planCount} план(ов), типы планировки: ${Array.from(
         recognizedPlanData.layoutTypes
-      ).join(", ")}`,
+      ).join(", ")}${recognizedPlanData.expectedFloors ? `, этажей ожидается: ${recognizedPlanData.expectedFloors}` : ""}${
+        recognizedPlanData.forecastedFloors ? `, спрогнозировано этажей: ${recognizedPlanData.forecastedFloors}` : ""
+      }`,
     },
   ];
 }
@@ -218,8 +260,11 @@ export function buildAiTechnicalRecommendations({
           notes: fallbackZoneModel.notes,
           layoutTypes: fallbackZoneModel.layoutTypes,
           planCount: fallbackZoneModel.planCount,
+          uploadedPlans: fallbackZoneModel.uploadedPlans,
+          forecastedFloors: fallbackZoneModel.forecastedFloors,
         }
       : recognizedPlanData;
+    const areaComparison = summarizeAreaComparison(effectiveZoneData.areaComparisons || []);
     const materialRows = [
       ...buildStatusMaterials(system.type, objectData, markerUnits, surveyAnswers, zones),
       ...buildZoneMaterials(system.type, zones, surveyAnswers),
@@ -256,10 +301,16 @@ export function buildAiTechnicalRecommendations({
         effectiveZoneData.totalZones > 0
           ? `По планам эвакуации и перепроверке распознано ${effectiveZoneData.totalZones} ${
               system.type === "aps" ? "ЗКСПС" : system.type === "soue" ? "зон оповещения" : "охранных зон"
-            } для ${system.type.toUpperCase()} (${effectiveZoneData.planCount} план(ов), типы планировки: ${Array.from(
+            } для ${system.type.toUpperCase()} (${effectiveZoneData.uploadedPlans || effectiveZoneData.planCount} принятых план(ов) из ${
+              effectiveZoneData.expectedFloors || "не задано"
+            } этажей, типы планировки: ${Array.from(
               effectiveZoneData.layoutTypes
             ).join(", ")}, источники: ${Array.from(effectiveZoneData.validationSources).join(", ")}).`
           : `Планы по ${system.type.toUpperCase()} не загружены или недостаточно надежны, поэтому используется fallback-алгоритм с перепроверкой по данным объекта.`,
+        areaComparison
+          ? `Сравнение площадей: пользователь ввел ${areaComparison.userTotalArea} м², по планировкам и фото прогнозируется ${areaComparison.predictedTotalArea} м² (отклонение ${areaComparison.deviationPercent}%).`
+          : "Сравнение площадей по планировкам недоступно: используется только введенная пользователем площадь.",
+        ...(effectiveZoneData.warnings || []).slice(0, 2),
         ...(effectiveZoneData.notes || []).slice(0, 2),
       ],
       influences: [
@@ -267,6 +318,7 @@ export function buildAiTechnicalRecommendations({
         { label: "Статус объекта", value: objectData?.buildingStatus === "construction" ? "Строящийся" : "Действующий" },
         { label: "Интеграция", value: `${integrationCount} точек` },
         { label: "Слаботочные узлы", value: `${lowCurrentRooms} помещений` },
+        ...(areaComparison ? [{ label: "Площадь по планам", value: `${areaComparison.predictedTotalArea} м²` }] : []),
         ...(effectiveZoneData.totalZones > 0
           ? [{ label: system.type === "aps" ? "ЗКСПС" : "Зоны по расчету", value: `${effectiveZoneData.totalZones} зон` }]
           : []),
