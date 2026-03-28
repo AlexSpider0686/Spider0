@@ -28,12 +28,20 @@ async function loadImage(file) {
   }
 }
 
-function clampCanvasSize(image, maxSize = 160) {
-  const scale = Math.min(maxSize / Math.max(image.naturalWidth || 1, 1), maxSize / Math.max(image.naturalHeight || 1, 1), 1);
+function clampCanvasSize(image, maxSize = 180) {
+  const scale = Math.min(
+    maxSize / Math.max(image.naturalWidth || 1, 1),
+    maxSize / Math.max(image.naturalHeight || 1, 1),
+    1
+  );
   return {
-    width: Math.max(32, Math.round((image.naturalWidth || 1) * scale)),
-    height: Math.max(32, Math.round((image.naturalHeight || 1) * scale)),
+    width: Math.max(36, Math.round((image.naturalWidth || 1) * scale)),
+    height: Math.max(36, Math.round((image.naturalHeight || 1) * scale)),
   };
+}
+
+function computeBrightness(r, g, b) {
+  return r * 0.299 + g * 0.587 + b * 0.114;
 }
 
 function analyzeRegion(imageData, width, xStart, xEnd, yStart, yEnd) {
@@ -45,15 +53,13 @@ function analyzeRegion(imageData, width, xStart, xEnd, yStart, yEnd) {
   let verticalEdgeCount = 0;
   let horizontalEdgeCount = 0;
 
-  const brightnessAt = (index) => imageData[index] * 0.299 + imageData[index + 1] * 0.587 + imageData[index + 2] * 0.114;
-
   for (let y = yStart; y < yEnd; y += 1) {
     for (let x = xStart; x < xEnd; x += 1) {
       const index = (y * width + x) * 4;
       const r = imageData[index];
       const g = imageData[index + 1];
       const b = imageData[index + 2];
-      const brightness = brightnessAt(index);
+      const brightness = computeBrightness(r, g, b);
       const max = Math.max(r, g, b);
       const min = Math.min(r, g, b);
       const saturation = max === 0 ? 0 : (max - min) / max;
@@ -65,7 +71,12 @@ function analyzeRegion(imageData, width, xStart, xEnd, yStart, yEnd) {
 
       if (x + 1 < xEnd) {
         const rightIndex = (y * width + (x + 1)) * 4;
-        const horizontalDiff = Math.abs(brightness - brightnessAt(rightIndex));
+        const rightBrightness = computeBrightness(
+          imageData[rightIndex],
+          imageData[rightIndex + 1],
+          imageData[rightIndex + 2]
+        );
+        const horizontalDiff = Math.abs(brightness - rightBrightness);
         if (horizontalDiff > 30) {
           edgeCount += 1;
           verticalEdgeCount += 1;
@@ -74,7 +85,12 @@ function analyzeRegion(imageData, width, xStart, xEnd, yStart, yEnd) {
 
       if (y + 1 < yEnd) {
         const bottomIndex = ((y + 1) * width + x) * 4;
-        const verticalDiff = Math.abs(brightness - brightnessAt(bottomIndex));
+        const bottomBrightness = computeBrightness(
+          imageData[bottomIndex],
+          imageData[bottomIndex + 1],
+          imageData[bottomIndex + 2]
+        );
+        const verticalDiff = Math.abs(brightness - bottomBrightness);
         if (verticalDiff > 30) {
           edgeCount += 1;
           horizontalEdgeCount += 1;
@@ -107,17 +123,65 @@ function analyzeRegion(imageData, width, xStart, xEnd, yStart, yEnd) {
   };
 }
 
+function analyzeSceneColors(imageData, width, height) {
+  let pixelCount = 0;
+  let skyLike = 0;
+  let vegetationLike = 0;
+  let vividLike = 0;
+  let neutralLike = 0;
+  let warmDecorative = 0;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const index = (y * width + x) * 4;
+      const r = imageData[index];
+      const g = imageData[index + 1];
+      const b = imageData[index + 2];
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const saturation = max === 0 ? 0 : (max - min) / max;
+
+      pixelCount += 1;
+
+      if (b > r + 18 && b >= g + 8 && b > 100) skyLike += 1;
+      if (g > r + 10 && g >= b - 8 && g > 80) vegetationLike += 1;
+      if (saturation > 0.42 && max > 120) vividLike += 1;
+      if (Math.abs(r - g) < 18 && Math.abs(g - b) < 18 && max > 70 && saturation < 0.12) neutralLike += 1;
+      if (r > 130 && saturation > 0.45 && (g > 60 || b > 60)) warmDecorative += 1;
+    }
+  }
+
+  if (!pixelCount) {
+    return {
+      skyRatio: 0,
+      vegetationRatio: 0,
+      vividRatio: 0,
+      neutralRatio: 0,
+      decorativeRatio: 0,
+    };
+  }
+
+  return {
+    skyRatio: skyLike / pixelCount,
+    vegetationRatio: vegetationLike / pixelCount,
+    vividRatio: vividLike / pixelCount,
+    neutralRatio: neutralLike / pixelCount,
+    decorativeRatio: warmDecorative / pixelCount,
+  };
+}
+
 async function getImageMeta(file) {
   const image = await loadImage(file);
   if (!image) {
     return { width: 0, height: 0, orientation: "unknown", features: null };
   }
 
-  const { width, height } = clampCanvasSize(image, 160);
+  const { width, height } = clampCanvasSize(image, 180);
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
   const context = canvas.getContext("2d", { willReadFrequently: true });
+
   if (!context) {
     return {
       width: Number(image.naturalWidth || 0),
@@ -135,6 +199,7 @@ async function getImageMeta(file) {
     height: Number(image.naturalHeight || 0),
     orientation: (image.naturalWidth || 0) >= (image.naturalHeight || 0) ? "landscape" : "portrait",
     features: {
+      sceneColors: analyzeSceneColors(imageData, width, height),
       topRegion: analyzeRegion(imageData, width, 0, width, 0, Math.max(8, Math.round(height * 0.34))),
       middleRegion: analyzeRegion(imageData, width, Math.round(width * 0.08), Math.round(width * 0.92), Math.round(height * 0.25), Math.round(height * 0.82)),
       bottomRegion: analyzeRegion(imageData, width, 0, width, Math.round(height * 0.66), height),
@@ -156,7 +221,11 @@ function scoreSurfaceSuitability(tokens, meta) {
   const wall = meta?.features?.wallRegion;
   const middle = meta?.features?.middleRegion;
   const bottom = meta?.features?.bottomRegion;
-  if (!top || !wall || !middle || !bottom) return { score: 0, reasons: ["Недостаточно данных изображения."] };
+  const sceneColors = meta?.features?.sceneColors;
+
+  if (!top || !wall || !middle || !bottom) {
+    return { score: 0, reasons: ["Недостаточно данных изображения."] };
+  }
 
   let score = 0;
   const reasons = [];
@@ -166,9 +235,9 @@ function scoreSurfaceSuitability(tokens, meta) {
     score += 0.08;
     reasons.push("Достаточное разрешение снимка.");
   }
-  if (brightnessGap >= 10) {
-    score += 0.16;
-    reasons.push("Разделяются зона потолка и зона стены.");
+  if (brightnessGap >= 12) {
+    score += 0.18;
+    reasons.push("Различимы зона потолка и зона стен.");
   }
   if (top.saturation <= wall.saturation + 0.03) {
     score += 0.1;
@@ -176,17 +245,17 @@ function scoreSurfaceSuitability(tokens, meta) {
   }
   if (wall.edgeDensity >= 0.02 && wall.edgeDensity <= 0.18) {
     score += 0.1;
-    reasons.push("Есть фактура поверхности стены.");
+    reasons.push("Есть фактура поверхности стен.");
   }
   if (top.edgeDensity <= 0.16) {
     score += 0.08;
     reasons.push("Потолочная зона не перегружена лишними деталями.");
   }
   if (middle.verticalEdgeDensity >= 0.015 || middle.horizontalEdgeDensity >= 0.015) {
-    score += 0.07;
+    score += 0.06;
     reasons.push("Есть конструктивные границы помещения.");
   }
-  if (tokens.some((token) => ["office", "ceiling", "wall", "room", "потолок", "стена", "офис", "помещение"].includes(token))) {
+  if (tokens.some((token) => ["office", "ceiling", "wall", "room", "потолок", "стена", "офис", "помещение", "parking", "паркинг"].includes(token))) {
     score += 0.08;
     reasons.push("Имя файла указывает на интерьер.");
   }
@@ -197,7 +266,7 @@ function scoreSurfaceSuitability(tokens, meta) {
   }
   if (top.edgeDensity > 0.22 && middle.edgeDensity > 0.22 && bottom.edgeDensity > 0.22) {
     score -= 0.18;
-    reasons.push("Весь кадр перегружен деталями.");
+    reasons.push("Весь кадр перегружен мелкими деталями.");
   }
   if (top.saturation > 0.24 && wall.saturation > 0.24 && brightnessGap < 8) {
     score -= 0.18;
@@ -206,6 +275,25 @@ function scoreSurfaceSuitability(tokens, meta) {
   if (wall.edgeDensity < 0.01 && top.edgeDensity < 0.01) {
     score -= 0.14;
     reasons.push("Почти нет признаков поверхностей помещения.");
+  }
+
+  if (sceneColors) {
+    if (sceneColors.skyRatio > 0.14 && sceneColors.vegetationRatio > 0.14) {
+      score -= 0.46;
+      reasons.push("Кадр похож на уличный пейзаж.");
+    }
+    if (sceneColors.vegetationRatio > 0.28) {
+      score -= 0.28;
+      reasons.push("В кадре преобладают признаки растительности.");
+    }
+    if (sceneColors.vividRatio > 0.5 && sceneColors.neutralRatio < 0.16) {
+      score -= 0.24;
+      reasons.push("Цветовой профиль похож на открытку, иллюстрацию или декоративную сцену.");
+    }
+    if (sceneColors.decorativeRatio > 0.22 && sceneColors.neutralRatio < 0.14) {
+      score -= 0.18;
+      reasons.push("Кадр содержит слишком много декоративных ярких объектов.");
+    }
   }
 
   return { score: Number(score.toFixed(2)), reasons };
@@ -217,6 +305,7 @@ function inferWall(tokens, meta) {
   if (tokens.includes("гкл") || tokens.includes("gypsum") || tokens.includes("drywall")) return "ГКЛ";
   if (tokens.includes("стекло") || tokens.includes("glass")) return "Стекло";
   if (tokens.includes("сэндвич") || tokens.includes("sandwich")) return "Сэндвич-панели";
+
   const wall = meta?.features?.wallRegion;
   if (!wall) return "Смешанный";
   if (wall.brightness > 170 && wall.saturation < 0.1 && wall.edgeDensity < 0.09) return "ГКЛ";
@@ -230,6 +319,7 @@ function inferCeiling(tokens, meta) {
   if (tokens.includes("гкл") || tokens.includes("gypsum") || tokens.includes("drywall")) return "ГКЛ";
   if (tokens.includes("монолит")) return "Монолит";
   if (tokens.includes("open") || tokens.includes("открытый")) return "Открытый";
+
   const top = meta?.features?.topRegion;
   if (!top) return "Смешанный";
   if (top.brightness > 150 && top.verticalEdgeDensity > 0.08 && top.horizontalEdgeDensity > 0.08) return "Армстронг";
@@ -245,14 +335,16 @@ function estimateHeight(tokens, meta, ceilingType) {
   if (match) {
     const value = Number(String(match[1]).replace(",", "."));
     if (Number.isFinite(value) && value >= 2 && value <= 18) {
-      return { value: Number(value.toFixed(1)), confidence: 0.95, source: "token" };
+      return { value: Number(value.toFixed(1)), confidence: 0.95 };
     }
   }
 
   const top = meta?.features?.topRegion;
   if (!top) return null;
+
   let height = ceilingType === "Открытый" ? 4.8 : ceilingType === "Грильято" ? 3.9 : ceilingType === "Монолит" ? 3.5 : 3.1;
   let confidence = ceilingType === "Смешанный" ? 0.42 : 0.68;
+
   if (meta.orientation === "portrait" && meta.height >= meta.width * 1.2) {
     height += 0.4;
     confidence += 0.08;
@@ -265,8 +357,9 @@ function estimateHeight(tokens, meta, ceilingType) {
     height += 0.3;
     confidence += 0.04;
   }
+
   if (confidence < 0.64) return null;
-  return { value: Number(Math.min(Math.max(height, 2.4), 9.5).toFixed(1)), confidence: Number(confidence.toFixed(2)), source: "image" };
+  return { value: Number(Math.min(Math.max(height, 2.4), 9.5).toFixed(1)), confidence: Number(confidence.toFixed(2)) };
 }
 
 function buildSurfaceSummary(wallMaterial, ceilingType, heightEstimate) {
@@ -287,7 +380,7 @@ async function executeAnalysis({ file, prompt }) {
         accepted: false,
         confidence: 0.22,
         summary: "Загруженное фото не похоже на план эвакуации или маршрутную схему. Данные не приняты в чек-лист.",
-        detections: ["Фото не соответствует требуемому типу: нужен план эвакуации"],
+        detections: ["Фото отклонено: нужен план эвакуации или маршрутная схема"],
         suggestedAnswers: [],
       };
     }
@@ -303,12 +396,19 @@ async function executeAnalysis({ file, prompt }) {
 
   if (prompt?.type === "surface_scan") {
     const suitability = scoreSurfaceSuitability(tokens, meta);
-    if (suitability.score < 0.22) {
+    const sceneColors = meta?.features?.sceneColors;
+    const obviousOutdoor =
+      !!sceneColors &&
+      ((sceneColors.skyRatio > 0.14 && sceneColors.vegetationRatio > 0.14) ||
+        sceneColors.vegetationRatio > 0.28 ||
+        (sceneColors.vividRatio > 0.5 && sceneColors.neutralRatio < 0.16));
+
+    if (obviousOutdoor || suitability.score < 0.22) {
       return {
         accepted: false,
-        confidence: 0.18,
+        confidence: 0.16,
         summary: "Фото не похоже на корректный снимок участка помещения. Для этого блока нужен реальный фрагмент стены и потолка внутри зоны.",
-        detections: ["Фото отклонено: недостаточно признаков стены и потолка помещения", ...suitability.reasons.slice(0, 3)],
+        detections: ["Фото отклонено: снимок не подтверждает внутренние поверхности помещения", ...suitability.reasons.slice(0, 4)],
         suggestedAnswers: [],
       };
     }
@@ -322,7 +422,7 @@ async function executeAnalysis({ file, prompt }) {
         accepted: false,
         confidence: 0.2,
         summary: "Фото не дало надежных признаков для определения конструкций помещения. Данные в чек-лист не загружены.",
-        detections: ["Фото отклонено: AI не нашел надежных признаков помещения", ...suitability.reasons.slice(0, 3)],
+        detections: ["Фото отклонено: AI не нашел надежных признаков помещения", ...suitability.reasons.slice(0, 4)],
         suggestedAnswers: [],
       };
     }
