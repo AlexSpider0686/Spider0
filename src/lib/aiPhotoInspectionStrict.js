@@ -34,6 +34,7 @@ function clampCanvasSize(image, maxSize = 180) {
     maxSize / Math.max(image.naturalHeight || 1, 1),
     1
   );
+
   return {
     width: Math.max(36, Math.round((image.naturalWidth || 1) * scale)),
     height: Math.max(36, Math.round((image.naturalHeight || 1) * scale)),
@@ -129,7 +130,7 @@ function analyzeSceneColors(imageData, width, height) {
   let vegetationLike = 0;
   let vividLike = 0;
   let neutralLike = 0;
-  let warmDecorative = 0;
+  let decorativeLike = 0;
 
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
@@ -147,7 +148,7 @@ function analyzeSceneColors(imageData, width, height) {
       if (g > r + 10 && g >= b - 8 && g > 80) vegetationLike += 1;
       if (saturation > 0.42 && max > 120) vividLike += 1;
       if (Math.abs(r - g) < 18 && Math.abs(g - b) < 18 && max > 70 && saturation < 0.12) neutralLike += 1;
-      if (r > 130 && saturation > 0.45 && (g > 60 || b > 60)) warmDecorative += 1;
+      if (r > 130 && saturation > 0.45 && (g > 60 || b > 60)) decorativeLike += 1;
     }
   }
 
@@ -166,7 +167,122 @@ function analyzeSceneColors(imageData, width, height) {
     vegetationRatio: vegetationLike / pixelCount,
     vividRatio: vividLike / pixelCount,
     neutralRatio: neutralLike / pixelCount,
-    decorativeRatio: warmDecorative / pixelCount,
+    decorativeRatio: decorativeLike / pixelCount,
+  };
+}
+
+function analyzeVerticalProfile(imageData, width, height) {
+  const rows = [];
+
+  for (let y = 0; y < height; y += 1) {
+    let sumBrightness = 0;
+    let sumSaturation = 0;
+    let horizontalEdges = 0;
+    let verticalEdges = 0;
+
+    for (let x = 0; x < width; x += 1) {
+      const index = (y * width + x) * 4;
+      const r = imageData[index];
+      const g = imageData[index + 1];
+      const b = imageData[index + 2];
+      const brightness = computeBrightness(r, g, b);
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const saturation = max === 0 ? 0 : (max - min) / max;
+
+      sumBrightness += brightness;
+      sumSaturation += saturation;
+
+      if (x + 1 < width) {
+        const rightIndex = (y * width + (x + 1)) * 4;
+        const rightBrightness = computeBrightness(
+          imageData[rightIndex],
+          imageData[rightIndex + 1],
+          imageData[rightIndex + 2]
+        );
+        if (Math.abs(brightness - rightBrightness) > 28) {
+          verticalEdges += 1;
+        }
+      }
+
+      if (y + 1 < height) {
+        const bottomIndex = ((y + 1) * width + x) * 4;
+        const bottomBrightness = computeBrightness(
+          imageData[bottomIndex],
+          imageData[bottomIndex + 1],
+          imageData[bottomIndex + 2]
+        );
+        if (Math.abs(brightness - bottomBrightness) > 28) {
+          horizontalEdges += 1;
+        }
+      }
+    }
+
+    rows.push({
+      brightness: sumBrightness / width,
+      saturation: sumSaturation / width,
+      horizontalEdgeDensity: horizontalEdges / width,
+      verticalEdgeDensity: verticalEdges / width,
+    });
+  }
+
+  return rows;
+}
+
+function summarizeSpatialLayout(rows, width, height) {
+  if (!rows.length) {
+    return {
+      ceilingBoundaryRatio: null,
+      ceilingVisibleRatio: null,
+      perspectiveDepth: 0,
+      verticality: 0,
+      horizontality: 0,
+      portraitBoost: 0,
+      boundaryConfidence: 0,
+    };
+  }
+
+  const startIndex = Math.max(3, Math.round(height * 0.08));
+  const endIndex = Math.min(rows.length - 3, Math.round(height * 0.62));
+  let bestIndex = -1;
+  let bestScore = 0;
+
+  for (let i = startIndex; i <= endIndex; i += 1) {
+    const current = rows[i];
+    const next = rows[i + 1];
+    if (!current || !next) continue;
+
+    const brightnessJump = Math.abs(current.brightness - next.brightness) / 255;
+    const saturationJump = Math.abs(current.saturation - next.saturation);
+    const edgeWeight = current.horizontalEdgeDensity + next.horizontalEdgeDensity;
+    const score = brightnessJump * 0.65 + saturationJump * 0.45 + edgeWeight * 0.9;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestIndex = i;
+    }
+  }
+
+  const topSlice = rows.slice(0, Math.max(1, Math.round(height * 0.2)));
+  const middleSlice = rows.slice(Math.round(height * 0.25), Math.max(Math.round(height * 0.25) + 1, Math.round(height * 0.7)));
+  const bottomSlice = rows.slice(Math.round(height * 0.7));
+
+  const average = (slice, key) => (slice.length ? slice.reduce((sum, row) => sum + row[key], 0) / slice.length : 0);
+
+  const topBrightness = average(topSlice, "brightness");
+  const bottomBrightness = average(bottomSlice, "brightness");
+  const topVerticality = average(topSlice, "verticalEdgeDensity");
+  const middleVerticality = average(middleSlice, "verticalEdgeDensity");
+  const middleHorizontality = average(middleSlice, "horizontalEdgeDensity");
+
+  return {
+    ceilingBoundaryRatio: bestIndex > -1 ? bestIndex / Math.max(rows.length - 1, 1) : null,
+    ceilingVisibleRatio: bestIndex > -1 ? Math.max(0.08, Math.min(0.62, bestIndex / Math.max(rows.length - 1, 1))) : null,
+    perspectiveDepth: Math.max(0, (bottomBrightness - topBrightness) / 255) + middleHorizontality * 0.9,
+    verticality: Math.max(topVerticality, middleVerticality),
+    horizontality: middleHorizontality,
+    portraitBoost: height > width ? Math.min(0.25, (height / Math.max(width, 1) - 1) * 0.2) : 0,
+    boundaryConfidence: Math.min(1, bestScore * 2.2),
   };
 }
 
@@ -193,6 +309,7 @@ async function getImageMeta(file) {
 
   context.drawImage(image, 0, 0, width, height);
   const imageData = context.getImageData(0, 0, width, height).data;
+  const verticalProfile = analyzeVerticalProfile(imageData, width, height);
 
   return {
     width: Number(image.naturalWidth || 0),
@@ -200,6 +317,8 @@ async function getImageMeta(file) {
     orientation: (image.naturalWidth || 0) >= (image.naturalHeight || 0) ? "landscape" : "portrait",
     features: {
       sceneColors: analyzeSceneColors(imageData, width, height),
+      verticalProfile,
+      spatialLayout: summarizeSpatialLayout(verticalProfile, width, height),
       topRegion: analyzeRegion(imageData, width, 0, width, 0, Math.max(8, Math.round(height * 0.34))),
       middleRegion: analyzeRegion(imageData, width, Math.round(width * 0.08), Math.round(width * 0.92), Math.round(height * 0.25), Math.round(height * 0.82)),
       bottomRegion: analyzeRegion(imageData, width, 0, width, Math.round(height * 0.66), height),
@@ -340,26 +459,87 @@ function estimateHeight(tokens, meta, ceilingType) {
   }
 
   const top = meta?.features?.topRegion;
-  if (!top) return null;
+  const middle = meta?.features?.middleRegion;
+  const layout = meta?.features?.spatialLayout;
+  if (!top || !middle || !layout) return null;
 
-  let height = ceilingType === "Открытый" ? 4.8 : ceilingType === "Грильято" ? 3.9 : ceilingType === "Монолит" ? 3.5 : 3.1;
-  let confidence = ceilingType === "Смешанный" ? 0.42 : 0.68;
-
-  if (meta.orientation === "portrait" && meta.height >= meta.width * 1.2) {
-    height += 0.4;
-    confidence += 0.08;
+  let baseHeight;
+  switch (ceilingType) {
+    case "Открытый":
+      baseHeight = 4.7;
+      break;
+    case "Грильято":
+      baseHeight = 3.85;
+      break;
+    case "Монолит":
+      baseHeight = 3.45;
+      break;
+    case "Армстронг":
+      baseHeight = 3.15;
+      break;
+    case "ГКЛ":
+      baseHeight = 3.0;
+      break;
+    default:
+      baseHeight = 3.2;
+      break;
   }
-  if (top.brightness < 122 && top.contrast > 34) {
-    height += 0.5;
+
+  let height = baseHeight;
+  let confidence = ceilingType === "Смешанный" ? 0.4 : 0.62;
+
+  const visibleCeiling = layout.ceilingVisibleRatio;
+  if (visibleCeiling != null) {
+    if (visibleCeiling > 0.34) {
+      height += 0.7;
+      confidence += 0.08;
+    } else if (visibleCeiling > 0.26) {
+      height += 0.45;
+      confidence += 0.07;
+    } else if (visibleCeiling < 0.16) {
+      height -= 0.2;
+      confidence += 0.03;
+    }
+  }
+
+  if (layout.perspectiveDepth > 0.32) {
+    height += 0.45;
+    confidence += 0.07;
+  } else if (layout.perspectiveDepth > 0.22) {
+    height += 0.25;
     confidence += 0.05;
   }
-  if (top.edgeDensity > 0.21) {
-    height += 0.3;
+
+  if (layout.verticality > 0.09) {
+    height += 0.25;
     confidence += 0.04;
   }
 
-  if (confidence < 0.64) return null;
-  return { value: Number(Math.min(Math.max(height, 2.4), 9.5).toFixed(1)), confidence: Number(confidence.toFixed(2)) };
+  if (layout.portraitBoost > 0) {
+    height += 0.2 + layout.portraitBoost;
+    confidence += 0.05;
+  }
+
+  if (top.brightness < 120 && top.contrast > 32) {
+    height += 0.25;
+    confidence += 0.04;
+  }
+
+  if (middle.verticalEdgeDensity < 0.012 && visibleCeiling != null && visibleCeiling < 0.18) {
+    confidence -= 0.08;
+  }
+
+  if ((layout.boundaryConfidence || 0) < 0.18) {
+    confidence -= 0.12;
+  } else if ((layout.boundaryConfidence || 0) > 0.32) {
+    confidence += 0.05;
+  }
+
+  height = Math.min(Math.max(height, 2.4), 9.5);
+  confidence = Number(Math.min(Math.max(confidence, 0), 0.93).toFixed(2));
+
+  if (confidence < 0.6) return null;
+  return { value: Number(height.toFixed(1)), confidence };
 }
 
 function buildSurfaceSummary(wallMaterial, ceilingType, heightEstimate) {
@@ -431,6 +611,7 @@ async function executeAnalysis({ file, prompt }) {
       { questionId: prompt.targetQuestionIds[0], value: [wallMaterial] },
       { questionId: prompt.targetQuestionIds[1], value: [ceilingType] },
     ];
+
     if (heightEstimate && prompt.targetQuestionIds[2]) {
       suggestedAnswers.push({ questionId: prompt.targetQuestionIds[2], value: heightEstimate.value });
     }
