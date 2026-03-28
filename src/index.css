@@ -289,11 +289,24 @@ select {
   padding: 20px;
 }
 
+.ai-survey-modal.ai-survey-modal--inline {
+  position: relative;
+  inset: auto;
+  z-index: auto;
+  display: block;
+  padding: 0;
+  margin-top: 12px;
+}
+
 .ai-survey-modal__backdrop {
   position: absolute;
   inset: 0;
   background: rgba(226, 236, 248, 0.9);
   pointer-events: auto;
+}
+
+.ai-survey-modal--inline .ai-survey-modal__backdrop {
+  display: none;
 }
 
 .ai-survey-modal__card {
@@ -311,6 +324,13 @@ select {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(245, 250, 255, 0.98));
   color: #173a60;
   isolation: isolate;
+}
+
+.ai-survey-modal--inline .ai-survey-modal__card {
+  width: 100%;
+  max-height: none;
+  min-height: 0;
+  box-shadow: var(--shadow);
 }
 
 .ai-survey-modal__header {

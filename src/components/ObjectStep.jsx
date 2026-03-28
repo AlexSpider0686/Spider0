@@ -156,6 +156,14 @@ export default function ObjectStep({
     };
   }, [surveyModalOpen]);
 
+  useEffect(() => {
+    if (!surveyModalOpen || typeof document === "undefined" || typeof window === "undefined") return undefined;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById("ai-survey-workspace")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [surveyModalOpen]);
+
   const handleOpenSurvey = () => {
     const started = technicalSolution?.surveyStartedAt ? true : startAiSurvey();
     if (started) setSurveyModalOpen(true);
@@ -624,7 +632,13 @@ export default function ObjectStep({
       </div>
 
       {surveyModalOpen ? (
-        <div className="ai-survey-modal" role="dialog" aria-modal="true" aria-label="AI-обследование объекта">
+        <div
+          id="ai-survey-workspace"
+          className="ai-survey-modal ai-survey-modal--inline"
+          role="dialog"
+          aria-modal="false"
+          aria-label="AI-обследование объекта"
+        >
           <div className="ai-survey-modal__backdrop" />
           <div
             className="ai-survey-modal__card"
