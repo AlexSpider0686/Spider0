@@ -133,7 +133,6 @@ export default function ObjectStep({
 }) {
   const [regionQuery, setRegionQuery] = useState(objectData.regionName || "");
   const [surveyModalOpen, setSurveyModalOpen] = useState(false);
-  const [surveyRenderKey, setSurveyRenderKey] = useState(0);
   const regionItems = useMemo(() => searchRegions(regionQuery).slice(0, 20), [regionQuery]);
   const selectedObjectType = OBJECT_TYPES.find((item) => item.value === objectData.objectType);
   const activeSystemTypes = new Set((systems || []).map((item) => item.type));
@@ -154,20 +153,6 @@ export default function ObjectStep({
     document.body.classList.toggle("ai-survey-open", surveyModalOpen);
     return () => {
       document.body.classList.remove("ai-survey-open");
-    };
-  }, [surveyModalOpen]);
-
-  useEffect(() => {
-    if (!surveyModalOpen || typeof window === "undefined" || typeof document === "undefined") return undefined;
-    const forceSurveyRepaint = () => setSurveyRenderKey((prev) => prev + 1);
-    const handleVisibility = () => {
-      if (!document.hidden) forceSurveyRepaint();
-    };
-    window.addEventListener("focus", forceSurveyRepaint);
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => {
-      window.removeEventListener("focus", forceSurveyRepaint);
-      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [surveyModalOpen]);
 
@@ -516,7 +501,7 @@ export default function ObjectStep({
         <div className="subpanel-header">
           <div>
             <h3>AI-Техническое решение: обследование объекта</h3>
-            <p>Модуль запускается как отдельное внутреннее окно после заполнения обязательных данных по объекту. Введенная внутри него информация сохраняется, пока пользователь остается в платформе.</p>
+            <p>Модуль запускается как отдельное внутреннее окно после заполнения обязательных данных по объекту. Собранная внутри него информация используется и для AI-технического решения, и для более точного расчета стоимости проектирования по системам без проекта.</p>
           </div>
           <button className="primary-btn" type="button" onClick={handleOpenSurvey} disabled={!aiSurveyPlan?.readiness?.isReady}>
             <ClipboardList size={16} />
@@ -551,7 +536,7 @@ export default function ObjectStep({
           <div className="calc-explain">
             <h4>Реестр инженерных систем</h4>
             <p className="hint-inline">
-              Выберите, какие системы входят в объект. Если по системе уже есть РД, чек-лист по ней не формируется, а AI-модуль использует ее как уточняющий контур.
+              Выберите, какие системы входят в объект. Если по системе уже есть РД или загружен проект, полный чек-лист по ней не формируется, а стоимость проектирования по такой системе далее не рассчитывается.
             </p>
           </div>
 
@@ -623,14 +608,14 @@ export default function ObjectStep({
                 <div>
                   <CheckCircle2 size={16} />
                   <span>
-                    С чек-листа исключены системы с РД: {aiSurveyPlan.skippedSystems.map((code) => systemNames[code] || code).join(", ")}.
+                    С чек-листа исключены системы с проектом: {aiSurveyPlan.skippedSystems.map((code) => systemNames[code] || code).join(", ")}. Для них на вкладке проектирования будет показано, что стоимость не рассчитывается.
                   </span>
                 </div>
               ) : null}
               {technicalSolution?.appliedAt ? (
                 <div>
                   <CheckCircle2 size={16} />
-                  <span>Последняя загрузка данных из окна обследования уже выполнена, и эти данные участвуют в дальнейших алгоритмах платформы.</span>
+                  <span>Последняя загрузка данных из окна обследования уже выполнена, и эти данные участвуют в дальнейшем подборе решений и в расчете стоимости проектирования.</span>
                 </div>
               ) : null}
             </div>
@@ -642,7 +627,6 @@ export default function ObjectStep({
         <div className="ai-survey-modal" role="dialog" aria-modal="true" aria-label="AI-обследование объекта">
           <div className="ai-survey-modal__backdrop" />
           <div
-            key={surveyRenderKey}
             className="ai-survey-modal__card"
             onClick={(event) => event.stopPropagation()}
             onMouseDown={(event) => event.stopPropagation()}
@@ -651,7 +635,7 @@ export default function ObjectStep({
               <div>
                 <h3>AI-Обследование объекта</h3>
                 <p>
-                  Отдельное внутреннее окно обследования. Данные внутри него сохраняются в течение текущей сессии платформы, даже если вы закроете окно и откроете его снова.
+                  Отдельное внутреннее окно обследования. Данные внутри него сохраняются в течение текущей сессии платформы, даже если вы закроете окно и откроете его снова, а после загрузки влияют и на техническое решение, и на стоимость проектирования.
                 </p>
               </div>
               <button className="ghost-btn ai-survey-modal__close" type="button" onClick={handleSurveyModalClose}>
@@ -692,7 +676,7 @@ export default function ObjectStep({
                 <div className="calc-explain ai-photo-prompt-block">
                   <h4>Интеллектуальная фотофиксация</h4>
                   <p className="hint-inline">
-                    AI-подсказки формируются по зонам. Если загруженное фото не соответствует требуемому типу снимка, модуль отклоняет его и не вносит ложные данные в чек-лист. По корректному фото система может автоматически определить материал стен, тип потолка и, при достаточной уверенности, высоту помещения.
+                    AI-подсказки формируются по зонам. Чек-лист учитывает не только подбор решения, но и вопросы, которые нужны для точного расчета проектирования. Если загруженное фото не соответствует требуемому типу снимка, модуль отклоняет его и не вносит ложные данные в чек-лист. По корректному фото система может автоматически определить материал стен, тип потолка и, при достаточной уверенности, высоту помещения.
                   </p>
                   <div className="ai-photo-prompt-grid">
                     {aiSurveyPlan.photoPrompts.map((prompt) => {
@@ -712,7 +696,6 @@ export default function ObjectStep({
                               className="file-upload-input"
                               type="file"
                               accept="image/*"
-                              onClick={() => setSurveyRenderKey((prev) => prev + 1)}
                               onChange={async (event) => {
                                 const file = event.target.files?.[0];
                                 if (!file) return;
@@ -721,7 +704,6 @@ export default function ObjectStep({
                                 } catch {
                                 } finally {
                                   event.target.value = "";
-                                  setSurveyRenderKey((prev) => prev + 1);
                                 }
                               }}
                             />
@@ -756,7 +738,7 @@ export default function ObjectStep({
 
             <div className="ai-survey-modal__footer">
               <div className="hint-inline">
-                Дальнейшие алгоритмы платформы используют только загруженные данные обследования. Пока кнопка не нажата, информация остается черновиком внутри окна.
+                Дальнейшие алгоритмы платформы используют только загруженные данные обследования. После загрузки они участвуют в AI-техническом решении и в расчете проектирования, а пока кнопка не нажата, информация остается черновиком внутри окна.
               </div>
               <button
                 className="primary-btn"
