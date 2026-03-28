@@ -472,6 +472,29 @@ html {
   box-shadow: 0 10px 24px rgba(65, 174, 228, 0.24);
 }
 
+.app-shell .section--dark .spotlight-card {
+  background:
+    linear-gradient(180deg, rgba(7, 22, 37, 0.9) 0%, rgba(17, 43, 68, 0.84) 44%, rgba(222, 232, 246, 0.9) 100%);
+  border-color: rgba(116, 205, 255, 0.42);
+  box-shadow: 0 18px 36px rgba(2, 12, 22, 0.34);
+}
+
+.app-shell .section--dark .spotlight-card__eyebrow {
+  color: #d7efff;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(168, 225, 255, 0.24);
+}
+
+.app-shell .section--dark .spotlight-card h3 {
+  color: #f4fbff;
+  text-shadow: 0 1px 10px rgba(2, 10, 18, 0.2);
+}
+
+.app-shell .section--dark .spotlight-card p {
+  color: #d7e8fb;
+  text-shadow: 0 1px 8px rgba(2, 10, 18, 0.18);
+}
+
 .app-shell .section--light .spotlight-card__eyebrow {
   color: #6b86a1;
   background: rgba(255, 255, 255, 0.55);
