@@ -125,6 +125,18 @@ html {
   background: rgba(255, 255, 255, 0.04);
 }
 
+.app-shell .btn--signal {
+  color: #fff8ee;
+  background: linear-gradient(135deg, #ff8f1f, #ff5353);
+  border: 1px solid rgba(255, 214, 172, 0.38);
+  box-shadow: 0 10px 28px rgba(255, 101, 53, 0.28);
+}
+
+.app-shell .btn--signal:hover {
+  text-decoration: none;
+  box-shadow: 0 14px 32px rgba(255, 101, 53, 0.34);
+}
+
 .app-shell .hero {
   position: relative;
   min-height: 100vh;
@@ -226,6 +238,10 @@ html {
   margin-top: 34px;
   flex-wrap: wrap;
   animation: fade-up 0.9s ease forwards;
+}
+
+.app-shell .hero__actions .btn--signal {
+  margin-left: auto;
 }
 
 .app-shell .hero__grid {
@@ -803,6 +819,150 @@ html {
   align-items: center;
 }
 
+.app-shell .promo-reel {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.app-shell .promo-reel__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(2, 9, 16, 0.8);
+  backdrop-filter: blur(12px);
+}
+
+.app-shell .promo-reel__window {
+  position: relative;
+  z-index: 1;
+  width: min(var(--promo-width), calc(100vw - 48px));
+  max-width: min(var(--promo-width), calc(100vw - 48px));
+  border-radius: 28px;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(6, 18, 30, 0.96), rgba(8, 20, 33, 0.98));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.46);
+}
+
+.app-shell .promo-reel__window.is-fullscreen {
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+  border-radius: 0;
+  border: 0;
+}
+
+.app-shell .promo-reel__frame {
+  position: relative;
+  width: 100%;
+  height: var(--promo-height);
+  background: #030b14;
+}
+
+.app-shell .promo-reel__window.is-fullscreen .promo-reel__frame {
+  height: calc(100vh - 116px);
+}
+
+.app-shell .promo-reel__frame canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.app-shell .promo-reel__hud {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  right: 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.app-shell .promo-reel__eyebrow {
+  display: inline-flex;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #d8efff;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.app-shell .promo-reel__close {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(5, 15, 25, 0.76);
+  color: #f4fbff;
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.app-shell .promo-reel__caption {
+  position: absolute;
+  left: 22px;
+  right: 22px;
+  bottom: 18px;
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(4, 13, 22, 0.74);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.app-shell .promo-reel__caption strong {
+  font-size: 22px;
+  color: #ffffff;
+}
+
+.app-shell .promo-reel__caption span {
+  color: #d6e8f9;
+  line-height: 1.5;
+}
+
+.app-shell .promo-reel__controls {
+  display: grid;
+  gap: 16px;
+  padding: 18px 20px 20px;
+}
+
+.app-shell .promo-reel__buttons {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.app-shell .promo-reel__timeline {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: center;
+  color: #d6e8f9;
+  font-size: 14px;
+}
+
+.app-shell .promo-reel__timeline input[type="range"] {
+  width: 100%;
+}
+
+.app-shell .promo-reel__meta {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  color: #9ebbd8;
+  font-size: 13px;
+}
+
 .app-shell .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -1232,6 +1392,10 @@ html {
     grid-template-columns: 1fr;
   }
 
+  .app-shell .hero__actions .btn--signal {
+    margin-left: 0;
+  }
+
   .app-shell .about-system-layout {
     grid-template-columns: 1fr;
   }
@@ -1244,6 +1408,26 @@ html {
 @media (max-width: 720px) {
   .app-shell .hero__content {
     padding-top: 92px;
+  }
+
+  .app-shell .promo-reel {
+    padding: 12px;
+  }
+
+  .app-shell .promo-reel__caption strong {
+    font-size: 18px;
+  }
+
+  .app-shell .promo-reel__caption span {
+    font-size: 14px;
+  }
+
+  .app-shell .promo-reel__controls {
+    padding: 14px;
+  }
+
+  .app-shell .promo-reel__timeline {
+    grid-template-columns: 1fr;
   }
 
   .app-shell .hero h1 {

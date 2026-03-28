@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { AuthModal } from "../components/AuthModal";
 import { HeroVideo } from "../components/HeroVideo";
+import { PromoReelPlayer } from "../components/PromoReelPlayer";
 import { SectionHeader } from "../components/SectionHeader";
 import { comparisonCards, growthPoints, metrics, siteConfig } from "../data/siteContent";
 
@@ -178,6 +179,7 @@ const aiTechnicalSolutionPoints = [
 
 export function HomePage() {
   const [authOpen, setAuthOpen] = useState(false);
+  const [promoOpen, setPromoOpen] = useState(false);
 
   return (
     <main>
@@ -203,6 +205,9 @@ export function HomePage() {
             <Link className="btn btn--ghost-light" to="/about-system">
               О системе
             </Link>
+            <button className="btn btn--signal" type="button" onClick={() => setPromoOpen(true)}>
+              Видео о возможностях
+            </button>
           </div>
           <div className="hero__grid">
             {metrics.map((metric) => (
@@ -223,6 +228,8 @@ export function HomePage() {
           </div>
         </div>
       </section>
+
+      <PromoReelPlayer open={promoOpen} onClose={() => setPromoOpen(false)} />
 
       <section className="section section--dark" id="comparison">
         <div className="container">
