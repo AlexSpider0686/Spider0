@@ -1,4 +1,5 @@
 import { withAiRetry } from "./aiRetry";
+import { recognizeEvacuationPlanLayout } from "./evacuationPlanRecognition";
 
 function normalizeText(value) {
   return String(value || "")
@@ -260,6 +261,94 @@ function looksLikeRealSurfaceShot(meta) {
   return wall.edgeDensity < 0.2 || wall.saturation > 0.06 || ceiling.contrast < 40;
 }
 
+function scoreSurfaceShotSuitability(tokens, meta) {
+  const top = meta?.features?.topRegion;
+  const wall = meta?.features?.wallRegion;
+  const middle = meta?.features?.middleRegion;
+  const bottom = meta?.features?.bottomRegion;
+
+  if (!top || !wall || !middle || !bottom) {
+    return { score: 0, reasons: ["Недостаточно визуальных данных для проверки снимка."] };
+  }
+
+  let score = 0;
+  const reasons = [];
+  const indoorHintTokens = [
+    "office",
+    "ceiling",
+    "wall",
+    "room",
+    "corridor",
+    "hall",
+    "потолок",
+    "стена",
+    "офис",
+    "коридор",
+    "помещение",
+  ];
+
+  if ((meta.width || 0) >= 500 && (meta.height || 0) >= 500) {
+    score += 0.08;
+    reasons.push("Разрешение достаточно для анализа поверхности.");
+  }
+
+  const brightnessGap = Math.abs((top.brightness || 0) - (wall.brightness || 0));
+  if (brightnessGap >= 10) {
+    score += 0.16;
+    reasons.push("Есть различие между потолочной и стеновой зонами.");
+  }
+
+  if ((top.saturation || 0) <= (wall.saturation || 0) + 0.03) {
+    score += 0.1;
+    reasons.push("Верхняя часть кадра похожа на потолок.");
+  }
+
+  if ((wall.edgeDensity || 0) >= 0.02 && (wall.edgeDensity || 0) <= 0.18) {
+    score += 0.1;
+    reasons.push("Стеновая зона содержит допустимую фактуру поверхности.");
+  }
+
+  if ((top.edgeDensity || 0) <= 0.16) {
+    score += 0.08;
+    reasons.push("Верхняя зона не похожа на случайную перегруженную сцену.");
+  }
+
+  if ((middle.verticalEdgeDensity || 0) >= 0.015 || (middle.horizontalEdgeDensity || 0) >= 0.015) {
+    score += 0.07;
+    reasons.push("В кадре есть конструктивные границы помещения.");
+  }
+
+  if (tokens.some((token) => indoorHintTokens.includes(token))) {
+    score += 0.08;
+    reasons.push("Имя файла указывает на интерьерный снимок.");
+  }
+
+  if ((wall.saturation || 0) > 0.26 && (bottom.saturation || 0) > 0.24) {
+    score -= 0.18;
+    reasons.push("Кадр слишком насыщен и похож на нерелевантную сцену.");
+  }
+
+  if ((top.edgeDensity || 0) > 0.22 && (middle.edgeDensity || 0) > 0.22 && (bottom.edgeDensity || 0) > 0.22) {
+    score -= 0.18;
+    reasons.push("Весь кадр перегружен деталями и не похож на типовой снимок поверхности.");
+  }
+
+  if ((top.saturation || 0) > 0.24 && (wall.saturation || 0) > 0.24 && brightnessGap < 8) {
+    score -= 0.18;
+    reasons.push("Кадр не разделяется на зоны потолка и стены.");
+  }
+
+  if ((wall.edgeDensity || 0) < 0.01 && (top.edgeDensity || 0) < 0.01) {
+    score -= 0.14;
+    reasons.push("В снимке почти нет признаков поверхностей помещения.");
+  }
+
+  return {
+    score: Number(score.toFixed(2)),
+    reasons,
+  };
+}
+
 function summarizeConfidence(primary, fallbackType) {
   if (primary) return 0.86;
   if (fallbackType === "Смешанный") return 0.48;
@@ -358,7 +447,15 @@ function buildSurfaceSummary(wallMaterial, ceilingType, heightEstimate) {
   return `Определены вероятные типы конструкций: стены — ${wallMaterial}, потолок — ${ceilingType}. Высоту помещения по этому фото лучше подтвердить вручную.`;
 }
 
-async function executeAnalysis({ file, prompt }) {
+function buildPlanRecognitionSummary(planRecognition) {
+  const zoneSummaries = (planRecognition?.systems || [])
+    .map((item) => `${item.systemLabel}: ${item.zoneCount} зон`)
+    .join(", ");
+
+  return `План эвакуации распознан. Планировка: ${planRecognition.layoutType.toLowerCase()}, оценка качества съемки: ${planRecognition.captureQuality.label.toLowerCase()}, выделены зоны для техрешения (${zoneSummaries}).`;
+}
+
+async function executeAnalysis({ file, prompt, zones, systems }) {
   const normalizedName = normalizeText(file?.name || "");
   const tokens = normalizedName.split(/[\s._-]+/).filter(Boolean);
   const meta = await getImageMeta(file);
@@ -374,15 +471,30 @@ async function executeAnalysis({ file, prompt }) {
         suggestedAnswers: [],
       };
     }
+
+    const planRecognition = recognizeEvacuationPlanLayout({
+      prompt,
+      zones,
+      systems,
+      meta,
+    });
+
     return {
       accepted: true,
-      confidence: 0.84,
-      summary: "Обнаружены признаки плана эвакуации или маршрутной схемы.",
-      detections: ["План эвакуации подтвержден"],
+      confidence: Math.min(0.94, 0.74 + (planRecognition.captureQuality?.score || 0) * 0.18),
+      summary: buildPlanRecognitionSummary(planRecognition),
+      detections: [
+        "План эвакуации подтвержден",
+        `Планировка: ${planRecognition.layoutType}`,
+        `Качество съемки: ${planRecognition.captureQuality.label}`,
+        `Эвакуационных выходов/маршрутов: ~${planRecognition.egressCount}`,
+        ...planRecognition.systems.map((item) => `${item.systemLabel}: выделено ${item.zoneCount} зон`),
+      ],
       suggestedAnswers: prompt.targetQuestionIds.map((questionId) => ({
         questionId,
         value: true,
       })),
+      planRecognition,
     };
   }
 
