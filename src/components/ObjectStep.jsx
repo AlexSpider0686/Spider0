@@ -133,6 +133,7 @@ export default function ObjectStep({
 }) {
   const [regionQuery, setRegionQuery] = useState(objectData.regionName || "");
   const [surveyModalOpen, setSurveyModalOpen] = useState(false);
+  const [surveyRenderKey, setSurveyRenderKey] = useState(0);
   const regionItems = useMemo(() => searchRegions(regionQuery).slice(0, 20), [regionQuery]);
   const selectedObjectType = OBJECT_TYPES.find((item) => item.value === objectData.objectType);
   const activeSystemTypes = new Set((systems || []).map((item) => item.type));
@@ -153,6 +154,20 @@ export default function ObjectStep({
     document.body.classList.toggle("ai-survey-open", surveyModalOpen);
     return () => {
       document.body.classList.remove("ai-survey-open");
+    };
+  }, [surveyModalOpen]);
+
+  useEffect(() => {
+    if (!surveyModalOpen || typeof window === "undefined" || typeof document === "undefined") return undefined;
+    const forceSurveyRepaint = () => setSurveyRenderKey((prev) => prev + 1);
+    const handleVisibility = () => {
+      if (!document.hidden) forceSurveyRepaint();
+    };
+    window.addEventListener("focus", forceSurveyRepaint);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      window.removeEventListener("focus", forceSurveyRepaint);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [surveyModalOpen]);
 
@@ -627,6 +642,7 @@ export default function ObjectStep({
         <div className="ai-survey-modal" role="dialog" aria-modal="true" aria-label="AI-обследование объекта">
           <div className="ai-survey-modal__backdrop" />
           <div
+            key={surveyRenderKey}
             className="ai-survey-modal__card"
             onClick={(event) => event.stopPropagation()}
             onMouseDown={(event) => event.stopPropagation()}
@@ -696,6 +712,7 @@ export default function ObjectStep({
                               className="file-upload-input"
                               type="file"
                               accept="image/*"
+                              onClick={() => setSurveyRenderKey((prev) => prev + 1)}
                               onChange={async (event) => {
                                 const file = event.target.files?.[0];
                                 if (!file) return;
@@ -704,6 +721,7 @@ export default function ObjectStep({
                                 } catch {
                                 } finally {
                                   event.target.value = "";
+                                  setSurveyRenderKey((prev) => prev + 1);
                                 }
                               }}
                             />

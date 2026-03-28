@@ -311,9 +311,6 @@ select {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(245, 250, 255, 0.98));
   color: #173a60;
   isolation: isolate;
-  contain: layout paint;
-  transform: translateZ(0);
-  backface-visibility: hidden;
 }
 
 .ai-survey-modal__header {
@@ -401,7 +398,7 @@ body.ai-survey-open .bg-video-layer video {
 }
 
 body.ai-survey-open .bg-video-layer video {
-  opacity: 0.2 !important;
+  opacity: 0 !important;
 }
 
 body.ai-survey-open .primary-btn,
