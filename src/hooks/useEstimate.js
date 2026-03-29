@@ -7,7 +7,13 @@ import { fetchPricesByRequests, fetchVendorPrices } from "../lib/priceCollector"
 import { VENDOR_EQUIPMENT } from "../config/vendorConfig";
 import { DEFAULT_REGION_NAME, getRegionCoef } from "../config/regionsConfig";
 import { validateEstimateInput } from "../lib/input-normalization";
-import { appendManualApsProjectItem, recalculateApsProjectSnapshot, removeApsProjectItem } from "../lib/apsProjectEstimate";
+import {
+  appendManualApsProjectItem,
+  buildApsProjectPriceRequests,
+  buildApsProjectSnapshot,
+  recalculateApsProjectSnapshot,
+  removeApsProjectItem,
+} from "../lib/apsProjectEstimate";
 import { calculateProtectedArea } from "../lib/protectedArea";
 import { verifyObjectAddress as verifyObjectAddressOnline } from "../lib/addressVerification";
 import { createProjectIdentity } from "../lib/projectIdentity";
@@ -733,25 +739,75 @@ export default function useEstimate() {
     try {
       const snapshots = await Promise.all(
         candidateVendors.map(async (vendor) => {
+          if (system.type === "aps" && apsSnapshot?.active) {
+            const originalItems =
+              Array.isArray(apsSnapshot.originalItems) && apsSnapshot.originalItems.length ? apsSnapshot.originalItems : apsSnapshot.items || [];
+            const parsedProject = {
+              parsedAt: apsSnapshot.parsedAt || new Date().toISOString(),
+              gostStandard: apsSnapshot.gostStandard || "ГОСТ 21.110-2013",
+              linesScanned: apsSnapshot.linesScanned || 0,
+              pages: apsSnapshot.pages || 0,
+              items: originalItems,
+              metrics: apsSnapshot.metrics || {},
+              unrecognizedRows: apsSnapshot.unrecognizedRows || [],
+              parseQuality: apsSnapshot.parseQuality || {},
+              aiQuality: apsSnapshot.aiQuality || null,
+            };
+            const requests = buildApsProjectPriceRequests(originalItems, vendor);
+            const priceSnapshot = await fetchPricesByRequests(requests);
+            let vendorSpecificApsSnapshot = buildApsProjectSnapshot({
+              fileName: apsSnapshot.fileName || "aps-project.pdf",
+              parsedProject,
+              requests,
+              priceSnapshot,
+              objectData,
+              vendorName: vendor,
+            });
+
+            if (apsSnapshot.itemOverrides && Object.keys(apsSnapshot.itemOverrides).length) {
+              vendorSpecificApsSnapshot = recalculateApsProjectSnapshot(vendorSpecificApsSnapshot, apsSnapshot.itemOverrides, objectData);
+            }
+
+            return [
+              vendor,
+              {
+                priceSnapshot,
+                apsSnapshot: vendorSpecificApsSnapshot,
+              },
+            ];
+          }
+
           const canReuseCurrentSnapshot =
             vendor === currentVendor &&
             vendorPriceSnapshots?.[systemId]?.entries?.length &&
             String(vendorPriceSnapshots?.[systemId]?.vendorName || system.vendor || currentVendor) === String(vendor);
 
           if (canReuseCurrentSnapshot) {
-            return [vendor, vendorPriceSnapshots[systemId]];
+            return [
+              vendor,
+              {
+                priceSnapshot: vendorPriceSnapshots[systemId],
+                apsSnapshot: null,
+              },
+            ];
           }
 
           const snapshot = await fetchVendorPrices(system.type, vendor);
-          return [vendor, snapshot];
+          return [
+            vendor,
+            {
+              priceSnapshot: snapshot,
+              apsSnapshot: null,
+            },
+          ];
         })
       );
 
       const snapshotMap = Object.fromEntries(snapshots);
-      if (snapshotMap[currentVendor]) {
+      if (snapshotMap[currentVendor]?.priceSnapshot) {
         setVendorPriceSnapshots((prev) => ({
           ...prev,
-          [systemId]: snapshotMap[currentVendor],
+          [systemId]: snapshotMap[currentVendor].priceSnapshot,
         }));
       }
 
@@ -770,7 +826,11 @@ export default function useEstimate() {
 
         const comparisonSnapshots = {
           ...vendorPriceSnapshots,
-          [systemId]: snapshotMap[vendor],
+          [systemId]: snapshotMap[vendor]?.priceSnapshot || null,
+        };
+        const comparisonProjectSnapshots = {
+          ...apsProjectSnapshots,
+          [systemId]: snapshotMap[vendor]?.apsSnapshot || apsProjectSnapshots?.[systemId] || null,
         };
 
         const { systemsDetailed } = calculateEstimateEngine(
@@ -779,12 +839,12 @@ export default function useEstimate() {
           budget,
           effectiveObjectData,
           comparisonSnapshots,
-          apsProjectSnapshots,
+          comparisonProjectSnapshots,
           technicalSolution.appliedAnswers
         );
 
         const comparisonResult = systemsDetailed[systemIndex] || {};
-        const snapshot = snapshotMap[vendor];
+        const snapshot = snapshotMap[vendor]?.priceSnapshot;
         const pricedSourceCount =
           snapshot?.entries
             ?.filter((item) => (item.sourceCount || 0) > 0)
