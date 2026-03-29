@@ -329,6 +329,7 @@ export default function SystemsStep({
           const manufacturerSuccess = manufacturerMatchedUrls.length > 0;
           const recheckRows = (snapshot?.entries || []).filter((item) => item.recheckRequired);
           const detectedVendor = apsSnapshot?.detectedVendor || system.vendor;
+          const vendorLockedByProject = Boolean(projectBasedMode && detectedVendor);
 
           return (
             <div className={`system-card ${projectBasedMode ? "project-based-mode" : ""}`} key={system.id}>
@@ -365,10 +366,17 @@ export default function SystemsStep({
 
                     <div className="input-card compact">
                       <label>Вендор</label>
+                      {vendorLockedByProject ? (
+                        <>
+                          <input type="text" value={detectedVendor} readOnly disabled title="Вендор определен автоматически по спецификации из проекта." />
+                          <small className="hint-inline">Определен автоматически по спецификации проекта</small>
+                        </>
+                      ) : null}
                       <select
                         value={system.vendor}
                         onChange={(event) => updateSystem(system.id, "vendor", event.target.value)}
                         disabled={projectBasedMode}
+                        style={vendorLockedByProject ? { display: "none" } : undefined}
                         title="Вендор влияет на ценовой профиль, коэффициенты и итог системы. Базовый вендор применяйте, если бренд еще не выбран и нужна нейтральная рыночная оценка."
                       >
                         {vendorList.map((vendor) => (
