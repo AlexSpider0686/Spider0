@@ -17,6 +17,11 @@ function numericAnswer(answers, key, fallback = 0) {
   return Number.isFinite(value) ? value : fallback;
 }
 
+function boolAnswer(answers, key, fallback = false) {
+  if (typeof answers?.[key] === "boolean") return answers[key];
+  return fallback;
+}
+
 function collectRecognizedPlanData(photoAnalyses, systemType) {
   return Object.values(photoAnalyses || {}).reduce(
     (acc, analysis) => {
@@ -94,7 +99,7 @@ function buildPlanSpecRows(systemType, recognizedPlanData) {
       ? "Зональное деление СОУЭ по планировкам"
       : systemType === "sots"
         ? "Охранные зоны СОТС по планировкам"
-      : "ЗКСПС АПС по планировкам";
+        : "ЗКСПС АПС по планировкам";
 
   return [
     {
@@ -160,6 +165,10 @@ function buildZoneMaterials(systemType, zones, answers) {
     const wallMaterials = firstAnswer(answers, `zone-${zone.id}-wall-material`, []);
     const ceilingTypes = firstAnswer(answers, `zone-${zone.id}-ceiling-type`, []);
     const ceilingHeight = numericAnswer(answers, `zone-${zone.id}-ceiling-height`, 0);
+    const routeMethods = firstAnswer(answers, `zone-${zone.id}-corridor-route-method`, []);
+    const raisedFloor = boolAnswer(answers, `zone-${zone.id}-raised-floor-present`);
+    const ceilingVoid = boolAnswer(answers, `zone-${zone.id}-ceiling-void-present`);
+    const trayRouting = boolAnswer(answers, `zone-${zone.id}-tray-routing-present`);
     const rows = [];
 
     if (wallMaterials.includes("Бетон")) {
@@ -192,24 +201,74 @@ function buildZoneMaterials(systemType, zones, answers) {
       });
     }
 
+    if (trayRouting || routeMethods.includes("В лотке")) {
+      rows.push({
+        key: `${systemType}-zone-${zone.id}-trays`,
+        name: `Кабельные лотки для зоны "${zone.name}"`,
+        qty: Math.max(Math.ceil(num(zone.area) / 25), 1),
+        unit: "м",
+        basis: "Маршрут прокладки определен по фото коридора: лотковая трасса",
+      });
+    }
+
+    if (routeMethods.includes("В коробе")) {
+      rows.push({
+        key: `${systemType}-zone-${zone.id}-boxes`,
+        name: `Кабель-канал / короб для зоны "${zone.name}"`,
+        qty: Math.max(Math.ceil(num(zone.area) / 28), 1),
+        unit: "м",
+        basis: "Маршрут прокладки определен по фото коридора: короб",
+      });
+    }
+
+    if (routeMethods.includes("В гофре/трубе")) {
+      rows.push({
+        key: `${systemType}-zone-${zone.id}-conduit`,
+        name: `Гофра/труба для зоны "${zone.name}"`,
+        qty: Math.max(Math.ceil(num(zone.area) / 22), 1),
+        unit: "м",
+        basis: "Маршрут прокладки определен по фото коридора: труба/гофра",
+      });
+    }
+
+    if (ceilingVoid || routeMethods.includes("В запотолочном пространстве")) {
+      rows.push({
+        key: `${systemType}-zone-${zone.id}-ceiling-void`,
+        name: `Крепеж и подвесы для запотолочного пространства в зоне "${zone.name}"`,
+        qty: Math.max(Math.ceil(num(zone.area) / 35), 1),
+        unit: "компл.",
+        basis: "По обследованию подтверждено запотолочное пространство для трасс",
+      });
+    }
+
+    if (raisedFloor || routeMethods.includes("Под фальш-полом")) {
+      rows.push({
+        key: `${systemType}-zone-${zone.id}-raised-floor`,
+        name: `Материалы для прокладки под фальш-полом в зоне "${zone.name}"`,
+        qty: Math.max(Math.ceil(num(zone.area) / 30), 1),
+        unit: "компл.",
+        basis: "По обследованию подтвержден фальш-пол",
+      });
+    }
+
     return rows;
   });
 }
 
 function buildBaseSpecRows(systemType, result, apsSnapshot) {
   if (systemType === "aps" && apsSnapshot?.active && Array.isArray(apsSnapshot.items) && apsSnapshot.items.length) {
-    return apsSnapshot.items.slice(0, 12).map((item, index) => ({
+    return apsSnapshot.items.map((item, index) => ({
       key: item.id || `${systemType}-pdf-${index + 1}`,
       name: item.model ? `${item.name} (${item.model})` : item.name,
       qty: Math.max(num(item.qty, 0), 0),
       unit: item.unit || "шт",
-      basis: item.positionNumber ? `Позиция ${item.positionNumber} из проектной спецификации` : "Проектная спецификация APS",
+      basis: item.position ? `Позиция ${item.position} из проектной спецификации` : "Проектная спецификация APS",
     }));
   }
 
   const bom = Array.isArray(result?.bom) ? result.bom : [];
   if (bom.length) {
-    return bom.slice(0, 10).map((item, index) => ({
+    return bom.map((item, index) => ({
       key: item.code || `${systemType}-bom-${index + 1}`,
       name: item.name,
       qty: Math.max(num(item.qty, 0), 0),
@@ -219,13 +278,34 @@ function buildBaseSpecRows(systemType, result, apsSnapshot) {
   }
 
   const keyEquipment = Array.isArray(result?.equipmentData?.keyEquipment) ? result.equipmentData.keyEquipment : [];
-  return keyEquipment.slice(0, 8).map((item, index) => ({
+  return keyEquipment.map((item, index) => ({
     key: item.code || `${systemType}-key-${index + 1}`,
     name: item.label || item.name || `Позиция ${index + 1}`,
     qty: Math.max(num(item.qty, result?.units || 0), 0),
     unit: "шт",
     basis: "Ключевое оборудование по конфигуратору системы",
   }));
+}
+
+function buildRouteInfluence(zones, answers) {
+  const routeCounts = {
+    tray: 0,
+    conduit: 0,
+    box: 0,
+    ceilingVoid: 0,
+    raisedFloor: 0,
+  };
+
+  (zones || []).forEach((zone) => {
+    const routeMethods = firstAnswer(answers, `zone-${zone.id}-corridor-route-method`, []);
+    if (routeMethods.includes("В лотке") || boolAnswer(answers, `zone-${zone.id}-tray-routing-present`)) routeCounts.tray += 1;
+    if (routeMethods.includes("В гофре/трубе")) routeCounts.conduit += 1;
+    if (routeMethods.includes("В коробе")) routeCounts.box += 1;
+    if (routeMethods.includes("В запотолочном пространстве") || boolAnswer(answers, `zone-${zone.id}-ceiling-void-present`)) routeCounts.ceilingVoid += 1;
+    if (routeMethods.includes("Под фальш-полом") || boolAnswer(answers, `zone-${zone.id}-raised-floor-present`)) routeCounts.raisedFloor += 1;
+  });
+
+  return routeCounts;
 }
 
 export function buildAiTechnicalRecommendations({
@@ -251,6 +331,7 @@ export function buildAiTechnicalRecommendations({
             objectData,
             zones,
           });
+
     const effectiveZoneData = fallbackZoneModel
       ? {
           ...recognizedPlanData,
@@ -264,12 +345,16 @@ export function buildAiTechnicalRecommendations({
           forecastedFloors: fallbackZoneModel.forecastedFloors,
         }
       : recognizedPlanData;
+
     const areaComparison = summarizeAreaComparison(effectiveZoneData.areaComparisons || []);
+    const routeInfluence = buildRouteInfluence(zones, surveyAnswers);
+
     const materialRows = [
       ...buildStatusMaterials(system.type, objectData, markerUnits, surveyAnswers, zones),
       ...buildZoneMaterials(system.type, zones, surveyAnswers),
       ...buildPlanSpecRows(system.type, effectiveZoneData),
     ];
+
     const combinedRows = [...baseRows, ...materialRows].map((row) => {
       const override = specOverrides?.[system.id]?.[row.key] || {};
       return {
@@ -284,7 +369,13 @@ export function buildAiTechnicalRecommendations({
       zones && zones.length
         ? zones.reduce((sum, zone) => sum + numericAnswer(surveyAnswers, `zone-${zone.id}-ceiling-height`, 0), 0) / zones.length
         : 0;
-    const readinessScoreBase = 66 + (system.hasWorkingDocs ? 16 : 0) + (integrationCount > 0 ? 6 : 0) + (lowCurrentRooms > 0 ? 4 : 0);
+
+    const readinessScoreBase =
+      66 +
+      (system.hasWorkingDocs ? 16 : 0) +
+      (integrationCount > 0 ? 6 : 0) +
+      (lowCurrentRooms > 0 ? 4 : 0) +
+      (routeInfluence.tray > 0 || routeInfluence.ceilingVoid > 0 || routeInfluence.raisedFloor > 0 ? 4 : 0);
 
     return {
       systemId: system.id,
@@ -303,13 +394,14 @@ export function buildAiTechnicalRecommendations({
               system.type === "aps" ? "ЗКСПС" : system.type === "soue" ? "зон оповещения" : "охранных зон"
             } для ${system.type.toUpperCase()} (${effectiveZoneData.uploadedPlans || effectiveZoneData.planCount} принятых план(ов) из ${
               effectiveZoneData.expectedFloors || "не задано"
-            } этажей, типы планировки: ${Array.from(
-              effectiveZoneData.layoutTypes
-            ).join(", ")}, источники: ${Array.from(effectiveZoneData.validationSources).join(", ")}).`
+            } этажей).`
           : `Планы по ${system.type.toUpperCase()} не загружены или недостаточно надежны, поэтому используется fallback-алгоритм с перепроверкой по данным объекта.`,
         areaComparison
           ? `Сравнение площадей: пользователь ввел ${areaComparison.userTotalArea} м², по планировкам и фото прогнозируется ${areaComparison.predictedTotalArea} м² (отклонение ${areaComparison.deviationPercent}%).`
           : "Сравнение площадей по планировкам недоступно: используется только введенная пользователем площадь.",
+        routeInfluence.tray || routeInfluence.conduit || routeInfluence.box || routeInfluence.ceilingVoid || routeInfluence.raisedFloor
+          ? `Фото коридоров уточнили способы прокладки: лотки ${routeInfluence.tray}, труба/гофра ${routeInfluence.conduit}, короб ${routeInfluence.box}, запотолок ${routeInfluence.ceilingVoid}, фальш-пол ${routeInfluence.raisedFloor}.`
+          : "Фото коридоров не дали выраженных признаков трасс, поэтому применены типовые предпосылки прокладки.",
         ...(effectiveZoneData.warnings || []).slice(0, 2),
         ...(effectiveZoneData.notes || []).slice(0, 2),
       ],
@@ -322,6 +414,10 @@ export function buildAiTechnicalRecommendations({
         ...(effectiveZoneData.totalZones > 0
           ? [{ label: system.type === "aps" ? "ЗКСПС" : "Зоны по расчету", value: `${effectiveZoneData.totalZones} зон` }]
           : []),
+        { label: "Лотковые трассы", value: `${routeInfluence.tray}` },
+        { label: "Запотолочные трассы", value: `${routeInfluence.ceilingVoid}` },
+        { label: "Фальш-пол", value: `${routeInfluence.raisedFloor}` },
+        { label: "Средняя высота", value: avgZoneHeight ? `${avgZoneHeight.toFixed(1)} м` : "нет данных" },
       ],
       recognizedPlanData: effectiveZoneData,
     };

@@ -21,7 +21,8 @@ function summarizeAiGuard(systemResults) {
   return { maxRisk, maxUplift, totalMarketFloor };
 }
 
-export default function CalculationLogicStep({ objectData, systems, systemResults, budget, totals, projectRisks = [] }) {
+export default function CalculationLogicStep({ objectData, effectiveObjectData, systems, systemResults, budget, totals, projectRisks = [] }) {
+  const calcObjectData = effectiveObjectData || objectData;
   const conditionFactor = useMemo(
     () =>
       toNumber(budget.heightCoef, 1) *
@@ -33,8 +34,8 @@ export default function CalculationLogicStep({ objectData, systems, systemResult
     [budget]
   );
 
-  const exploitedBuildingCoef = objectData?.buildingStatus === "operational" ? 1.2 : 1;
-  const regionalCoef = Math.max(toNumber(objectData?.regionCoef, 1), 1);
+  const exploitedBuildingCoef = calcObjectData?.buildingStatus === "operational" ? 1.2 : 1;
+  const regionalCoef = Math.max(toNumber(calcObjectData?.regionCoef, 1), 1);
   const calculatedDesignRows = systemResults.filter((row) => !row.designSkipped);
   const totalDesignHours = calculatedDesignRows.reduce((sum, row) => sum + toNumber(row.designHours, 0), 0);
   const avgDesignTeam =
@@ -65,7 +66,7 @@ export default function CalculationLogicStep({ objectData, systems, systemResult
         <article className="logic-card">
           <h3>1. Входные параметры объекта</h3>
           <p>Расчет начинается с типа объекта, площади, защищаемой площади, этажности, региона, статуса здания и выбранных систем. Эти данные формируют профиль сложности и стартовые объемы по каждой системе.</p>
-          <p>Сейчас: площадь <strong>{num(objectData.totalArea, 0)} м²</strong>, систем <strong>{num(systems.length, 0)}</strong>, регион <strong>{objectData.regionName}</strong> ({coef(regionalCoef)}), статус здания <strong>{objectData.buildingStatus === "operational" ? "действующее" : "строящееся"}</strong> ({coef(exploitedBuildingCoef)}).</p>
+          <p>Сейчас: площадь <strong>{num(calcObjectData.totalArea, 0)} м²</strong>, систем <strong>{num(systems.length, 0)}</strong>, регион <strong>{calcObjectData.regionName}</strong> ({coef(regionalCoef)}), статус здания <strong>{calcObjectData.buildingStatus === "operational" ? "действующее" : "строящееся"}</strong> ({coef(exploitedBuildingCoef)}).</p>
         </article>
 
         <article className="logic-card">

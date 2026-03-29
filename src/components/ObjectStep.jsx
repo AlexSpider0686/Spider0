@@ -51,6 +51,8 @@ const OBJECT_TYPE_IMAGE_FALLBACKS = {
 
 function renderChecklistInput(question, value, onChange, options = {}) {
   const disabled = options.disabled === true;
+  const toggleValue = options.toggleValue;
+  const onToggle = options.onToggle;
   if (question.type === "boolean") {
     return (
       <div className="ai-checklist-bool">
@@ -65,6 +67,25 @@ function renderChecklistInput(question, value, onChange, options = {}) {
   }
 
   if (question.type === "number") {
+    if (question.id?.endsWith("-mount-height-limit")) {
+      return (
+        <div className="ai-mount-limit-control">
+          <label className="ai-mount-limit-toggle">
+            <input type="checkbox" checked={toggleValue === true} onChange={(event) => onToggle?.(event.target.checked)} />
+            <span>Учитывать в расчетах</span>
+          </label>
+          <input
+            type="number"
+            min={question.min ?? 0}
+            max={question.max ?? undefined}
+            value={value ?? ""}
+            placeholder={question.placeholder || "Введите значение"}
+            disabled={disabled}
+            onChange={(event) => onChange(toNumber(event.target.value))}
+          />
+        </div>
+      );
+    }
     return (
       <input
         type="number"
@@ -131,6 +152,8 @@ export default function ObjectStep({
   aiSurveyPlan,
   aiSurveyCompletion,
   appliedAiSurveyCompletion,
+  draftSurveyAreaRefinement,
+  appliedSurveyAreaRefinement,
   startAiSurvey,
   updateAiSurveyAnswer,
   analyzeAiSurveyPhoto,
@@ -311,6 +334,12 @@ export default function ObjectStep({
         <div className="input-card">
           <label>Площадь по объекту, м²</label>
           <input type="number" value={objectData.totalArea} onChange={(event) => updateObject("totalArea", toNumber(event.target.value))} />
+          {draftSurveyAreaRefinement ? (
+            <small className="hint-inline">
+              AI-уточнение по планировкам и геометрии фото: {num(draftSurveyAreaRefinement.adjustedTotalArea, 1)} м²
+              {appliedSurveyAreaRefinement ? " участвует в расчетах." : " будет учтено после загрузки данных обследования."}
+            </small>
+          ) : null}
         </div>
 
         <div className="input-card">
@@ -714,7 +743,9 @@ export default function ObjectStep({
 
                     <div className="ai-checklist-grid">
                       {section.questions.map((question) => {
+                        if (question.id?.endsWith("-mount-height-limit-enabled")) return null;
                         const enabled = isQuestionEnabled(question);
+                        const toggleQuestionId = question.enabledByQuestionId;
                         return (
                           <div className={`input-card ai-checklist-question ${enabled ? "" : "disabled"}`} key={question.id}>
                             <label>
@@ -725,7 +756,11 @@ export default function ObjectStep({
                               question,
                               technicalSolution?.answers?.[question.id],
                               (value) => updateAiSurveyAnswer(question.id, value),
-                              { disabled: !enabled }
+                              {
+                                disabled: !enabled,
+                                toggleValue: toggleQuestionId ? technicalSolution?.answers?.[toggleQuestionId] : undefined,
+                                onToggle: toggleQuestionId ? (value) => updateAiSurveyAnswer(toggleQuestionId, value) : undefined,
+                              }
                             )}
                           </div>
                         );

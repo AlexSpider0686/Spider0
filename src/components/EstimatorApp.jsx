@@ -30,15 +30,16 @@ export default function EstimatorApp() {
   const steps = [
     { key: "object", label: "Объект", icon: Building2 },
     { key: "systems", label: "Системы", icon: Layers },
-    { key: "logic", label: "Логика расчета", icon: FileText },
     { key: "design", label: "Проектирование", icon: Ruler },
     { key: "budget", label: "Бюджет", icon: Wallet },
     { key: "breakdown", label: "Стоимость проекта", icon: PieChart },
+    { key: "logic", label: "Логика расчетов", icon: FileText },
     { key: "risks", label: "AI-риски проекта", icon: ShieldAlert },
   ];
+  const stepRows = [steps.slice(0, 4), steps.slice(4)];
 
   const currentVideoUrl = useMemo(() => BACKGROUND_VIDEO_URLS[Math.min(videoIndex, BACKGROUND_VIDEO_URLS.length - 1)], [videoIndex]);
-  const hideSummary = vm.step >= 5;
+  const hideSummary = vm.step >= 4;
 
   useEffect(() => {
     setVideoReady(false);
@@ -97,25 +98,31 @@ export default function EstimatorApp() {
 
         <section className="stepper-card">
           <div className="stepper">
-            {steps.map((item, index) => {
-              const Icon = item.icon;
-              const active = index === vm.step;
-              const done = index < vm.step;
-              return (
-                <button
-                  key={item.key}
-                  className={`step-chip ${active ? "active" : ""} ${done ? "done" : ""}`}
-                  onClick={() => vm.setStep(index)}
-                  type="button"
-                  disabled={!authorized}
-                >
-                  <span className="step-icon">
-                    <Icon size={14} />
-                  </span>
-                  <span>{item.label}</span>
-                </button>
-              );
-            })}
+            {stepRows.map((row, rowIndex) => (
+              <div className="stepper-row" key={`step-row-${rowIndex}`}>
+                {row.map((item) => {
+                  const index = steps.findIndex((step) => step.key === item.key);
+                  const Icon = item.icon;
+                  const active = index === vm.step;
+                  const done = index < vm.step;
+
+                  return (
+                    <button
+                      key={item.key}
+                      className={`step-chip ${active ? "active" : ""} ${done ? "done" : ""}`}
+                      onClick={() => vm.setStep(index)}
+                      type="button"
+                      disabled={!authorized}
+                    >
+                      <span className="step-icon">
+                        <Icon size={16} />
+                      </span>
+                      <span>{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
           </div>
         </section>
 
@@ -124,8 +131,8 @@ export default function EstimatorApp() {
         {vm.step === 2 ? <ProjectDesignStep {...vm} /> : null}
         {vm.step === 3 ? <BudgetStep {...vm} /> : null}
         {vm.step === 4 ? <CostBreakdownStep systemResults={vm.systemResults} totals={vm.totals} /> : null}
-        {vm.step === 5 ? <ProjectRisksStep projectRisks={vm.projectRisks} /> : null}
-        {vm.step === 6 ? <CalculationLogicStep {...vm} /> : null}
+        {vm.step === 5 ? <CalculationLogicStep {...vm} /> : null}
+        {vm.step === 6 ? <ProjectRisksStep projectRisks={vm.projectRisks} /> : null}
 
         {!hideSummary ? <Summary totals={vm.totals} systemResults={vm.systemResults} objectData={vm.objectData} /> : null}
       </div>

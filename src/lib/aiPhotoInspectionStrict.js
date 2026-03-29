@@ -103,6 +103,23 @@ function analyzeRegion(imageData, width, xStart, xEnd, yStart, yEnd) {
   }
 
   if (!pixelCount) {
+    const detections =
+      prompt?.type === "corridor_scan" && corridorRouting
+        ? [
+            `Способ прокладки: ${corridorRouting.methods.join(", ")}`,
+            corridorRouting.hasTrayRouting ? "Определены признаки лотковых трасс" : "Явные признаки лотков не найдены",
+            corridorRouting.hasCeilingVoid ? "Определено запотолочное пространство" : "Запотолочное пространство не подтверждено",
+            corridorRouting.hasRaisedFloor ? "Определен фальш-пол" : "Фальш-пол не подтвержден",
+            `Оценка пригодности снимка: ${suitability.score}`,
+          ]
+        : [
+            `РЎС‚РµРЅС‹: ${wallMaterial}`,
+            `РџРѕС‚РѕР»РѕРє: ${ceilingType}`,
+            heightEstimate ? `Р’С‹СЃРѕС‚Р° РїРѕРјРµС‰РµРЅРёСЏ: РѕРєРѕР»Рѕ ${heightEstimate.value} Рј` : "Р’С‹СЃРѕС‚Р° РїРѕРјРµС‰РµРЅРёСЏ: РЅСѓР¶РµРЅ СЂСѓС‡РЅРѕР№ РІРІРѕРґ",
+            `РћС†РµРЅРєР° РїСЂРёРіРѕРґРЅРѕСЃС‚Рё СЃРЅРёРјРєР°: ${suitability.score}`,
+            "Р—Р°С‰РёС‚Р° Р°РєС‚РёРІРЅР°: РЅРµРїРѕРґС…РѕРґСЏС‰РёРµ С„РѕС‚Рѕ РЅРµ РїРѕРїР°РґР°СЋС‚ РІ С‡РµРє-Р»РёСЃС‚",
+          ];
+
     return {
       brightness: 0,
       contrast: 0,
@@ -551,6 +568,29 @@ function buildSurfaceSummary(wallMaterial, ceilingType, heightEstimate) {
   return `Определены вероятные типы конструкций: стены — ${wallMaterial}, потолок — ${ceilingType}. Высоту помещения по этому фото лучше подтвердить вручную.`;
 }
 
+function inferCorridorRouting(meta, ceilingType) {
+  const features = meta?.features || {};
+  const sceneColors = features.sceneColors || {};
+  const layout = features.layout || {};
+  const top = features.top || {};
+  const middle = features.middle || {};
+  const methods = [];
+
+  if ((middle.horizontalEdgeDensity || 0) > 0.03 || (middle.lineDensity || 0) > 0.2) methods.push("В лотке");
+  if ((layout.boundaryConfidence || 0) > 0.24 && (top.brightness || 0) < 170 && ceilingType !== "Открытый") methods.push("В запотолочном пространстве");
+  if ((sceneColors.darkRatio || 0) > 0.22 && (features.bottom?.textureComplexity || 0) > 0.24) methods.push("Под фальш-полом");
+  if ((middle.verticalEdgeDensity || 0) > 0.025 && (middle.horizontalEdgeDensity || 0) < 0.02) methods.push("В коробе");
+  if ((middle.verticalEdgeDensity || 0) > 0.03 && (sceneColors.neutralRatio || 0) > 0.55) methods.push("В гофре/трубе");
+  if (!methods.length) methods.push("Открыто по основанию");
+
+  return {
+    methods: [...new Set(methods)],
+    hasRaisedFloor: methods.includes("Под фальш-полом"),
+    hasCeilingVoid: methods.includes("В запотолочном пространстве"),
+    hasTrayRouting: methods.includes("В лотке"),
+  };
+}
+
 function buildPlanRecognitionSummary(planRecognition) {
   const zoneSummaries = (planRecognition?.systems || [])
     .map((item) => `${item.systemLabel}: ${item.zoneCount} ${item.zoneTerm}`)
@@ -632,7 +672,7 @@ async function executeAnalysis({ file, prompt, zones, systems, objectData, photo
     };
   }
 
-  if (prompt?.type === "surface_scan") {
+  if (prompt?.type === "surface_scan" || prompt?.type === "corridor_scan") {
     const suitability = scoreSurfaceSuitability(tokens, meta);
     const sceneColors = meta?.features?.sceneColors;
     const obviousOutdoor =
@@ -665,20 +705,31 @@ async function executeAnalysis({ file, prompt, zones, systems, objectData, photo
       };
     }
 
-    const suggestedAnswers = [
-      { questionId: prompt.targetQuestionIds[0], value: [wallMaterial] },
-      { questionId: prompt.targetQuestionIds[1], value: [ceilingType] },
-    ];
-
-    if (heightEstimate && prompt.targetQuestionIds[2]) {
-      suggestedAnswers.push({ questionId: prompt.targetQuestionIds[2], value: heightEstimate.value });
-    }
+    const corridorRouting = prompt?.type === "corridor_scan" ? inferCorridorRouting(meta, ceilingType) : null;
+    const suggestedAnswers =
+      prompt?.type === "corridor_scan" && corridorRouting
+        ? [
+            prompt.targetQuestionIds[0] ? { questionId: prompt.targetQuestionIds[0], value: corridorRouting.methods } : null,
+            prompt.targetQuestionIds[1] ? { questionId: prompt.targetQuestionIds[1], value: corridorRouting.hasRaisedFloor } : null,
+            prompt.targetQuestionIds[2] ? { questionId: prompt.targetQuestionIds[2], value: corridorRouting.hasCeilingVoid } : null,
+            prompt.targetQuestionIds[3] ? { questionId: prompt.targetQuestionIds[3], value: corridorRouting.hasTrayRouting } : null,
+          ].filter(Boolean)
+        : [
+            { questionId: prompt.targetQuestionIds[0], value: [wallMaterial] },
+            { questionId: prompt.targetQuestionIds[1], value: [ceilingType] },
+            heightEstimate && prompt.targetQuestionIds[2]
+              ? { questionId: prompt.targetQuestionIds[2], value: heightEstimate.value }
+              : null,
+          ].filter(Boolean);
 
     return {
       accepted: true,
       confidence: Math.min(0.93, 0.45 + suitability.score + (heightEstimate?.confidence || 0) * 0.15),
-      summary: buildSurfaceSummary(wallMaterial, ceilingType, heightEstimate),
-      detections: [
+      summary:
+        prompt?.type === "corridor_scan" && corridorRouting
+          ? `Определены вероятные способы прокладки: ${corridorRouting.methods.join(", ")}.`
+          : buildSurfaceSummary(wallMaterial, ceilingType, heightEstimate),
+      detections: prompt?.type === "corridor_scan" && corridorRouting ? detections : [
         `Стены: ${wallMaterial}`,
         `Потолок: ${ceilingType}`,
         heightEstimate ? `Высота помещения: около ${heightEstimate.value} м` : "Высота помещения: нужен ручной ввод",

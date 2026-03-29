@@ -216,6 +216,21 @@ select {
   gap: 6px;
 }
 
+.ai-photo-card__head {
+  flex-wrap: wrap;
+}
+
+.ai-photo-card__head .file-upload-btn,
+.ai-photo-refresh-btn {
+  min-height: 34px;
+  min-width: 118px;
+  justify-content: center;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
 .ai-checklist-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -236,6 +251,19 @@ select {
 
 .ai-checklist-question.disabled input {
   background: rgba(226, 232, 240, 0.55);
+}
+
+.ai-mount-limit-control {
+  display: grid;
+  gap: 8px;
+}
+
+.ai-mount-limit-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .ai-inline-mark {

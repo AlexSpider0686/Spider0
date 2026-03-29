@@ -16,6 +16,7 @@ import { buildAiSurveyPlan, calculateAiSurveyCompletion } from "../lib/aiTechnic
 import { buildAiTechnicalRecommendations } from "../lib/aiTechnicalConfigurator";
 import { buildAiProjectRisks } from "../lib/aiProjectRiskEngine";
 import { aggregatePlanRecognitions } from "../lib/evacuationPlanRecognition";
+import { downloadSystemSpecificationExcel } from "../lib/specExport";
 
 function removeById(mapObject, id) {
   if (!(id in mapObject)) return mapObject;
@@ -39,6 +40,48 @@ function removeManyByIds(mapObject, ids = []) {
 
 function hasKeys(value) {
   return Boolean(value && Object.keys(value).length);
+}
+
+function deriveSurveyAreaRefinement(photoAnalyses = {}, fallbackTotalArea = 0) {
+  const byZone = new Map();
+
+  Object.values(photoAnalyses || {}).forEach((analysis) => {
+    if (analysis?.accepted === false) return;
+    const comparison = analysis?.planRecognition?.areaComparison;
+    if (!comparison) return;
+    const zoneKey = String(analysis?.zoneId || analysis?.planRecognition?.zoneId || `zone-${byZone.size + 1}`);
+    byZone.set(zoneKey, comparison);
+  });
+
+  if (!byZone.size) return null;
+
+  const aggregate = Array.from(byZone.values()).reduce(
+    (sum, item) => {
+      sum.userTotalArea += num(item?.userTotalArea, 0);
+      sum.predictedTotalArea += num(item?.predictedTotalArea, 0);
+      sum.recognizedAverageFloorArea += num(item?.recognizedAverageFloorArea, 0);
+      return sum;
+    },
+    {
+      userTotalArea: 0,
+      predictedTotalArea: 0,
+      recognizedAverageFloorArea: 0,
+    }
+  );
+
+  const userTotalArea = aggregate.userTotalArea || num(fallbackTotalArea, 0);
+  const predictedTotalArea = aggregate.predictedTotalArea || userTotalArea;
+  const adjustedTotalArea = Number(((predictedTotalArea * 0.75 + userTotalArea * 0.25) || userTotalArea).toFixed(1));
+  const deviationPercent = userTotalArea > 0 ? Number((((adjustedTotalArea - userTotalArea) / userTotalArea) * 100).toFixed(1)) : 0;
+
+  return {
+    sourceZones: byZone.size,
+    userTotalArea: Number(userTotalArea.toFixed(1)),
+    predictedTotalArea: Number(predictedTotalArea.toFixed(1)),
+    adjustedTotalArea,
+    recognizedAverageFloorArea: Number((aggregate.recognizedAverageFloorArea / Math.max(byZone.size, 1)).toFixed(1)),
+    deviationPercent,
+  };
 }
 
 export default function useEstimate() {
@@ -87,22 +130,54 @@ export default function useEstimate() {
   });
 
   const pricingSignaturesRef = useRef(new Map());
-  const protectedAreaMeta = useMemo(() => calculateProtectedArea(objectData), [objectData]);
+  const appliedSurveyAreaRefinement = useMemo(
+    () => deriveSurveyAreaRefinement(technicalSolution.appliedPhotoAnalyses, objectData.totalArea),
+    [technicalSolution.appliedPhotoAnalyses, objectData.totalArea]
+  );
+  const draftSurveyAreaRefinement = useMemo(
+    () => deriveSurveyAreaRefinement(technicalSolution.photoAnalyses, objectData.totalArea),
+    [technicalSolution.photoAnalyses, objectData.totalArea]
+  );
+  const effectiveObjectData = useMemo(
+    () =>
+      appliedSurveyAreaRefinement
+        ? {
+            ...objectData,
+            totalArea: appliedSurveyAreaRefinement.adjustedTotalArea,
+            userDeclaredTotalArea: objectData.totalArea,
+            surveyAdjustedTotalArea: appliedSurveyAreaRefinement.adjustedTotalArea,
+          }
+        : objectData,
+    [objectData, appliedSurveyAreaRefinement]
+  );
+  const surveyPlanObjectData = useMemo(
+    () =>
+      draftSurveyAreaRefinement
+        ? {
+            ...objectData,
+            totalArea: draftSurveyAreaRefinement.adjustedTotalArea,
+            userDeclaredTotalArea: objectData.totalArea,
+            surveyAdjustedTotalArea: draftSurveyAreaRefinement.adjustedTotalArea,
+          }
+        : objectData,
+    [objectData, draftSurveyAreaRefinement]
+  );
+  const protectedAreaMeta = useMemo(() => calculateProtectedArea(effectiveObjectData), [effectiveObjectData]);
   const recalculatedArea = protectedAreaMeta.protectedAreaM2;
   const { systemsDetailed: systemResults, totals } = useMemo(
-    () => calculateEstimateEngine(systems, zones, budget, objectData, vendorPriceSnapshots, apsProjectSnapshots, technicalSolution.appliedAnswers),
-    [systems, zones, budget, objectData, vendorPriceSnapshots, apsProjectSnapshots, technicalSolution.appliedAnswers]
+    () => calculateEstimateEngine(systems, zones, budget, effectiveObjectData, vendorPriceSnapshots, apsProjectSnapshots, technicalSolution.appliedAnswers),
+    [systems, zones, budget, effectiveObjectData, vendorPriceSnapshots, apsProjectSnapshots, technicalSolution.appliedAnswers]
   );
   const zoneDistribution = useMemo(() => validateZoneDistribution(zones, recalculatedArea), [zones, recalculatedArea]);
   const aiSurveyPlan = useMemo(
     () =>
       buildAiSurveyPlan({
-        objectData,
+        objectData: surveyPlanObjectData,
         zones,
         systems,
         protectedArea: recalculatedArea,
       }),
-    [objectData, zones, systems, recalculatedArea]
+    [surveyPlanObjectData, zones, systems, recalculatedArea]
   );
   const aiSurveyCompletion = useMemo(
     () => calculateAiSurveyCompletion(aiSurveyPlan, technicalSolution.answers),
@@ -117,7 +192,7 @@ export default function useEstimate() {
       buildAiTechnicalRecommendations({
         systems,
         systemResults,
-        objectData,
+        objectData: effectiveObjectData,
         zones,
         surveyAnswers: technicalSolution.appliedAnswers,
         photoAnalyses: technicalSolution.appliedPhotoAnalyses,
@@ -127,7 +202,7 @@ export default function useEstimate() {
     [
       systems,
       systemResults,
-      objectData,
+      effectiveObjectData,
       zones,
       technicalSolution.appliedAnswers,
       technicalSolution.appliedPhotoAnalyses,
@@ -138,7 +213,7 @@ export default function useEstimate() {
   const projectRisks = useMemo(
     () =>
       buildAiProjectRisks({
-        objectData: { ...objectData, protectedAreaM2: recalculatedArea },
+        objectData: { ...effectiveObjectData, protectedAreaM2: recalculatedArea },
         zones,
         systems,
         systemResults,
@@ -146,7 +221,7 @@ export default function useEstimate() {
         aiSurveyCompletion: appliedAiSurveyCompletion,
         apsProjectSnapshots,
       }),
-    [objectData, recalculatedArea, zones, systems, systemResults, technicalSolution, appliedAiSurveyCompletion, apsProjectSnapshots]
+    [effectiveObjectData, recalculatedArea, zones, systems, systemResults, technicalSolution, appliedAiSurveyCompletion, apsProjectSnapshots]
   );
   const inputValidation = useMemo(
     () =>
@@ -154,10 +229,10 @@ export default function useEstimate() {
         system: systems[0],
         zones,
         budget,
-        objectData: { ...objectData, protectedAreaM2: recalculatedArea },
+        objectData: { ...effectiveObjectData, protectedAreaM2: recalculatedArea },
         allSystems: systems,
       }),
-    [systems, zones, budget, objectData, recalculatedArea]
+    [systems, zones, budget, effectiveObjectData, recalculatedArea]
   );
 
   const updateObject = (key, value) => {
@@ -355,6 +430,17 @@ export default function useEstimate() {
         }
 
         setApsProjectSnapshots((prev) => ({ ...prev, [system.id]: refreshedSnapshot }));
+        setSystems((prev) =>
+          prev.map((item) =>
+            item.id === system.id
+              ? {
+                  ...item,
+                  vendor: refreshedSnapshot.detectedVendor || item.vendor,
+                  baseVendor: refreshedSnapshot.detectedVendor || item.baseVendor || item.vendor,
+                }
+              : item
+          )
+        );
         setVendorPriceSnapshots((prev) => ({ ...prev, [system.id]: priceSnapshot }));
         setApsImportStatuses((prev) => ({
           ...prev,
@@ -424,6 +510,17 @@ export default function useEstimate() {
       });
 
       setApsProjectSnapshots((prev) => ({ ...prev, [systemId]: snapshot }));
+      setSystems((prev) =>
+        prev.map((item) =>
+          item.id === systemId
+            ? {
+                ...item,
+                vendor: snapshot.detectedVendor || item.vendor,
+                baseVendor: snapshot.detectedVendor || item.baseVendor || item.vendor,
+              }
+            : item
+        )
+      );
       setApsImportStatuses((prev) => ({
         ...prev,
         [systemId]: {
@@ -611,7 +708,7 @@ export default function useEstimate() {
         })
         .filter(Boolean);
       const payload = {
-        objectData: { ...objectData, objectTypeLabel },
+        objectData: { ...effectiveObjectData, objectTypeLabel },
         budget,
         zones,
         recalculatedArea,
@@ -630,8 +727,28 @@ export default function useEstimate() {
 
   const exportEstimateCsv = () => {
     const objectTypeLabel = OBJECT_TYPES.find((item) => item.value === objectData.objectType)?.label || objectData.objectType;
-    const rows = buildEstimateRows({ objectData: { ...objectData, objectTypeLabel }, recalculatedArea, systemResults, totals });
+    const rows = buildEstimateRows({ objectData: { ...effectiveObjectData, objectTypeLabel }, recalculatedArea, systemResults, totals });
     downloadCsv(`${objectData.projectName || "estimate"}.csv`, rows);
+  };
+
+  const exportSystemSpecification = (systemId) => {
+    const systemIndex = systems.findIndex((item) => item.id === systemId);
+    if (systemIndex < 0) return false;
+
+    const system = systems[systemIndex];
+    const systemResult = systemResults[systemIndex];
+    const recommendation = technicalRecommendations.find((item) => item.systemId === systemId);
+    if (!system || !systemResult || !recommendation) return false;
+
+    downloadSystemSpecificationExcel({
+      objectData: effectiveObjectData,
+      system,
+      systemResult,
+      recommendation,
+      zones,
+    });
+
+    return true;
   };
 
   const startAiSurvey = () => {
@@ -878,6 +995,9 @@ export default function useEstimate() {
     step,
     setStep,
     objectData,
+    effectiveObjectData,
+    appliedSurveyAreaRefinement,
+    draftSurveyAreaRefinement,
     addressVerification,
     zones,
     systems,
@@ -931,6 +1051,7 @@ export default function useEstimate() {
     updateTechnicalSpecOverride,
     exportEstimate,
     exportEstimateCsv,
+    exportSystemSpecification,
     setZones,
     canAddMoreSystems: systems.length < SYSTEM_TYPES.length,
   };

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Plus, Trash2, Shield, FileUp, RefreshCcw, Eye, EyeOff, CheckCircle2 } from "lucide-react";
+import { Plus, Trash2, Shield, FileUp, RefreshCcw, Eye, EyeOff, CheckCircle2, Download } from "lucide-react";
 import { SYSTEM_TYPES, VENDORS } from "../config/estimateConfig";
 import { getManufacturerSource, getVendorByName } from "../config/vendorsConfig";
 import { num, rub, toNumber } from "../lib/estimate";
@@ -157,10 +157,12 @@ export default function SystemsStep({
   apsImportStatuses,
   technicalRecommendations,
   updateTechnicalSpecOverride,
+  exportSystemSpecification,
 }) {
   const usedTypeMap = new Map(systems.map((item) => [item.id, item.type]));
   const [manualDraftBySystem, setManualDraftBySystem] = useState({});
   const [showUnitAuditBySystem, setShowUnitAuditBySystem] = useState({});
+  const [showRecheckBySystem, setShowRecheckBySystem] = useState({});
   const [refreshingBySystem, setRefreshingBySystem] = useState({});
 
   const getManualDraft = (systemId) => manualDraftBySystem[systemId] || defaultManualDraft();
@@ -181,6 +183,10 @@ export default function SystemsStep({
 
   const toggleUnitAudit = (systemId) => {
     setShowUnitAuditBySystem((prev) => ({ ...prev, [systemId]: !prev[systemId] }));
+  };
+
+  const toggleRecheckRows = (systemId) => {
+    setShowRecheckBySystem((prev) => ({ ...prev, [systemId]: !prev[systemId] }));
   };
 
   const handleRefresh = async (system) => {
@@ -217,12 +223,14 @@ export default function SystemsStep({
           const apsSnapshot = apsProjectSnapshots?.[system.id];
           const apsStatus = apsImportStatuses?.[system.id];
           const technicalRecommendation = (technicalRecommendations || []).find((item) => item.systemId === system.id);
+          const projectBasedMode = Boolean(apsSnapshot?.active || result?.projectInPlace);
           const unitAuditRows = (apsSnapshot?.items || []).filter((item) => (item?.unitAudit?.status || "unknown") !== "match");
           const manufacturerSource = getManufacturerSource(system.type, system.vendor);
           const manufacturerWebsite = manufacturerSource?.website || "";
           const manufacturerHost = toHost(manufacturerWebsite);
           const isRefreshing = Boolean(refreshingBySystem[system.id]);
           const showUnitAudit = Boolean(showUnitAuditBySystem[system.id]);
+          const showRecheck = Boolean(showRecheckBySystem[system.id]);
 
           const pricedSourceCount =
             snapshot?.entries
@@ -244,9 +252,11 @@ export default function SystemsStep({
             ? [...new Set((snapshot?.entries || []).flatMap((item) => item.usedSources || []).filter((url) => toHost(url) === manufacturerHost))]
             : [];
           const manufacturerSuccess = manufacturerUsedUrls.length > 0;
+          const recheckRows = (snapshot?.entries || []).filter((item) => item.recheckRequired);
+          const detectedVendor = apsSnapshot?.detectedVendor || system.vendor;
 
           return (
-            <div className="system-card" key={system.id}>
+            <div className={`system-card ${projectBasedMode ? "project-based-mode" : ""}`} key={system.id}>
               {/* TOP BLOCK */}
               <div className="system-title">
                 <div className="system-badge">
@@ -283,6 +293,7 @@ export default function SystemsStep({
                       <select
                         value={system.vendor}
                         onChange={(event) => updateSystem(system.id, "vendor", event.target.value)}
+                        disabled={projectBasedMode}
                         title="Вендор влияет на ценовой профиль, коэффициенты и итог системы. Базовый вендор применяйте, если бренд еще не выбран и нужна нейтральная рыночная оценка."
                       >
                         {vendorList.map((vendor) => (
@@ -424,6 +435,44 @@ export default function SystemsStep({
                     </span>
                   </div>
                   {snapshot.error ? <span className="warn-inline"> Ошибка API: {snapshot.error}</span> : null}
+                </div>
+              ) : null}
+
+              {recheckRequiredCount ? (
+                <div className="calc-explain">
+                  <div className="aps-ops-header">
+                    <h4>Спорные позиции</h4>
+                    <button className="ghost-btn" type="button" onClick={() => toggleRecheckRows(system.id)}>
+                      {showRecheck ? <EyeOff size={14} /> : <Eye size={14} />}
+                      {showRecheck ? "Скрыть спорные позиции" : "Показать спорные позиции"}
+                    </button>
+                  </div>
+                  {showRecheck ? (
+                    <div className="table-wrap compact">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Позиция</th>
+                            <th>Наименование</th>
+                            <th>Цена</th>
+                            <th>Уверенность</th>
+                            <th>Причина</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {recheckRows.map((item) => (
+                            <tr key={`${system.id}-recheck-${item.key}`}>
+                              <td>{item.position || item.key || "—"}</td>
+                              <td>{item.equipmentLabel || item.model || item.name || "Позиция"}</td>
+                              <td>{rub(item.price || 0)}</td>
+                              <td>{num((item.priceConfidence || 0) * 100, 0)}%</td>
+                              <td>{item.recheckReason || "Нужна ручная перепроверка сопоставления и цены"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -786,16 +835,18 @@ export default function SystemsStep({
                 </div>
               ) : null}
 
-              <VendorConfigurator
-                system={system}
-                projectBasedMode={Boolean(apsSnapshot?.active)}
-                onChange={(key, value) =>
-                  updateSystem(system.id, "selectedEquipmentParams", {
-                    ...(system.selectedEquipmentParams || {}),
-                    [key]: value,
-                  })
-                }
-              />
+              {!projectBasedMode ? (
+                <VendorConfigurator
+                  system={system}
+                  projectBasedMode={false}
+                  onChange={(key, value) =>
+                    updateSystem(system.id, "selectedEquipmentParams", {
+                      ...(system.selectedEquipmentParams || {}),
+                      [key]: value,
+                    })
+                  }
+                />
+              ) : null}
 
               <div className="system-subgrid">
                 <div className="calc-explain">
@@ -937,6 +988,9 @@ export default function SystemsStep({
               ) : null}
 
               <div className="action-cell">
+                <button className="ghost-btn" type="button" onClick={() => exportSystemSpecification?.(system.id)}>
+                  <Download size={16} /> Excel-спецификация
+                </button>
                 <button className="danger-btn" type="button" onClick={() => removeSystem(system.id)} disabled={systems.length <= 1}>
                   <Trash2 size={16} /> Удалить систему
                 </button>

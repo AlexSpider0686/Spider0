@@ -8,12 +8,12 @@ function hasSystem(systems, type) {
 }
 
 function getAreaTimeFactor(area) {
-  if (area >= 100000) return 72;
-  if (area >= 50000) return 54;
-  if (area >= 20000) return 38;
-  if (area >= 10000) return 27;
-  if (area >= 5000) return 18;
-  return 10;
+  if (area >= 100000) return 18;
+  if (area >= 50000) return 14;
+  if (area >= 20000) return 10;
+  if (area >= 10000) return 7;
+  if (area >= 5000) return 5;
+  return 3;
 }
 
 function estimateSurveyHours({ objectData, zones, surveySystems, sections, photoPrompts, objectArea }) {
@@ -21,41 +21,48 @@ function estimateSurveyHours({ objectData, zones, surveySystems, sections, photo
   const floors = Math.max(num(objectData?.floors, 1), 1);
   const operational = objectData?.buildingStatus === "operational";
   const systemsWithPlans = surveySystems.filter((system) => ["aps", "soue", "sots"].includes(system.type)).length;
+
   const totalQuestions = sections.reduce(
     (sum, section) =>
       sum +
       (section.questions || []).reduce((sectionSum, question) => {
         if (question.required === false) return sectionSum;
-        if (question.type === "multiselect") return sectionSum + 2.4;
-        if (question.type === "number") return sectionSum + 1.7;
-        if (question.type === "boolean") return sectionSum + 1.1;
-        return sectionSum + 1.4;
+        if (question.type === "multiselect") return sectionSum + 0.9;
+        if (question.type === "number") return sectionSum + 0.65;
+        if (question.type === "boolean") return sectionSum + 0.45;
+        return sectionSum + 0.6;
       }, 0),
     0
   );
+
   const averageZoneArea = zoneCount ? objectArea / Math.max(zoneCount, 1) : objectArea;
-  const zoneComplexityFactor = averageZoneArea > 3500 ? 0.92 : averageZoneArea < 700 ? 1.12 : 1;
+  const zoneComplexityFactor = averageZoneArea > 3500 ? 0.9 : averageZoneArea < 700 ? 1.08 : 1;
   const uniqueFloorLevels = new Set((zones || []).map((zone) => `${num(zone?.floors, 1)}`)).size;
+
   const systemMinutes = surveySystems.reduce((sum, system) => {
-    if (system.type === "aps") return sum + 26;
-    if (system.type === "soue") return sum + 22;
-    if (system.type === "sots") return sum + 20;
-    if (system.type === "sot") return sum + 18;
-    if (system.type === "skud") return sum + 18;
-    return sum + 16;
+    if (system.type === "aps") return sum + 10;
+    if (system.type === "soue") return sum + 9;
+    if (system.type === "sots") return sum + 8;
+    if (system.type === "sot") return sum + 7;
+    if (system.type === "skud") return sum + 7;
+    return sum + 6;
   }, 0);
+
   const photoMinutes =
-    photoPrompts.filter((prompt) => prompt.type === "surface_scan").length * 6 +
-    photoPrompts.filter((prompt) => prompt.type === "evacuation_plan").length * 8;
-  const floorMinutes = Math.max(0, floors - 1) * 5 + Math.max(0, uniqueFloorLevels - 1) * 2;
-  const planMinutes = systemsWithPlans * 9;
-  const accessMinutes = operational ? 14 : 8;
-  const baselineMinutes = 22;
+    photoPrompts.filter((prompt) => prompt.type === "surface_scan").length * 1.6 +
+    photoPrompts.filter((prompt) => prompt.type === "corridor_scan").length * 1.8 +
+    photoPrompts.filter((prompt) => prompt.type === "evacuation_plan").length * 3.2;
+
+  const floorMinutes = Math.max(0, floors - 1) * 1.2 + Math.max(0, uniqueFloorLevels - 1) * 0.6;
+  const planMinutes = systemsWithPlans * 2.5;
+  const accessMinutes = operational ? 4 : 3;
+  const baselineMinutes = 8;
+
   const totalMinutes =
-    (baselineMinutes + getAreaTimeFactor(objectArea) + zoneCount * 5 + floorMinutes + systemMinutes + totalQuestions + photoMinutes + planMinutes + accessMinutes) *
+    (baselineMinutes + getAreaTimeFactor(objectArea) + zoneCount * 1.6 + floorMinutes + systemMinutes + totalQuestions * 0.7 + photoMinutes + planMinutes + accessMinutes) *
     zoneComplexityFactor;
 
-  return Number((Math.max(totalMinutes, 35) / 60).toFixed(1));
+  return Number((Math.max(totalMinutes, 18) / 60).toFixed(1));
 }
 
 function createQuestion({
@@ -73,6 +80,7 @@ function createQuestion({
   min = 0,
   max = null,
   enabledByQuestionId = null,
+  defaultValue = undefined,
 }) {
   return {
     id,
@@ -89,6 +97,7 @@ function createQuestion({
     min,
     max,
     enabledByQuestionId,
+    defaultValue,
   };
 }
 
@@ -120,7 +129,6 @@ export function buildAiSurveyPlan({ objectData, zones, systems, protectedArea })
   const skippedSystems = activeSystems.filter((system) => system.hasWorkingDocs);
   const sections = [];
   const photoPrompts = [];
-
   const objectArea = num(objectData?.totalArea);
 
   const objectSectionId = "object-baseline";
@@ -155,6 +163,8 @@ export function buildAiSurveyPlan({ objectData, zones, systems, protectedArea })
         type: "multiselect",
         label: "В каких окнах допускается производство работ?",
         options: ["Рабочее время", "Ночные смены", "Выходные", "Поэтапно по зонам"],
+        required: false,
+        defaultValue: ["Рабочее время"],
       })
     );
   }
@@ -166,12 +176,15 @@ export function buildAiSurveyPlan({ objectData, zones, systems, protectedArea })
       type: "number",
       label: "Сколько предусмотрено слаботочных помещений или узлов связи?",
       placeholder: "0",
+      required: false,
+      defaultValue: 0,
     }),
     createQuestion({
       id: "object-riser-access",
       sectionId: objectSectionId,
       type: "boolean",
       label: "Есть ли беспрепятственный доступ к стоякам и вертикальным трассам?",
+      required: false,
     }),
     createQuestion({
       id: "object-cable-reserve",
@@ -181,6 +194,8 @@ export function buildAiSurveyPlan({ objectData, zones, systems, protectedArea })
       placeholder: "10",
       min: 0,
       max: 100,
+      required: false,
+      defaultValue: 10,
     })
   );
 
@@ -255,6 +270,45 @@ export function buildAiSurveyPlan({ objectData, zones, systems, protectedArea })
         type: "multiselect",
         label: `Какие ограничения есть в зоне "${zoneTitle}"`,
         options: ["Чистовая отделка", "Работа рядом с людьми", "Ночной график", "Ограниченный доступ", "Нет ограничений"],
+        required: false,
+        defaultValue: ["Нет ограничений"],
+      }),
+      createQuestion({
+        id: `zone-${zone.id}-corridor-route-method`,
+        sectionId: zoneSectionId,
+        group: "zone",
+        zoneId: zone.id,
+        type: "multiselect",
+        label: `Предполагаемый способ прокладки кабеля в зоне "${zoneTitle}"`,
+        options: ["В лотке", "В гофре/трубе", "В коробе", "В запотолочном пространстве", "Под фальш-полом", "Открыто по основанию"],
+        required: false,
+      }),
+      createQuestion({
+        id: `zone-${zone.id}-raised-floor-present`,
+        sectionId: zoneSectionId,
+        group: "zone",
+        zoneId: zone.id,
+        type: "boolean",
+        label: `Есть ли в зоне "${zoneTitle}" фальш-пол?`,
+        required: false,
+      }),
+      createQuestion({
+        id: `zone-${zone.id}-ceiling-void-present`,
+        sectionId: zoneSectionId,
+        group: "zone",
+        zoneId: zone.id,
+        type: "boolean",
+        label: `Есть ли в зоне "${zoneTitle}" запотолочное пространство для трасс?`,
+        required: false,
+      }),
+      createQuestion({
+        id: `zone-${zone.id}-tray-routing-present`,
+        sectionId: zoneSectionId,
+        group: "zone",
+        zoneId: zone.id,
+        type: "boolean",
+        label: `Есть ли в зоне "${zoneTitle}" лотки или готовые кабельные трассы?`,
+        required: false,
       }),
     ];
 
@@ -268,8 +322,10 @@ export function buildAiSurveyPlan({ objectData, zones, systems, protectedArea })
           type: "boolean",
           label: `Удалось ли получить читаемый план эвакуации или планировку для зоны "${zoneTitle}"?`,
           aiAutofill: true,
+          required: false,
         })
       );
+
       photoPrompts.push({
         id: `photo-zone-${zone.id}-evacuation`,
         zoneId: zone.id,
@@ -277,7 +333,7 @@ export function buildAiSurveyPlan({ objectData, zones, systems, protectedArea })
         type: "evacuation_plan",
         title: `Фото плана эвакуации / планировки: ${zoneTitle}`,
         hint:
-          "Можно загрузить сразу несколько планов по этажам. Снимайте каждый план с расстояния примерно 0.7-1.5 м, держите камеру почти параллельно плоскости плана без сильного наклона, захватывайте лист целиком, без бликов и смаза. Фото с пригодностью ниже 50% система отклонит.",
+          "Можно загрузить сразу несколько планов по этажам. Снимайте каждый план с расстояния примерно 0.7-1.5 м, держите камеру почти параллельно плоскости плана, захватывайте лист целиком, избегайте бликов и смаза. Фото с пригодностью ниже 50% система отклонит.",
         targetQuestionIds: [`zone-${zone.id}-evacuation-plan`],
       });
     }
@@ -290,6 +346,22 @@ export function buildAiSurveyPlan({ objectData, zones, systems, protectedArea })
       title: `Фото поверхностей и потолка: ${zoneTitle}`,
       hint: "Снимите участок стены и потолка так, чтобы были видны материал и тип крепления будущих трасс.",
       targetQuestionIds: [`zone-${zone.id}-wall-material`, `zone-${zone.id}-ceiling-type`, `zone-${zone.id}-ceiling-height`],
+    });
+
+    photoPrompts.push({
+      id: `photo-zone-${zone.id}-corridor`,
+      zoneId: zone.id,
+      zoneName: zoneTitle,
+      type: "corridor_scan",
+      title: `Фото коридора / трассы: ${zoneTitle}`,
+      hint:
+        "Снимите коридор или участок основной трассы так, чтобы были видны стены, потолок, возможные лотки, короба, фальш-пол и проходы кабеля. Снимать лучше вдоль трассы без сильного наклона.",
+      targetQuestionIds: [
+        `zone-${zone.id}-corridor-route-method`,
+        `zone-${zone.id}-raised-floor-present`,
+        `zone-${zone.id}-ceiling-void-present`,
+        `zone-${zone.id}-tray-routing-present`,
+      ],
     });
 
     sections.push({
@@ -311,6 +383,8 @@ export function buildAiSurveyPlan({ objectData, zones, systems, protectedArea })
         type: "multiselect",
         label: `Какие ограничения трасс характерны для системы ${system.type.toUpperCase()}?`,
         options: ["Длинные вертикали", "Скрытая прокладка", "Пересечение действующих сетей", "Сложные узлы прохода", "Типовые условия"],
+        required: false,
+        defaultValue: ["Типовые условия"],
       }),
       createQuestion({
         id: `system-${system.id}-integration-count`,
@@ -320,6 +394,8 @@ export function buildAiSurveyPlan({ objectData, zones, systems, protectedArea })
         type: "number",
         label: `Сколько точек интеграции или обмена требуется по системе ${system.type.toUpperCase()}?`,
         placeholder: "0",
+        required: false,
+        defaultValue: 0,
       }),
       createQuestion({
         id: `system-${system.id}-coordination-zones`,
@@ -329,6 +405,8 @@ export function buildAiSurveyPlan({ objectData, zones, systems, protectedArea })
         type: "number",
         label: `По скольким зонам нужна координация и привязка решений для ${system.type.toUpperCase()}?`,
         placeholder: "0",
+        required: false,
+        defaultValue: 0,
       }),
       createQuestion({
         id: `system-${system.id}-reuse-existing-infra`,
@@ -337,6 +415,7 @@ export function buildAiSurveyPlan({ objectData, zones, systems, protectedArea })
         systemType: system.type,
         type: "boolean",
         label: `Есть ли по ${system.type.toUpperCase()} существующие линии, шкафы или узлы, которые нужно учесть в проекте?`,
+        required: false,
       }),
     ];
 
@@ -353,6 +432,8 @@ export function buildAiSurveyPlan({ objectData, zones, systems, protectedArea })
               ? "Сколько самостоятельных ЗКСПС требуется по АПС?"
               : `Сколько самостоятельных зон оповещения нужно по ${system.type.toUpperCase()}?`,
           placeholder: "1",
+          required: false,
+          defaultValue: 1,
         })
       );
     }
@@ -367,6 +448,7 @@ export function buildAiSurveyPlan({ objectData, zones, systems, protectedArea })
           type: "multiselect",
           label: "Какие сценарии видеоконтроля требуются?",
           options: ["Общий обзор", "Лица/проходы", "Номера авто", "Периметр", "Складские ячейки"],
+          required: false,
         })
       );
     }
@@ -381,6 +463,8 @@ export function buildAiSurveyPlan({ objectData, zones, systems, protectedArea })
           type: "number",
           label: "Сколько точек прохода или контролируемых дверей нужно предусмотреть?",
           placeholder: "0",
+          required: false,
+          defaultValue: 0,
         })
       );
     }
@@ -388,7 +472,7 @@ export function buildAiSurveyPlan({ objectData, zones, systems, protectedArea })
     sections.push({
       id: systemSectionId,
       title: `Система: ${system.type.toUpperCase()}`,
-      description: "Чек-лист уточняет условия, которые влияют на точность расчета проектирования именно по этой системе.",
+      description: "Чек-лист уточняет условия, которые влияют на точность расчета проектирования, техрешения и стоимости по системе.",
       questions: systemQuestions,
     });
   });
@@ -428,6 +512,7 @@ export function calculateAiSurveyCompletion(plan, answers = {}) {
 
   const completed = requiredQuestions.filter((question) => {
     const value = answers?.[question.id];
+    if ((value === "" || value === null || value === undefined) && question.defaultValue !== undefined) return true;
     if (question.type === "number") return value !== "" && value !== null && value !== undefined;
     if (question.type === "boolean") return typeof value === "boolean";
     if (question.type === "multiselect") return Array.isArray(value) && value.length > 0;
