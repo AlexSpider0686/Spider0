@@ -4,6 +4,7 @@ import { OBJECT_TYPES, SYSTEM_TYPES } from "../config/estimateConfig";
 import { BUILDING_STATUS_OPTIONS } from "../config/costModelConfig";
 import { searchRegions } from "../config/regionsConfig";
 import { ZONE_PRESET_DETAILS, ZONE_PRESETS, ZONE_TYPES } from "../config/zonesConfig";
+import { hasProjectForSystem } from "../lib/designSurveyEngine";
 import { getZonePercentSum, normalizeZoneAreas } from "../lib/zoneEngine";
 import { num, toNumber } from "../lib/estimate";
 
@@ -125,6 +126,7 @@ export default function ObjectStep({
   setZones,
   toggleSystemRegistry,
   updateSystemWorkingDocs,
+  apsProjectSnapshots,
   technicalSolution,
   aiSurveyPlan,
   aiSurveyCompletion,
@@ -585,6 +587,9 @@ export default function ObjectStep({
             {SYSTEM_TYPES.map((systemType) => {
               const enabled = activeSystemTypes.has(systemType.code);
               const currentSystem = (systems || []).find((item) => item.type === systemType.code);
+              const projectSnapshot = currentSystem?.id ? apsProjectSnapshots?.[currentSystem.id] : null;
+              const projectInPlace = hasProjectForSystem(currentSystem, projectSnapshot);
+              const uploadedProjectInPlace = Boolean(projectSnapshot?.active);
               return (
                 <div key={systemType.code} className={`ai-system-registry__item ${enabled ? "active" : ""}`}>
                   <label className="ai-system-toggle">
@@ -602,9 +607,9 @@ export default function ObjectStep({
                   <label className={`ai-working-docs ${enabled ? "" : "disabled"}`}>
                     <input
                       type="checkbox"
-                      checked={Boolean(currentSystem?.hasWorkingDocs)}
+                      checked={projectInPlace}
                       onChange={(event) => updateSystemWorkingDocs(currentSystem?.id, event.target.checked)}
-                      disabled={!enabled || !currentSystem?.id}
+                      disabled={!enabled || !currentSystem?.id || uploadedProjectInPlace}
                     />
                     <span>Наличие РД (проекта)</span>
                   </label>

@@ -60,7 +60,7 @@ export default function Summary({ totals, systemResults, objectData }) {
                 <td>{rub(item.equipmentCost)}</td>
                 <td>{rub(item.materialCost)}</td>
                 <td>{rub(item.workTotal)}</td>
-                <td>{rub(item.designTotal || 0)}</td>
+                <td>{item.designSkipped ? "?? ??????????????" : rub(item.designTotal || 0)}</td>
                 <td>{rub(item.total)}</td>
               </tr>
             ))}
