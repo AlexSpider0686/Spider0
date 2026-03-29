@@ -96,6 +96,10 @@ function buildManufacturerUrl(source, item, searchQuery) {
   const website = trimSlash(source?.website);
   if (!website) return "";
 
+  if (source?.preferSearch && source?.searchPathTemplate) {
+    return `${website}${source.searchPathTemplate.replace("{query}", encodeURIComponent(searchQuery))}`;
+  }
+
   if (item.sourcePath) {
     return `${website}${item.sourcePath}`;
   }
@@ -121,7 +125,7 @@ function buildSourceTargets(source, item, queries, manufacturerUrl) {
     }
   }
 
-  if (source?.website && item?.sourcePath) {
+  if (source?.website && item?.sourcePath && !source?.preferSearch) {
     targets.push(`${trimSlash(source.website)}${item.sourcePath}`);
   }
 

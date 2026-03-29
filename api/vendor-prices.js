@@ -3,6 +3,8 @@ const META_PRICE_REGEX = /itemprop=["']price["'][^>]*content=["']([\d\s.,]+)["']
 const MONEY_REGEX =
   /(?:\u20BD|\u0440\u0443\u0431\.?|RUB|USD|EUR)\s*([\d\s.,]{1,})|([\d\s.,]{1,})\s*(?:\u20BD|\u0440\u0443\u0431\.?|RUB|USD|EUR)/giu;
 const TINKO_PRODUCT_LINK_REGEX = /\/catalog\/product\/\d+\//gi;
+const BOLID_PRODUCT_LINK_REGEX = /\/catalog\/[^"'#\s]*\/tovar_[^"'#\s]+\.html/gi;
+const BOLID_RESULT_LINK_REGEX = /<a\s+href="([^"]*tovar_[^"]+\.html)"[^>]*class="good-item__title-link"[^>]*>([^<]+)<\/a>/giu;
 const UNIT_NEAR_PRICE_REGEX =
   /(?:\u20BD|\u0440\u0443\u0431\.?|RUB)\s*(?:\/|\u0437\u0430)?\s*(\u0448\u0442(?:\u0443\u043a)?|\u0435\u0434\.?|\u043a\u043e\u043c\u043f\u043b(?:\u0435\u043a\u0442)?|\u043c2|\u043c\u00b2|\u043c|\u043a\u0433|\u043b|\u0443\u043f(?:\u0430\u043a)?|\u043b\u0438\u0441\u0442(?:\u043e\u0432|\u0430)?)/giu;
 const UNIT_GENERIC_REGEX = /(?:\u0437\u0430|\/)\s*(\u0448\u0442(?:\u0443\u043a)?|\u0435\u0434\.?|\u043a\u043e\u043c\u043f\u043b(?:\u0435\u043a\u0442)?|\u043c2|\u043c\u00b2|\u043c|\u043a\u0433|\u043b|\u0443\u043f(?:\u0430\u043a)?|\u043b\u0438\u0441\u0442(?:\u043e\u0432|\u0430)?)/giu;
@@ -257,6 +259,10 @@ function absoluteTinkoUrl(pathOrUrl) {
   return pathOrUrl.startsWith("http") ? pathOrUrl : `https://www.tinko.ru${pathOrUrl}`;
 }
 
+function absoluteBolidUrl(pathOrUrl) {
+  return pathOrUrl.startsWith("http") ? pathOrUrl : `https://shop.bolid.ru${pathOrUrl}`;
+}
+
 function extractTinkoProductUrls(searchHtml) {
   const urls = [];
   const seen = new Set();
@@ -270,6 +276,66 @@ function extractTinkoProductUrls(searchHtml) {
   }
 
   return urls;
+}
+
+function extractBolidProductUrls(searchHtml) {
+  const urls = [];
+  const seen = new Set();
+
+  for (const match of String(searchHtml || "").matchAll(BOLID_PRODUCT_LINK_REGEX)) {
+    const url = absoluteBolidUrl(match[0]);
+    if (seen.has(url)) continue;
+    seen.add(url);
+    urls.push(url);
+    if (urls.length >= 6) break;
+  }
+
+  return urls;
+}
+
+function decodeHtmlEntities(value) {
+  return String(value || "")
+    .replace(/&quot;/gi, '"')
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)));
+}
+
+function extractBolidSearchResults(searchHtml) {
+  const results = [];
+  const seen = new Set();
+
+  for (const match of String(searchHtml || "").matchAll(BOLID_RESULT_LINK_REGEX)) {
+    const url = absoluteBolidUrl(match[1]);
+    if (seen.has(url)) continue;
+    seen.add(url);
+    results.push({
+      url,
+      title: decodeHtmlEntities(match[2]).replace(/\s+/g, " ").trim(),
+    });
+    if (results.length >= 12) break;
+  }
+
+  if (results.length) return results;
+  return extractBolidProductUrls(searchHtml).map((url) => ({ url, title: "" }));
+}
+
+function scoreBolidResult(result, queryText) {
+  const title = normalizeSearchQuery(result?.title || "");
+  if (!title) return 0;
+
+  const queryTokens = buildQueryTokens(queryText);
+  const modelToken = extractModelTokenWithArticleBias(queryText);
+  let score = 0;
+
+  if (modelToken && isModelTokenInText(modelToken, title)) score += 12;
+  for (const token of queryTokens) {
+    if (title.includes(token)) score += token.length >= 5 ? 3 : 1.5;
+  }
+  if (title.startsWith(normalizeSearchQuery(queryText))) score += 4;
+
+  return score;
 }
 
 function normalizeSourceTarget(target) {
@@ -569,6 +635,195 @@ async function fetchPriceFromTinkoSearch(searchUrl, fallbackPrice) {
   };
 }
 
+async function fetchPricesFromSearchProductPages(searchUrl, fallbackPrice, options = {}) {
+  const {
+    extractProductUrls,
+    sourceKind = "search_follow",
+    maxProducts = 4,
+    sequential = false,
+  } = options;
+
+  let queryModelToken = "";
+  try {
+    const parsed = new URL(searchUrl);
+    queryModelToken = extractModelTokenWithArticleBias(decodeURIComponent(parsed.searchParams.get("q") || ""));
+  } catch {
+    queryModelToken = extractModelTokenWithArticleBias(searchUrl);
+  }
+
+  const searchResponse = await fetchWithTimeout(
+    searchUrl,
+    {
+      method: "GET",
+      headers: {
+        accept: "text/html,application/xhtml+xml",
+      },
+    },
+    18000
+  );
+  const searchHtml = await searchResponse.text();
+  const productUrls = typeof extractProductUrls === "function" ? extractProductUrls(searchHtml) : [];
+
+  if (!productUrls.length) {
+    const price = selectBestPrice(extractPricesFromText(searchHtml), fallbackPrice);
+    const unitHints = extractUnitHintsFromText(searchHtml);
+    return price
+      ? {
+          prices: [price],
+          usedSources: [searchUrl],
+          unitHints,
+          selectionMeta: {
+            sourceKind,
+            modelToken: queryModelToken,
+            modelTokenMatched: isModelTokenInText(queryModelToken, searchUrl),
+          },
+        }
+      : { prices: [], usedSources: [], unitHints };
+  }
+
+  const prices = [];
+  const usedSources = [];
+  const unitHints = [];
+  const candidateUrls = productUrls.slice(0, maxProducts);
+
+  if (sequential) {
+    for (const url of candidateUrls) {
+      try {
+        const text = await fetchWithTimeout(
+          url,
+          {
+            method: "GET",
+            headers: {
+              accept: "text/html,application/xhtml+xml",
+            },
+          },
+          22000
+        ).then((response) => response.text());
+        const price = selectBestPrice(extractPricesFromText(text), fallbackPrice);
+        unitHints.push(...extractUnitHintsFromText(text));
+        if (!price) continue;
+        prices.push(price);
+        usedSources.push(url);
+        if (prices.length >= 2) break;
+      } catch {
+        // Keep going: Bolid pages can intermittently reset connections.
+      }
+    }
+  } else {
+    const settled = await Promise.allSettled(
+      candidateUrls.map((url) =>
+        fetchWithTimeout(
+          url,
+          {
+            method: "GET",
+            headers: {
+              accept: "text/html,application/xhtml+xml",
+            },
+          },
+          16000
+        ).then((response) => response.text())
+      )
+    );
+
+    settled.forEach((result, index) => {
+      if (result.status !== "fulfilled") return;
+      const text = result.value || "";
+      const price = selectBestPrice(extractPricesFromText(text), fallbackPrice);
+      unitHints.push(...extractUnitHintsFromText(text));
+      if (!price) return;
+      prices.push(price);
+      usedSources.push(candidateUrls[index]);
+    });
+  }
+
+  const finalPrice = selectBestPrice(prices, fallbackPrice);
+  if (!finalPrice) return { prices: [], usedSources: [], unitHints: unique(unitHints) };
+  const winnerUrl = usedSources.length ? usedSources[0] : searchUrl;
+
+  return {
+    prices: [finalPrice],
+    usedSources: [winnerUrl],
+    unitHints: unique(unitHints),
+    selectionMeta: {
+      sourceKind,
+      modelToken: queryModelToken,
+      modelTokenMatched: isModelTokenInText(queryModelToken, winnerUrl),
+    },
+  };
+}
+
+async function fetchPriceFromBolidSearch(searchUrl, fallbackPrice) {
+  let queryText = "";
+  try {
+    const parsed = new URL(searchUrl);
+    queryText = decodeURIComponent(parsed.searchParams.get("q") || "");
+  } catch {
+    queryText = searchUrl;
+  }
+
+  const searchResponse = await fetchWithTimeout(
+    searchUrl,
+    {
+      method: "GET",
+      headers: {
+        accept: "text/html,application/xhtml+xml",
+      },
+    },
+    18000
+  );
+  const searchHtml = await searchResponse.text();
+  const results = extractBolidSearchResults(searchHtml)
+    .map((item) => ({ ...item, score: scoreBolidResult(item, queryText) }))
+    .sort((a, b) => b.score - a.score || a.url.length - b.url.length);
+
+  const candidateUrls = results.slice(0, 2).map((item) => item.url);
+  if (!candidateUrls.length) {
+    return { prices: [], usedSources: [], unitHints: [] };
+  }
+
+  const prices = [];
+  const usedSources = [];
+  const unitHints = [];
+  const modelToken = extractModelTokenWithArticleBias(queryText);
+
+  for (const url of candidateUrls) {
+    try {
+      const text = await fetchWithTimeout(
+        url,
+        {
+          method: "GET",
+          headers: {
+            accept: "text/html,application/xhtml+xml",
+          },
+        },
+        22000
+      ).then((response) => response.text());
+      const price = selectBestPrice(extractPricesFromText(text), fallbackPrice);
+      unitHints.push(...extractUnitHintsFromText(text));
+      if (!price) continue;
+      prices.push(price);
+      usedSources.push(url);
+      break;
+    } catch {
+      // Bolid can intermittently reset product-page requests; try the next best match.
+    }
+  }
+
+  const finalPrice = selectBestPrice(prices, fallbackPrice);
+  if (!finalPrice) return { prices: [], usedSources: [], unitHints: unique(unitHints) };
+  const winnerUrl = usedSources[0] || candidateUrls[0] || searchUrl;
+  return {
+    prices: [finalPrice],
+    usedSources: [winnerUrl],
+    unitHints: unique(unitHints),
+    selectionMeta: {
+      sourceKind: "bolid_search",
+      modelToken,
+      modelTokenMatched: isModelTokenInText(modelToken, winnerUrl),
+    },
+  };
+}
+
 async function fetchPriceFromGenericSource(source, fallbackPrice) {
   const queryModelToken = extractModelTokenWithArticleBias(source?.url || "");
   const method = source.method || "GET";
@@ -644,6 +899,9 @@ async function fetchPriceForTarget(target, fallbackPrice) {
   }
   if (source.url.includes("tinko.ru/search/")) {
     return fetchPriceFromTinkoSearch(source.url, fallbackPrice);
+  }
+  if (source.url.includes("shop.bolid.ru/search/")) {
+    return fetchPriceFromBolidSearch(source.url, fallbackPrice);
   }
   return fetchPriceFromGenericSource(source, fallbackPrice);
 }
@@ -760,29 +1018,35 @@ export async function resolveVendorPrices(requests = []) {
         : selectFinalPrice(poolPrices, fallbackPrice);
 
       const fallback = Number(fallbackPrice);
-      if (Number.isFinite(fallback) && fallback > 0 && Number.isFinite(selectedPrice) && selectedPrice > 0) {
-        const tooHigh = selectedPrice > fallback * 4;
-        const tooLow = selectedPrice < fallback * 0.2;
-        if (tooHigh || tooLow) {
-          const corridorRows = baseRows.filter((item) => item.price >= fallback * 0.22 && item.price <= fallback * 4.2);
-          if (corridorRows.length) {
-            selectionPool = corridorRows;
-            const corridorPrices = selectionPool.map((item) => item.price);
-            selectedPrice = preferFallbackAnchoredSelection
+        const isManufacturerAuthoritative = selectionStrategy === "manufacturer_source_bias" && manufacturerRows.length > 0;
+        let manufacturerDriftRisk = false;
+
+        if (Number.isFinite(fallback) && fallback > 0 && Number.isFinite(selectedPrice) && selectedPrice > 0) {
+          const tooHigh = selectedPrice > fallback * 4;
+          const tooLow = selectedPrice < fallback * 0.2;
+          if ((tooHigh || tooLow) && !isManufacturerAuthoritative) {
+            const corridorRows = baseRows.filter((item) => item.price >= fallback * 0.22 && item.price <= fallback * 4.2);
+            if (corridorRows.length) {
+              selectionPool = corridorRows;
+              const corridorPrices = selectionPool.map((item) => item.price);
+              selectedPrice = preferFallbackAnchoredSelection
               ? selectClosestToFallback(corridorPrices, fallback) || selectBestPrice(corridorPrices, fallback) || selectFinalPrice(corridorPrices, fallback)
               : selectFinalPrice(corridorPrices, fallback);
             selectionStrategy = `${selectionStrategy}_fallback_guard`;
-          } else {
-            selectedPrice = fallback;
-            selectionStrategy = `${selectionStrategy}_fallback_guard`;
+            } else {
+              selectedPrice = fallback;
+              selectionStrategy = `${selectionStrategy}_fallback_guard`;
+            }
+          } else if (tooHigh || tooLow) {
+            manufacturerDriftRisk = true;
+            selectionStrategy = `${selectionStrategy}_manufacturer_override`;
           }
         }
-      }
 
       const spreadBase = selectionPool.map((item) => item.price).filter((item) => Number.isFinite(item) && item > 0);
       const spread = spreadBase.length > 1 ? Math.max(...spreadBase) / Math.max(Math.min(...spreadBase), 1) : 1;
       const hasUnitMismatchRisk = !unitCompatibleRows.length && candidateRows.length > 0;
-      const recheckRequired = (spread >= 6 && selectionPool.length > 1) || hasUnitMismatchRisk;
+        const recheckRequired = (spread >= 6 && selectionPool.length > 1) || hasUnitMismatchRisk || manufacturerDriftRisk;
       const closestRows = selectedPrice
         ? selectionPool.filter((item) => Math.abs(item.price - selectedPrice) <= Math.max(1, selectedPrice * 0.03))
         : [];

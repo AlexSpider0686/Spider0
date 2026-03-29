@@ -314,10 +314,18 @@ export const MANUFACTURER_SOURCES = {
     Uniview: { website: "https://global.uniview.com" },
   },
   sots: {
-    Базовый: { website: "https://bolid.ru" },
+    Базовый: {
+      website: "https://shop.bolid.ru",
+      searchPathTemplate: "/search/?q={query}",
+      preferSearch: true,
+    },
     Бастион: { website: "https://bast.ru" },
     Рубеж: { website: "https://rubezh.ru" },
-    Болид: { website: "https://bolid.ru" },
+    Болид: {
+      website: "https://shop.bolid.ru",
+      searchPathTemplate: "/search/?q={query}",
+      preferSearch: true,
+    },
   },
   skud: {
     Базовый: { website: "https://sigur.com" },
@@ -335,8 +343,16 @@ export const MANUFACTURER_SOURCES = {
     AxxonSoft: { website: "https://www.axxonsoft.com" },
   },
   aps: {
-    Базовый: { website: "https://bolid.ru" },
-    Болид: { website: "https://bolid.ru" },
+    Базовый: {
+      website: "https://shop.bolid.ru",
+      searchPathTemplate: "/search/?q={query}",
+      preferSearch: true,
+    },
+    Болид: {
+      website: "https://shop.bolid.ru",
+      searchPathTemplate: "/search/?q={query}",
+      preferSearch: true,
+    },
     Рубеж: { website: "https://rubezh.ru" },
     "Аргус-Спектр": { website: "https://argus-spectr.ru" },
     Simplex: { website: "https://www.johnsoncontrols.com/fire-detection/simplex" },
@@ -344,7 +360,11 @@ export const MANUFACTURER_SOURCES = {
   },
   soue: {
     Базовый: { website: "https://roxton-audio.com" },
-    Болид: { website: "https://bolid.ru" },
+    Болид: {
+      website: "https://shop.bolid.ru",
+      searchPathTemplate: "/search/?q={query}",
+      preferSearch: true,
+    },
     Рубеж: { website: "https://rubezh.ru" },
     Roxton: { website: "https://roxton-audio.com" },
   },
