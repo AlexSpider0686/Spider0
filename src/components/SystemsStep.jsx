@@ -217,6 +217,7 @@ export default function SystemsStep({
   systemResults,
   refreshVendorPricing,
   compareVendorPrices,
+  clearVendorComparison,
   vendorPriceSnapshots,
   vendorComparisonsBySystem,
   canAddMoreSystems,
@@ -510,7 +511,7 @@ export default function SystemsStep({
                           <strong>PPTX:</strong> таблица будет включена в выгрузку
                         </span>
                         <button className="ghost-btn" type="button" onClick={() => clearVendorComparison(system.id)}>
-                          ������ ��������� ���
+                          Скрыть сравнение цен
                         </button>
                       </div>
 

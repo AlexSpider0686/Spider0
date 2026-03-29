@@ -892,6 +892,10 @@ export default function useEstimate() {
     }
   };
 
+  const clearVendorComparison = (systemId) => {
+    setVendorComparisonsBySystem((prev) => removeById(prev, systemId));
+  };
+
   const exportEstimate = async () => {
     try {
       const objectTypeLabel = OBJECT_TYPES.find((item) => item.value === objectData.objectType)?.label || objectData.objectType;
@@ -1245,6 +1249,7 @@ export default function useEstimate() {
     updateBudget,
     refreshVendorPricing,
     compareVendorPrices,
+    clearVendorComparison,
     importApsProjectPdf,
     clearApsProjectPdf,
     updateApsProjectItem,
