@@ -168,6 +168,13 @@ export function calculateLaborCost({
     workChargesBeforeRegion,
     workTotalBeforeRegion,
     workTotal,
+    chargePercents: {
+      overhead: toNumber(budget?.overheadPercent, 0),
+      payrollTaxes: toNumber(budget?.payrollTaxesPercent, 0),
+      utilization: toNumber(budget?.utilizationPercent, 0),
+      ppe: toNumber(budget?.ppePercent, 0),
+      admin: toNumber(budget?.adminPercent, 0),
+    },
     unitRates: {
       mountPrimary: toNumber(rates.mountPrimary, 0),
       pnrPrimary: toNumber(rates.pnrPrimary, 0),
@@ -200,9 +207,19 @@ export function calculateLaborCost({
     marketGuard: {
       minBaseFactor: toNumber(marketGuardrail.minBaseFactor, 1),
       minFinalPerMarker: toNumber(marketGuardrail.minFinalPerMarker, 0),
+      marketFloorBaseByRates,
+      marketFloorBaseByMarker,
       marketFloorTotal,
     },
     neuralCheck,
+    modelSource: {
+      unitRatesConfig: "LABOR_UNIT_RATES / src/config/costModelConfig.js",
+      marketGuardConfig: "LABOR_MARKET_GUARDRAILS / src/config/costModelConfig.js",
+      scheduleCalibration:
+        projectMode
+          ? "APS PDF: трудоемкость и состав работ калибруются по распознанной проектной спецификации"
+          : "Пресейл: трудоемкость и состав работ рассчитываются по модели плотностей, зон и трасс",
+    },
     designHours: safeDesignHours,
     designBase,
     designAfterConditions,

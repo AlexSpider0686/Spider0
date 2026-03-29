@@ -68,15 +68,18 @@ function formatMultiplier(value) {
 function renderWorkCostPopover(result) {
   const laborDetails = result?.laborDetails;
   if (!laborDetails?.unitRates || !laborDetails?.workBreakdown) {
-    return <span className="pricing-chip-popover">Детализация расчета работ появится после формирования итогового расчета системы.</span>;
+    return <span className="pricing-chip-popover">{"\u0414\u0435\u0442\u0430\u043b\u0438\u0437\u0430\u0446\u0438\u044f \u0440\u0430\u0441\u0447\u0435\u0442\u0430 \u0440\u0430\u0431\u043e\u0442 \u043f\u043e\u044f\u0432\u0438\u0442\u0441\u044f \u043f\u043e\u0441\u043b\u0435 \u0444\u043e\u0440\u043c\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u044f \u0438\u0442\u043e\u0433\u043e\u0432\u043e\u0433\u043e \u0440\u0430\u0441\u0447\u0435\u0442\u0430 \u0441\u0438\u0441\u0442\u0435\u043c\u044b."}</span>;
   }
 
   const rates = laborDetails.unitRates;
   const breakdown = laborDetails.workBreakdown;
   const charges = laborDetails.workChargesBeforeRegion || {};
+  const chargePercents = laborDetails.chargePercents || {};
   const marketGuard = laborDetails.marketGuard || {};
   const neuralCheck = laborDetails.neuralCheck || {};
+  const modelSource = laborDetails.modelSource || {};
   const regionalFactor = Math.max(toNumber(breakdown.regionalFactor, 1), 0.0001);
+  const workBase = toNumber(result?.workBase || breakdown.computedWorkBase, 0);
   const workAfterConditions = toNumber(result?.laborBase, 0) / regionalFactor;
   const chargesTotal =
     toNumber(charges.overhead, 0) +
@@ -84,57 +87,67 @@ function renderWorkCostPopover(result) {
     toNumber(charges.utilization, 0) +
     toNumber(charges.ppe, 0) +
     toNumber(charges.admin, 0);
+  const markerLabel = result?.unitWorkMarker?.label || "marker";
+  const markerUnits = Math.max(toNumber(laborDetails.markerUnits, 0), 1);
+  const marketFloorBaseByRates = toNumber(marketGuard.marketFloorBaseByRates, 0);
+  const marketFloorBaseByMarker = toNumber(marketGuard.marketFloorBaseByMarker, 0);
+  const neuralFloorBase = toNumber(neuralCheck.neuralFloorBase, 0);
 
   return (
     <span className="pricing-chip-popover work-cost-popover">
       <span className="work-cost-popover__section">
-        <strong>Как считается стоимость работ</strong>
-        <span>
-          СМР+ПНР считаются по внутренней модели единичных расценок, затем проверяются рыночным полом и AI-анализом риска
-          недооценки. Для APS с PDF итог не может быть ниже базы по единичным расценкам.
-        </span>
+        <strong>{"\u041a\u0430\u043a \u0441\u0447\u0438\u0442\u0430\u0435\u0442\u0441\u044f \u0441\u0442\u043e\u0438\u043c\u043e\u0441\u0442\u044c \u0440\u0430\u0431\u043e\u0442"}</strong>
+        <span>{"\u0417\u0434\u0435\u0441\u044c \u043f\u043e\u043a\u0430\u0437\u0430\u043d \u043f\u043e\u043b\u043d\u044b\u0439 \u043f\u043e\u0440\u044f\u0434\u043e\u043a \u0440\u0430\u0441\u0447\u0435\u0442\u0430 \u0421\u041c\u0420+\u041f\u041d\u0420: \u043e\u0442 \u0431\u0430\u0437\u043e\u0432\u044b\u0445 \u0435\u0434\u0438\u043d\u0438\u0447\u043d\u044b\u0445 \u0440\u0430\u0441\u0446\u0435\u043d\u043e\u043a \u0438 \u043e\u0431\u044a\u0435\u043c\u043e\u0432 \u0434\u043e \u043d\u0430\u0447\u0438\u0441\u043b\u0435\u043d\u0438\u0439, \u0440\u0435\u0433\u0438\u043e\u043d\u0430\u043b\u044c\u043d\u043e\u0433\u043e \u043a\u043e\u044d\u0444\u0444\u0438\u0446\u0438\u0435\u043d\u0442\u0430 \u0438 \u0437\u0430\u0449\u0438\u0442\u044b \u043e\u0442 \u043d\u0435\u0434\u043e\u043e\u0446\u0435\u043d\u043a\u0438."}</span>
+        <span>{`\u041f\u0440\u043e\u0435\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435 \u0441\u0447\u0438\u0442\u0430\u0435\u0442\u0441\u044f \u043e\u0442\u0434\u0435\u043b\u044c\u043d\u043e \u043f\u043e \u0441\u0442\u0430\u0432\u043a\u0435 ${rub(rates.designHour)} / \u0447\u0430\u0441 \u0438 \u0432 \u044d\u0442\u0443 \u0441\u0443\u043c\u043c\u0443 \u0440\u0430\u0431\u043e\u0442 \u043d\u0435 \u0432\u0445\u043e\u0434\u0438\u0442.`}</span>
       </span>
 
       <span className="work-cost-popover__section">
-        <strong>Базовые единичные расценки</strong>
-        <span>
-          Осн. элемент: {rub(rates.mountPrimary)} монтаж / {rub(rates.pnrPrimary)} ПНР; контроллер: {rub(rates.controllerMount)};
-          активный элемент ПНР: {rub(rates.pnrActiveElement)}; кабель: {rub(rates.cablePerMeter)}/м; КНС: {rub(rates.knsPerMeter)}/м;
-          интеграция: {rub(rates.integrationPoint)}/точку.
-        </span>
+        <strong>{"\u041e\u0442\u043a\u0443\u0434\u0430 \u0431\u0435\u0440\u0443\u0442\u0441\u044f \u0441\u0442\u0430\u0432\u043a\u0438 \u0438 \u043d\u043e\u0440\u043c\u044b"}</strong>
+        <span>{`\u0418\u0441\u0442\u043e\u0447\u043d\u0438\u043a \u0431\u0430\u0437\u043e\u0432\u044b\u0445 \u0440\u0430\u0441\u0446\u0435\u043d\u043e\u043a: ${modelSource.unitRatesConfig || "LABOR_UNIT_RATES / src/config/costModelConfig.js"}.`}</span>
+        <span>{"\u0411\u0430\u0437\u043e\u0432\u044b\u0435 \u0441\u0442\u0430\u0432\u043a\u0438 \u2014 \u044d\u0442\u043e \u0443\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u043d\u044b\u0435 \u0432\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0438\u0435 \u0435\u0434\u0438\u043d\u0438\u0447\u043d\u044b\u0435 \u043d\u043e\u0440\u043c\u044b \u0442\u0435\u043a\u0443\u0449\u0435\u0439 \u0432\u0435\u0440\u0441\u0438\u0438 \u043f\u043b\u0430\u0442\u0444\u043e\u0440\u043c\u044b; \u043e\u043d\u0438 \u043f\u0440\u0438\u043c\u0435\u043d\u044f\u044e\u0442\u0441\u044f \u043e\u0434\u0438\u043d\u0430\u043a\u043e\u0432\u043e \u0434\u043b\u044f \u0432\u0441\u0435\u0445 \u0440\u0430\u0441\u0447\u0435\u0442\u043e\u0432 \u044d\u0442\u043e\u0439 \u0432\u0435\u0440\u0441\u0438\u0438 \u0438 \u0437\u0430\u0442\u0435\u043c \u043a\u043e\u0440\u0440\u0435\u043a\u0442\u0438\u0440\u0443\u044e\u0442\u0441\u044f \u0443\u0441\u043b\u043e\u0432\u0438\u044f\u043c\u0438 \u043c\u043e\u043d\u0442\u0430\u0436\u0430, \u0440\u0435\u0433\u0438\u043e\u043d\u043e\u043c \u0438 \u0437\u0430\u0449\u0438\u0442\u043d\u044b\u043c\u0438 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0430\u043c\u0438."}</span>
+        <span>{`\u0418\u0441\u0442\u043e\u0447\u043d\u0438\u043a \u0437\u0430\u0449\u0438\u0442\u043d\u044b\u0445 \u043f\u043e\u0440\u043e\u0433\u043e\u0432: ${modelSource.marketGuardConfig || "LABOR_MARKET_GUARDRAILS / src/config/costModelConfig.js"}.`}</span>
+        <span>{modelSource.scheduleCalibration || "\u0422\u0440\u0443\u0434\u043e\u0435\u043c\u043a\u043e\u0441\u0442\u044c \u043a\u0430\u043b\u0438\u0431\u0440\u0443\u0435\u0442\u0441\u044f \u0432\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0435\u0439 \u043c\u043e\u0434\u0435\u043b\u044c\u044e \u0441\u0442\u0430\u0432\u043e\u043a, \u043d\u043e\u0440\u043c \u0438 \u043e\u0431\u044a\u0435\u043c\u043e\u0432."}</span>
       </span>
 
       <span className="work-cost-popover__section">
-        <strong>Объемы</strong>
-        <span>
-          {num(breakdown.primaryUnits, 0)} осн. элементов, {num(breakdown.controllerUnits, 0)} контроллеров, {num(breakdown.activeElements, 0)}
-          {" "}активных элементов, {num(breakdown.integrationPoints, 0)} точек интеграции, {num(breakdown.cableLengthM, 0)} м кабеля,
-          {` ${num(breakdown.knsLengthM, 0)} м КНС.`}
-        </span>
+        <strong>{"\u0411\u0430\u0437\u043e\u0432\u044b\u0435 \u0435\u0434\u0438\u043d\u0438\u0447\u043d\u044b\u0435 \u0440\u0430\u0441\u0446\u0435\u043d\u043a\u0438 \u0434\u043b\u044f \u044d\u0442\u043e\u0439 \u0441\u0438\u0441\u0442\u0435\u043c\u044b"}</strong>
+        <span>{`\u041c\u043e\u043d\u0442\u0430\u0436 \u043e\u0441\u043d\u043e\u0432\u043d\u043e\u0433\u043e \u044d\u043b\u0435\u043c\u0435\u043d\u0442\u0430: ${rub(rates.mountPrimary)} / \u0448\u0442; \u041f\u041d\u0420 \u043e\u0441\u043d\u043e\u0432\u043d\u043e\u0433\u043e \u044d\u043b\u0435\u043c\u0435\u043d\u0442\u0430: ${rub(rates.pnrPrimary)} / \u0448\u0442.`}</span>
+        <span>{`\u041c\u043e\u043d\u0442\u0430\u0436 \u043a\u043e\u043d\u0442\u0440\u043e\u043b\u043b\u0435\u0440\u0430: ${rub(rates.controllerMount)} / \u0448\u0442; \u041f\u041d\u0420 \u0430\u043a\u0442\u0438\u0432\u043d\u043e\u0433\u043e \u044d\u043b\u0435\u043c\u0435\u043d\u0442\u0430: ${rub(rates.pnrActiveElement)} / \u0448\u0442.`}</span>
+        <span>{`\u041a\u0430\u0431\u0435\u043b\u044c\u043d\u044b\u0435 \u043b\u0438\u043d\u0438\u0438: ${rub(rates.cablePerMeter)} / \u043c; \u041a\u041d\u0421: ${rub(rates.knsPerMeter)} / \u043c; \u0442\u043e\u0447\u043a\u0430 \u0438\u043d\u0442\u0435\u0433\u0440\u0430\u0446\u0438\u0438: ${rub(rates.integrationPoint)} / \u0442\u043e\u0447\u043a\u0443.`}</span>
       </span>
 
       <span className="work-cost-popover__section">
-        <strong>Формула</strong>
-        <span>
-          База: {rub(result?.workBase || breakdown.computedWorkBase)} = СМР {rub(breakdown.smrBase)} + ПНР {rub(breakdown.pnrBase)} +
-          интеграция {rub(breakdown.integrationBase)} + КНС {rub(breakdown.knsBase)}.
-        </span>
-        <span>
-          После условий: {rub(workAfterConditions)} = база {formatMultiplier(breakdown.conditionFactor)} x эксплуатируемое здание{" "}
-          {formatMultiplier(breakdown.exploitedFactor)}.
-        </span>
-        <span>
-          Начисления: {rub(chargesTotal)}; до региона {rub(laborDetails.workTotalBeforeRegion || 0)}; регион {formatMultiplier(breakdown.regionalFactor)}.
-        </span>
-        <span>
-          Рыночный пол: {rub(marketGuard.marketFloorTotal || 0)}; AI uplift {formatMultiplier(neuralCheck.neuralUpliftMultiplier || 1)}; риск
-          недооценки {num(toNumber(neuralCheck.underestimationRisk, 0) * 100, 0)}%.
-        </span>
+        <strong>{"\u041e\u0431\u044a\u0435\u043c\u044b, \u043a\u043e\u0442\u043e\u0440\u044b\u0435 \u0432\u043e\u0448\u043b\u0438 \u0432 \u0440\u0430\u0441\u0447\u0435\u0442"}</strong>
+        <span>{`\u041e\u0441\u043d\u043e\u0432\u043d\u044b\u0435 \u044d\u043b\u0435\u043c\u0435\u043d\u0442\u044b: ${num(breakdown.primaryUnits, 0)}; \u043a\u043e\u043d\u0442\u0440\u043e\u043b\u043b\u0435\u0440\u044b: ${num(breakdown.controllerUnits, 0)}; \u0430\u043a\u0442\u0438\u0432\u043d\u044b\u0435 \u044d\u043b\u0435\u043c\u0435\u043d\u0442\u044b \u041f\u041d\u0420: ${num(breakdown.activeElements, 0)}.`}</span>
+        <span>{`\u0422\u043e\u0447\u043a\u0438 \u0438\u043d\u0442\u0435\u0433\u0440\u0430\u0446\u0438\u0438: ${num(breakdown.integrationPoints, 0)}; \u043a\u0430\u0431\u0435\u043b\u044c: ${num(breakdown.cableLengthM, 1)} \u043c; \u041a\u041d\u0421: ${num(breakdown.knsLengthM, 1)} \u043c; \u0443\u0441\u043b\u043e\u0432\u043d\u044b\u0435 \u0440\u0430\u0431\u043e\u0442\u044b \u043f\u043e \u041a\u041d\u0421: ${num(breakdown.knsWorkUnits, 1)}.`}</span>
+        <span>{`\u041c\u0430\u0440\u043a\u0435\u0440 \u043d\u043e\u0440\u043c\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u044f: \u00ab${markerLabel}\u00bb; \u043a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u043e \u043c\u0430\u0440\u043a\u0435\u0440\u043e\u0432 \u0432 \u0440\u0430\u0441\u0447\u0435\u0442\u0435: ${num(markerUnits, 0)}.`}</span>
+      </span>
+
+      <span className="work-cost-popover__section">
+        <strong>{"\u041f\u043e\u0448\u0430\u0433\u043e\u0432\u0430\u044f \u0444\u043e\u0440\u043c\u0443\u043b\u0430 \u0440\u0430\u0441\u0447\u0435\u0442\u0430"}</strong>
+        <span>{`1) \u0421\u041c\u0420 = ${num(breakdown.primaryUnits, 0)} x ${rub(rates.mountPrimary)} + ${num(breakdown.controllerUnits, 0)} x ${rub(rates.controllerMount)} + ${num(breakdown.cableLengthM, 1)} \u043c x ${rub(rates.cablePerMeter)} = ${rub(breakdown.smrBase)}.`}</span>
+        <span>{`2) \u041f\u041d\u0420 = ${num(breakdown.primaryUnits, 0)} x ${rub(rates.pnrPrimary)} + ${num(breakdown.activeElements, 0)} x ${rub(rates.pnrActiveElement)} = ${rub(breakdown.pnrBase)}.`}</span>
+        <span>{`3) \u0418\u043d\u0442\u0435\u0433\u0440\u0430\u0446\u0438\u044f = ${num(breakdown.integrationPoints, 0)} x ${rub(rates.integrationPoint)} = ${rub(breakdown.integrationBase)}.`}</span>
+        <span>{`4) \u041a\u041d\u0421 = ${num(breakdown.knsLengthM, 1)} \u043c x ${rub(rates.knsPerMeter)} + ${num(breakdown.knsWorkUnits, 1)} x ${rub(rates.knsPerMeter)} x 0.22 = ${rub(breakdown.knsBase)}.`}</span>
+        <span>{`5) \u0420\u0430\u0441\u0447\u0435\u0442\u043d\u0430\u044f \u0431\u0430\u0437\u0430 \u043f\u043e \u0435\u0434\u0438\u043d\u0438\u0447\u043d\u044b\u043c \u0440\u0430\u0441\u0446\u0435\u043d\u043a\u0430\u043c = ${rub(breakdown.computedWorkBase)}.`}</span>
+        <span>{`6) \u0417\u0430\u0449\u0438\u0449\u0435\u043d\u043d\u0430\u044f \u0431\u0430\u0437\u0430 = max(\u043f\u0440\u043e\u0435\u043a\u0442\u043d\u0430\u044f ${rub(breakdown.projectWorkBase)}, floor \u043f\u043e \u0441\u0442\u0430\u0432\u043a\u0430\u043c ${rub(marketFloorBaseByRates)}, floor \u043f\u043e \u043c\u0430\u0440\u043a\u0435\u0440\u0443 ${rub(marketFloorBaseByMarker)}, AI floor ${rub(neuralFloorBase)}) = ${rub(workBase)}.`}</span>
+        <span>{`7) \u041f\u043e\u0441\u043b\u0435 \u0443\u0441\u043b\u043e\u0432\u0438\u0439 \u043c\u043e\u043d\u0442\u0430\u0436\u0430 = ${rub(workBase)} x ${num(breakdown.conditionFactor, 2)} x ${num(breakdown.exploitedFactor, 2)} = ${rub(workAfterConditions)}.`}</span>
+        <span>{`8) \u041d\u0430\u0447\u0438\u0441\u043b\u0435\u043d\u0438\u044f = \u043d\u0430\u043a\u043b\u0430\u0434\u043d\u044b\u0435 ${num(chargePercents.overhead, 0)}% (${rub(charges.overhead)}) + \u043d\u0430\u043b\u043e\u0433\u0438 \u0424\u041e\u0422 ${num(chargePercents.payrollTaxes, 0)}% (${rub(charges.payrollTaxes)}) + \u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442/\u0438\u0437\u043d\u043e\u0441 ${num(chargePercents.utilization, 0)}% (${rub(charges.utilization)}) + \u0421\u0418\u0417 ${num(chargePercents.ppe, 0)}% (${rub(charges.ppe)}) + \u0430\u0434\u043c\u0438\u043d ${num(chargePercents.admin, 0)}% (${rub(charges.admin)}) = ${rub(chargesTotal)}.`}</span>
+        <span>{`9) \u0414\u043e \u0440\u0435\u0433\u0438\u043e\u043d\u0430 = ${rub(workAfterConditions)} + ${rub(chargesTotal)} = ${rub(laborDetails.workTotalBeforeRegion || 0)}; \u043f\u043e\u0441\u043b\u0435 \u0440\u0435\u0433\u0438\u043e\u043d\u0430 = ${rub(laborDetails.workTotalBeforeRegion || 0)} x ${num(breakdown.regionalFactor, 2)} = ${rub(result?.workTotal || 0)}.`}</span>
+      </span>
+
+      <span className="work-cost-popover__section">
+        <strong>{"\u0417\u0430\u0449\u0438\u0442\u0430 \u043e\u0442 \u043d\u0435\u0434\u043e\u043e\u0446\u0435\u043d\u043a\u0438"}</strong>
+        <span>{`\u041c\u0438\u043d\u0438\u043c\u0430\u043b\u044c\u043d\u0430\u044f \u0431\u0430\u0437\u0430 \u043f\u043e \u0441\u0442\u0430\u0432\u043a\u0430\u043c = ${rub(breakdown.computedWorkBase)} x ${num(marketGuard.minBaseFactor, 2)} = ${rub(marketFloorBaseByRates)}.`}</span>
+        <span>{`\u041c\u0438\u043d\u0438\u043c\u0430\u043b\u044c\u043d\u044b\u0439 \u0440\u044b\u043d\u043e\u0447\u043d\u044b\u0439 \u0438\u0442\u043e\u0433 \u043f\u043e \u043c\u0430\u0440\u043a\u0435\u0440\u0443 = ${rub(marketGuard.minFinalPerMarker || 0)} x ${num(markerUnits, 0)} \u043c\u0430\u0440\u043a\u0435\u0440\u043e\u0432 = ${rub(marketGuard.marketFloorTotal || 0)} \u043f\u043e\u0441\u043b\u0435 \u0443\u0441\u043b\u043e\u0432\u0438\u0439 \u0438 \u0440\u0435\u0433\u0438\u043e\u043d\u0430.`}</span>
+        <span>{`AI-\u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u0440\u0438\u0441\u043a\u0430 \u043d\u0435\u0434\u043e\u043e\u0446\u0435\u043d\u043a\u0438 = ${num(toNumber(neuralCheck.underestimationRisk, 0) * 100, 0)}%; \u0443\u0441\u0438\u043b\u0435\u043d\u0438\u0435 \u0431\u0430\u0437\u044b = x${num(neuralCheck.neuralUpliftMultiplier || 1, 2)}; AI floor = ${rub(neuralFloorBase)}.`}</span>
+        <span>{"\u0412 \u0438\u0442\u043e\u0433 \u0431\u0435\u0440\u0435\u0442\u0441\u044f \u043d\u0435 \u043c\u0438\u043d\u0438\u043c\u0443\u043c, \u0430 \u043c\u0430\u043a\u0441\u0438\u043c\u0443\u043c \u0438\u0437 \u0432\u0441\u0435\u0445 \u0437\u0430\u0449\u0438\u0442\u043d\u044b\u0445 \u043f\u043e\u0440\u043e\u0433\u043e\u0432, \u0447\u0442\u043e\u0431\u044b \u0441\u043c\u0435\u0442\u0430 \u043d\u0435 \u043f\u0440\u043e\u0432\u0430\u043b\u0438\u0432\u0430\u043b\u0430\u0441\u044c \u043d\u0438\u0436\u0435 \u0440\u0430\u0431\u043e\u0447\u0435\u0433\u043e \u043c\u0438\u043d\u0438\u043c\u0443\u043c\u0430."}</span>
       </span>
 
       <span className="work-cost-popover__section work-cost-popover__section--accent">
-        <strong>Итог</strong>
-        <span>Итоговая стоимость работ (СМР+ПНР): {rub(result?.workTotal || 0)}</span>
+        <strong>{"\u0418\u0442\u043e\u0433 \u0434\u043b\u044f \u0444\u0438\u043d\u0441\u043b\u0443\u0436\u0431\u044b"}</strong>
+        <span>{`\u0418\u0442\u043e\u0433\u043e\u0432\u0430\u044f \u0441\u0442\u043e\u0438\u043c\u043e\u0441\u0442\u044c \u0440\u0430\u0431\u043e\u0442 (\u0421\u041c\u0420+\u041f\u041d\u0420) = ${rub(result?.workTotal || 0)}.`}</span>
+        <span>{`\u042d\u0442\u0430 \u0441\u0443\u043c\u043c\u0430 \u043f\u0440\u043e\u0441\u043b\u0435\u0436\u0438\u0432\u0430\u0435\u0442\u0441\u044f \u043e\u0442 \u043a\u043e\u043d\u043a\u0440\u0435\u0442\u043d\u044b\u0445 \u0441\u0442\u0430\u0432\u043e\u043a, \u043e\u0431\u044a\u0435\u043c\u043e\u0432, \u043d\u0430\u0447\u0438\u0441\u043b\u0435\u043d\u0438\u0439 \u0438 \u043a\u043e\u044d\u0444\u0444\u0438\u0446\u0438\u0435\u043d\u0442\u043e\u0432, \u043f\u043e\u043a\u0430\u0437\u0430\u043d\u043d\u044b\u0445 \u0432\u044b\u0448\u0435.`}</span>
       </span>
     </span>
   );
