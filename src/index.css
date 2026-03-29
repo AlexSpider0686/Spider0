@@ -1463,7 +1463,7 @@ body.ai-survey-open .object-photo-card {
 
 .system-control-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -1598,6 +1598,30 @@ body.ai-survey-open .object-photo-card {
 
 .vendor-hint-footer p {
   font-size: 10px;
+}
+
+.comparison-trigger-card {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+
+.comparison-trigger-btn {
+  width: 100%;
+  justify-content: center;
+}
+
+.comparison-panel {
+  display: grid;
+  gap: 8px;
+}
+
+.comparison-summary-row {
+  margin-top: 0;
+}
+
+.comparison-table-wrap table td strong {
+  color: #12395e;
 }
 
 .spin {

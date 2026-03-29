@@ -385,5 +385,10 @@ export async function fetchPricesByRequests(requests = []) {
 
 export async function fetchVendorPrices(systemType, vendorName) {
   const requests = buildPriceRequests(systemType, vendorName);
-  return fetchPricesByRequests(requests);
+  const snapshot = await fetchPricesByRequests(requests);
+  return {
+    ...snapshot,
+    systemType,
+    vendorName,
+  };
 }

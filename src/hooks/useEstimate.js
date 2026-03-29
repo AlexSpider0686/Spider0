@@ -112,6 +112,7 @@ export default function useEstimate() {
   const [zonePreset, setZonePreset] = useState("business_center");
   const [lockedZoneIds, setLockedZoneIds] = useState([]);
   const [vendorPriceSnapshots, setVendorPriceSnapshots] = useState({});
+  const [vendorComparisonsBySystem, setVendorComparisonsBySystem] = useState({});
   const [apsProjectSnapshots, setApsProjectSnapshots] = useState({});
   const [apsImportStatuses, setApsImportStatuses] = useState({});
   const [technicalSolution, setTechnicalSolution] = useState({
@@ -316,6 +317,7 @@ export default function useEstimate() {
   };
 
   const updateSystem = (id, key, value) => {
+    setVendorComparisonsBySystem((prev) => removeById(prev, id));
     if (key === "type" && value !== "aps") {
       setApsProjectSnapshots((prev) => removeById(prev, id));
       setApsImportStatuses((prev) => removeById(prev, id));
@@ -372,6 +374,7 @@ export default function useEstimate() {
 
   const removeSystem = (id) => {
     setSystems((prev) => (prev.length <= 1 ? prev : prev.filter((system) => system.id !== id)));
+    setVendorComparisonsBySystem((prev) => removeById(prev, id));
     setApsProjectSnapshots((prev) => removeById(prev, id));
     setApsImportStatuses((prev) => removeById(prev, id));
   };
@@ -389,6 +392,7 @@ export default function useEstimate() {
 
   const refreshVendorPricing = async (system) => {
     const apsSnapshot = apsProjectSnapshots?.[system?.id];
+    setVendorComparisonsBySystem((prev) => removeById(prev, system?.id));
     if (system?.type === "aps" && apsSnapshot?.active) {
       setApsImportStatuses((prev) => ({
         ...prev,
@@ -541,6 +545,7 @@ export default function useEstimate() {
   };
 
   const clearApsProjectPdf = (systemId) => {
+    setVendorComparisonsBySystem((prev) => removeById(prev, systemId));
     setApsProjectSnapshots((prev) => removeById(prev, systemId));
     setApsImportStatuses((prev) => removeById(prev, systemId));
   };
@@ -621,6 +626,7 @@ export default function useEstimate() {
 
   useEffect(() => {
     const systemIds = new Set(systems.map((item) => String(item.id)));
+    setVendorComparisonsBySystem((prev) => Object.fromEntries(Object.entries(prev).filter(([id]) => systemIds.has(String(id)))));
     setApsProjectSnapshots((prev) => Object.fromEntries(Object.entries(prev).filter(([id]) => systemIds.has(String(id)))));
     setApsImportStatuses((prev) => Object.fromEntries(Object.entries(prev).filter(([id]) => systemIds.has(String(id)))));
   }, [systems]);
@@ -688,6 +694,146 @@ export default function useEstimate() {
     };
   }, [systems]);
 
+  const compareVendorPrices = async (systemId) => {
+    const system = systems.find((item) => item.id === systemId);
+    if (!system) {
+      throw new Error("Система для сравнения цен не найдена.");
+    }
+
+    const apsSnapshot = apsProjectSnapshots?.[systemId];
+    const currentVendor = apsSnapshot?.detectedVendor || system.vendor;
+    const candidateVendors = [currentVendor, ...(VENDORS[system.type] || []).filter((vendor) => vendor !== currentVendor)].slice(0, 3);
+
+    if (candidateVendors.length < 2) {
+      setVendorComparisonsBySystem((prev) => ({
+        ...prev,
+        [systemId]: {
+          state: "error",
+          message: "Для этой системы пока недостаточно альтернативных вендоров для сравнения.",
+          currentVendor,
+          rows: [],
+        },
+      }));
+      return null;
+    }
+
+    setVendorComparisonsBySystem((prev) => ({
+      ...prev,
+      [systemId]: {
+        ...(prev?.[systemId] || {}),
+        state: "loading",
+        message: "Идет сбор цен и пересчет системы по текущему вендору и двум альтернативам...",
+        currentVendor,
+        rows: [],
+      },
+    }));
+
+    try {
+      const snapshots = await Promise.all(
+        candidateVendors.map(async (vendor) => {
+          const canReuseCurrentSnapshot =
+            vendor === currentVendor &&
+            vendorPriceSnapshots?.[systemId]?.entries?.length &&
+            String(vendorPriceSnapshots?.[systemId]?.vendorName || system.vendor || currentVendor) === String(vendor);
+
+          if (canReuseCurrentSnapshot) {
+            return [vendor, vendorPriceSnapshots[systemId]];
+          }
+
+          const snapshot = await fetchVendorPrices(system.type, vendor);
+          return [vendor, snapshot];
+        })
+      );
+
+      const snapshotMap = Object.fromEntries(snapshots);
+      if (snapshotMap[currentVendor]) {
+        setVendorPriceSnapshots((prev) => ({
+          ...prev,
+          [systemId]: snapshotMap[currentVendor],
+        }));
+      }
+
+      const rows = candidateVendors.map((vendor) => {
+        const comparisonSystems = systems.map((item) =>
+          item.id === systemId
+            ? {
+                ...item,
+                vendor,
+                baseVendor: vendor,
+                customVendorIndex: item.customVendorIndex || 1,
+              }
+            : item
+        );
+
+        const comparisonSnapshots = {
+          ...vendorPriceSnapshots,
+          [systemId]: snapshotMap[vendor],
+        };
+
+        const { systemsDetailed } = calculateEstimateEngine(
+          comparisonSystems,
+          zones,
+          budget,
+          effectiveObjectData,
+          comparisonSnapshots,
+          apsProjectSnapshots,
+          technicalSolution.appliedAnswers
+        );
+
+        const comparisonResult = systemsDetailed.find((item) => item.systemId === systemId) || {};
+        const snapshot = snapshotMap[vendor];
+        const pricedSourceCount =
+          snapshot?.entries
+            ?.filter((item) => (item.sourceCount || 0) > 0)
+            .reduce((sum, item) => sum + (item.sourceCount || 0), 0) || 0;
+        const checkedSourceCount =
+          snapshot?.entries?.reduce((sum, item) => sum + (item.checkedSources || item.sourceUrls?.length || 0), 0) || 0;
+
+        return {
+          vendor,
+          role: vendor === currentVendor ? "Текущий" : "Альтернатива",
+          isCurrent: vendor === currentVendor,
+          unitPrice: toNumber(comparisonResult?.equipmentData?.unitPrice, 0),
+          equipmentCost: toNumber(comparisonResult?.equipmentCost, 0),
+          materialCost: toNumber(comparisonResult?.materialCost, 0),
+          workTotal: toNumber(comparisonResult?.workTotal, 0),
+          designTotal: toNumber(comparisonResult?.designTotal, 0),
+          total: toNumber(comparisonResult?.total, 0),
+          checkedSourceCount,
+          pricedSourceCount,
+        };
+      });
+
+      const nextComparison = {
+        state: "success",
+        generatedAt: new Date().toISOString(),
+        currentVendor,
+        systemId,
+        systemType: system.type,
+        systemName: SYSTEM_TYPES.find((item) => item.code === system.type)?.name || system.type,
+        rows,
+      };
+
+      setVendorComparisonsBySystem((prev) => ({
+        ...prev,
+        [systemId]: nextComparison,
+      }));
+
+      return nextComparison;
+    } catch (error) {
+      setVendorComparisonsBySystem((prev) => ({
+        ...prev,
+        [systemId]: {
+          state: "error",
+          message: error?.message || "Не удалось построить сравнение цен по вендорам.",
+          currentVendor,
+          rows: [],
+        },
+      }));
+      throw error;
+    }
+  };
+
   const exportEstimate = async () => {
     try {
       const objectTypeLabel = OBJECT_TYPES.find((item) => item.value === objectData.objectType)?.label || objectData.objectType;
@@ -716,6 +862,7 @@ export default function useEstimate() {
         totals,
         projectRisks,
         apsProjectExports,
+        vendorComparisons: Object.values(vendorComparisonsBySystem || {}).filter((item) => item?.state === "success" && item?.rows?.length),
       };
       const { exportEstimatePptx } = await import("../lib/pptxExport");
       await exportEstimatePptx(payload);
@@ -1007,6 +1154,7 @@ export default function useEstimate() {
     setZonePreset,
     lockedZoneIds,
     vendorPriceSnapshots,
+    vendorComparisonsBySystem,
     apsProjectSnapshots,
     apsImportStatuses,
     protectedAreaMeta,
@@ -1038,6 +1186,7 @@ export default function useEstimate() {
     updateSystemEquipmentProfile,
     updateBudget,
     refreshVendorPricing,
+    compareVendorPrices,
     importApsProjectPdf,
     clearApsProjectPdf,
     updateApsProjectItem,

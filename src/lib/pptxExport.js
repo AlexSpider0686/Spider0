@@ -401,6 +401,29 @@ function buildProjectRiskRows(projectRisks = []) {
   ]);
 }
 
+function buildVendorComparisonRows(vendorComparisons = []) {
+  const rows = [];
+
+  for (const comparison of Array.isArray(vendorComparisons) ? vendorComparisons : []) {
+    const systemName = sanitizeText(comparison?.systemName || comparison?.systemType || "вЂ”");
+    for (const row of comparison?.rows || []) {
+      rows.push([
+        systemName,
+        sanitizeText(row?.role || "вЂ”"),
+        sanitizeText(row?.vendor || "вЂ”"),
+        rub(row?.unitPrice || 0),
+        rub(row?.equipmentCost || 0),
+        rub(row?.materialCost || 0),
+        rub(row?.workTotal || 0),
+        rub(row?.total || 0),
+        `${safeNum(row?.pricedSourceCount, 0)}/${safeNum(row?.checkedSourceCount, 0)}`,
+      ]);
+    }
+  }
+
+  return rows;
+}
+
 function buildTimeline(systemResults, objectData, totals) {
   const systemsCount = Math.max(systemResults.length, 1);
   const area = safeNum(objectData?.totalArea, 0);
@@ -526,13 +549,14 @@ function addGanttSlide(slide, systemResults, objectData, totals) {
   );
 }
 
-export async function exportEstimatePptx({ objectData, budget, systemResults, totals, apsProjectExports = [], projectRisks = [] }) {
+export async function exportEstimatePptx({ objectData, budget, systemResults, totals, apsProjectExports = [], projectRisks = [], vendorComparisons = [] }) {
   const safeObject = objectData || {};
   const safeBudget = budget || {};
   const safeSystems = Array.isArray(systemResults) ? systemResults : [];
   const safeTotals = totals || {};
   const safeApsProjects = Array.isArray(apsProjectExports) ? apsProjectExports : [];
   const safeProjectRisks = Array.isArray(projectRisks) ? projectRisks : [];
+  const safeVendorComparisons = Array.isArray(vendorComparisons) ? vendorComparisons : [];
 
   const pptx = new PptxGenJS();
   pptx.layout = "LAYOUT_WIDE";
@@ -742,6 +766,31 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
     fontSize: 9,
   });
 
+  const comparisonRows = buildVendorComparisonRows(safeVendorComparisons);
+  const comparisonChunks = chunkArray(comparisonRows, 9);
+
+  comparisonChunks.forEach((rowsChunk, chunkIndex) => {
+    const slide = pptx.addSlide();
+    const titleSuffix = comparisonChunks.length > 1 ? ` (${chunkIndex + 1}/${comparisonChunks.length})` : "";
+    addSlideFrame(
+      slide,
+      `Сравнение цен по вендорам${titleSuffix}`,
+      "Текущий вендор и две альтернативы по каждой системе с пересчетом стоимости оборудования, материалов и работ.",
+      5 + chunkIndex
+    );
+    drawTable(slide, {
+      x: 0.55,
+      y: 1.2,
+      w: 12.2,
+      headers: ["Система", "Роль", "Вендор", "Ед. цена", "Оборуд.", "Материалы", "СМР+ПНР", "Итог", "Источники"],
+      widths: [0.18, 0.1, 0.13, 0.1, 0.11, 0.11, 0.11, 0.1, 0.06],
+      rows: rowsChunk,
+      maxRows: 9,
+      rowH: 0.55,
+      fontSize: 8,
+    });
+  });
+
   const unifiedSpecificationRows = buildUnifiedSpecificationRows(safeSystems, safeApsProjects);
   const specificationChunks = chunkArray(
     unifiedSpecificationRows.length ? unifiedSpecificationRows : [["—", "Нет данных", "—", "—", "—", "—", "—"]],
@@ -755,7 +804,7 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
       slide,
       `Спецификация оборудования и материалов${titleSuffix}`,
       "Единый перечень по всем системам: оборудование, материалы, количество, цена, сумма, ссылка и позиция из проекта.",
-      5 + chunkIndex
+      5 + comparisonChunks.length + chunkIndex
     );
     drawTable(slide, {
       x: 0.55,
@@ -776,7 +825,7 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
     riskSlide,
     "AI-риски проекта",
     "До пяти самых критичных индивидуальных рисков по текущему объекту: монтаж, спецификация, закупка, координация и сроки.",
-    5 + specificationChunks.length
+    5 + comparisonChunks.length + specificationChunks.length
   );
   drawTable(riskSlide, {
     x: 0.55,
@@ -797,7 +846,7 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
     slide6,
     "График реализации проекта",
     "Ориентировочные сроки проектирования, поставки, СМР, ПНР и интеграции.",
-    6 + specificationChunks.length
+    6 + comparisonChunks.length + specificationChunks.length
   );
   addGanttSlide(slide6, safeSystems, safeObject, safeTotals);
 

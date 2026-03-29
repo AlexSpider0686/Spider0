@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Plus, Trash2, Shield, FileUp, RefreshCcw, Eye, EyeOff, CheckCircle2, Download } from "lucide-react";
+import { Plus, Trash2, Shield, FileUp, RefreshCcw, Eye, EyeOff, CheckCircle2, Download, BarChart3 } from "lucide-react";
 import { SYSTEM_TYPES, VENDORS } from "../config/estimateConfig";
 import { getManufacturerSource, getVendorByName } from "../config/vendorsConfig";
 import { num, rub, toNumber } from "../lib/estimate";
@@ -215,7 +215,9 @@ export default function SystemsStep({
   updateSystem,
   systemResults,
   refreshVendorPricing,
+  compareVendorPrices,
   vendorPriceSnapshots,
+  vendorComparisonsBySystem,
   canAddMoreSystems,
   importApsProjectPdf,
   clearApsProjectPdf,
@@ -233,6 +235,7 @@ export default function SystemsStep({
   const [showUnitAuditBySystem, setShowUnitAuditBySystem] = useState({});
   const [showRecheckBySystem, setShowRecheckBySystem] = useState({});
   const [refreshingBySystem, setRefreshingBySystem] = useState({});
+  const [comparingBySystem, setComparingBySystem] = useState({});
 
   const getManualDraft = (systemId) => manualDraftBySystem[systemId] || defaultManualDraft();
 
@@ -268,6 +271,16 @@ export default function SystemsStep({
     }
   };
 
+  const handleCompare = async (system) => {
+    if (!system?.id || comparingBySystem[system.id]) return;
+    setComparingBySystem((prev) => ({ ...prev, [system.id]: true }));
+    try {
+      await compareVendorPrices?.(system.id);
+    } finally {
+      setComparingBySystem((prev) => ({ ...prev, [system.id]: false }));
+    }
+  };
+
   return (
     <section className="panel">
       <div className="panel-header">
@@ -298,8 +311,10 @@ export default function SystemsStep({
           const manufacturerWebsite = manufacturerSource?.website || "";
           const manufacturerHost = toHost(manufacturerWebsite);
           const isRefreshing = Boolean(refreshingBySystem[system.id]);
+          const isComparing = Boolean(comparingBySystem[system.id]);
           const showUnitAudit = Boolean(showUnitAuditBySystem[system.id]);
           const showRecheck = Boolean(showRecheckBySystem[system.id]);
+          const comparison = vendorComparisonsBySystem?.[system.id];
 
           const pricedSourceCount =
             snapshot?.entries
@@ -408,6 +423,14 @@ export default function SystemsStep({
                         onChange={(event) => updateSystem(system.id, "customVendorIndex", toNumber(event.target.value, 1))}
                       />
                     </div>
+                    <div className="input-card compact comparison-trigger-card">
+                      <label>Сравнение цен</label>
+                      <button className="ghost-btn comparison-trigger-btn" type="button" onClick={() => handleCompare(system)} disabled={isComparing}>
+                        <BarChart3 size={16} />
+                        {isComparing ? "Собираем цены..." : "Сравнить 3 вендора"}
+                      </button>
+                      <small className="hint-inline">Текущий вендор и две альтернативы с пересчетом итоговой стоимости системы.</small>
+                    </div>
                   </div>
                 </div>
 
@@ -463,6 +486,73 @@ export default function SystemsStep({
                   </div>
                 </div>
               </div>
+
+              {comparison ? (
+                <div className="subpanel comparison-panel">
+                  <div className="subpanel-header">
+                    <div>
+                      <h3>Сравнение цен по вендорам</h3>
+                      <p>Сравнение учитывает цены оборудования, материалы, работы, проектирование и итог по системе.</p>
+                    </div>
+                  </div>
+
+                  {comparison.state === "loading" ? <p className="hint-inline">{comparison.message}</p> : null}
+                  {comparison.state === "error" ? <p className="warn-inline">{comparison.message}</p> : null}
+
+                  {comparison.state === "success" && comparison.rows?.length ? (
+                    <>
+                      <div className="pricing-source-row comparison-summary-row">
+                        <span className="pricing-source-chip ok">
+                          <strong>Текущий вендор:</strong> {comparison.currentVendor}
+                        </span>
+                        <span className="pricing-source-chip">
+                          <strong>Строк в сравнении:</strong> {comparison.rows.length}
+                        </span>
+                        <span className="pricing-source-chip muted">
+                          <strong>PPTX:</strong> таблица будет включена в выгрузку
+                        </span>
+                      </div>
+
+                      <div className="table-wrap compact comparison-table-wrap">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>Роль</th>
+                              <th>Вендор</th>
+                              <th>Ед. цена</th>
+                              <th>Оборудование</th>
+                              <th>Материалы</th>
+                              <th>СМР+ПНР</th>
+                              <th>Проектир.</th>
+                              <th>Итог</th>
+                              <th>Источники</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {comparison.rows.map((row) => (
+                              <tr key={`${system.id}-${row.vendor}`}>
+                                <td>{row.role}</td>
+                                <td>{row.vendor}</td>
+                                <td>{rub(row.unitPrice)}</td>
+                                <td>{rub(row.equipmentCost)}</td>
+                                <td>{rub(row.materialCost)}</td>
+                                <td>{rub(row.workTotal)}</td>
+                                <td>{rub(row.designTotal)}</td>
+                                <td>
+                                  <strong>{rub(row.total)}</strong>
+                                </td>
+                                <td>
+                                  {row.pricedSourceCount}/{row.checkedSourceCount}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
 
               {snapshot ? (
                 <div className="pricing-caption">
