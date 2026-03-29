@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { AuthModal } from "../components/AuthModal";
+import { DevelopmentPlanModal } from "../components/DevelopmentPlanModal";
 import { HeroVideo } from "../components/HeroVideo";
 import { PromoReelPlayer } from "../components/PromoReelPlayer";
 import { SectionHeader } from "../components/SectionHeader";
@@ -180,6 +181,7 @@ const aiTechnicalSolutionPoints = [
 export function HomePage() {
   const [authOpen, setAuthOpen] = useState(false);
   const [promoOpen, setPromoOpen] = useState(false);
+  const [developmentPlanOpen, setDevelopmentPlanOpen] = useState(false);
 
   return (
     <main>
@@ -205,6 +207,9 @@ export function HomePage() {
             <Link className="btn btn--ghost-light" to="/about-system">
               О системе
             </Link>
+            <button className="btn btn--ghost-light btn--plan" type="button" onClick={() => setDevelopmentPlanOpen(true)}>
+              План разработки
+            </button>
             <button className="btn btn--signal" type="button" onClick={() => setPromoOpen(true)}>
               Видео о возможностях
             </button>
@@ -230,6 +235,7 @@ export function HomePage() {
       </section>
 
       <PromoReelPlayer open={promoOpen} onClose={() => setPromoOpen(false)} />
+      <DevelopmentPlanModal open={developmentPlanOpen} onClose={() => setDevelopmentPlanOpen(false)} />
 
       <section className="section section--dark" id="comparison">
         <div className="container">
