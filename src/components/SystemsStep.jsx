@@ -999,6 +999,9 @@ export default function SystemsStep({
                       <p className="hint-inline">
                         Спецификация собрана по данным вкладки "Объект", зонированию, этажности, статусу здания, ответам обследования и проектным данным.
                       </p>
+                      <p className="hint-inline">
+                        Фото коридоров и ответы о лотках, фальш-полах и запотолочном пространстве учитываются в техническом решении, материалах, СМР и итоговой стоимости системы.
+                      </p>
                     </div>
                     <div className="ai-configurator-badges">
                       <span className="pricing-source-chip ok">Готовность: {num(technicalRecommendation.readinessScore, 0)}%</span>

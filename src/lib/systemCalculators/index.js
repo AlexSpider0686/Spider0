@@ -256,6 +256,113 @@ function applyScheduleOverrides(laborModel, override) {
   };
 }
 
+function firstSurveyAnswer(answers, key) {
+  const value = answers?.[key];
+  if (Array.isArray(value)) return value;
+  if (value === null || value === undefined || value === "") return [];
+  return [value];
+}
+
+function boolSurveyAnswer(answers, key) {
+  return answers?.[key] === true;
+}
+
+function buildSurveyRoutingAdjustment({ zones, surveyAnswers, cableLengthM, markerCostPerUnit }) {
+  const normalizedZones = Array.isArray(zones) ? zones : [];
+  const totalArea = Math.max(
+    normalizedZones.reduce((sum, zone) => sum + Math.max(toNumber(zone?.area, 0), 0), 0),
+    1
+  );
+
+  const totals = {
+    materialsCost: 0,
+    workCost: 0,
+    routeLengthM: 0,
+    zoneCount: 0,
+    trayZones: 0,
+    conduitZones: 0,
+    boxZones: 0,
+    ceilingVoidZones: 0,
+    raisedFloorZones: 0,
+    labels: [],
+  };
+
+  normalizedZones.forEach((zone) => {
+    const zoneArea = Math.max(toNumber(zone?.area, 0), 0);
+    if (zoneArea <= 0) return;
+
+    const routeMethods = firstSurveyAnswer(surveyAnswers, `zone-${zone.id}-corridor-route-method`);
+    const trayRouting = boolSurveyAnswer(surveyAnswers, `zone-${zone.id}-tray-routing-present`) || routeMethods.includes("В лотке");
+    const conduitRouting = routeMethods.includes("В гофре/трубе");
+    const boxRouting = routeMethods.includes("В коробе");
+    const ceilingVoid = boolSurveyAnswer(surveyAnswers, `zone-${zone.id}-ceiling-void-present`) || routeMethods.includes("В запотолочном пространстве");
+    const raisedFloor = boolSurveyAnswer(surveyAnswers, `zone-${zone.id}-raised-floor-present`) || routeMethods.includes("Под фальш-полом");
+
+    if (!trayRouting && !conduitRouting && !boxRouting && !ceilingVoid && !raisedFloor) {
+      return;
+    }
+
+    const areaShare = zoneArea / totalArea;
+    const routeLengthM = Math.max(cableLengthM * areaShare * 0.3, zoneArea / 18, 8);
+    let zoneMaterials = 0;
+    let zoneWorks = 0;
+    const zoneLabels = [];
+
+    if (trayRouting) {
+      zoneMaterials += routeLengthM * 340 + Math.ceil(routeLengthM / 3) * 55;
+      zoneWorks += routeLengthM * 125;
+      totals.trayZones += 1;
+      zoneLabels.push("лотковые трассы");
+    }
+
+    if (conduitRouting) {
+      zoneMaterials += routeLengthM * 145;
+      zoneWorks += routeLengthM * 85;
+      totals.conduitZones += 1;
+      zoneLabels.push("гофра/труба");
+    }
+
+    if (boxRouting) {
+      zoneMaterials += routeLengthM * 230;
+      zoneWorks += routeLengthM * 96;
+      totals.boxZones += 1;
+      zoneLabels.push("короб");
+    }
+
+    if (ceilingVoid) {
+      zoneMaterials += Math.ceil(zoneArea / 24) * 420;
+      zoneWorks += routeLengthM * 48;
+      totals.ceilingVoidZones += 1;
+      zoneLabels.push("запотолочное пространство");
+    }
+
+    if (raisedFloor) {
+      zoneMaterials += Math.ceil(zoneArea / 20) * 520;
+      zoneWorks += routeLengthM * 52;
+      totals.raisedFloorZones += 1;
+      zoneLabels.push("фальш-пол");
+    }
+
+    const markerFloor = Math.max(toNumber(markerCostPerUnit, 0), 0);
+    if (markerFloor > 0) {
+      zoneWorks = Math.max(zoneWorks, markerFloor * 0.08);
+    }
+
+    totals.materialsCost += zoneMaterials;
+    totals.workCost += zoneWorks;
+    totals.routeLengthM += routeLengthM;
+    totals.zoneCount += 1;
+    totals.labels.push(`${zone?.name || "Зона"}: ${zoneLabels.join(", ")}`);
+  });
+
+  return {
+    ...totals,
+    materialsCost: Math.round(totals.materialsCost),
+    workCost: Math.round(totals.workCost),
+    routeLengthM: Number(totals.routeLengthM.toFixed(1)),
+  };
+}
+
 export function calculateSystemWithBreakdown(
   system,
   zones,
@@ -362,15 +469,23 @@ export function calculateSystemWithBreakdown(
   const cableMaterials = cableModel.cableLengthM * 92;
   const trayAndFasteners = knsModel.knsMaterialsCost;
   const resourceMaterials = quantities.primaryUnits * 28 + quantities.controllerUnits * 130;
+  const surveyRoutingAdjustment = buildSurveyRoutingAdjustment({
+    zones: normalizedInput.zones,
+    surveyAnswers,
+    cableLengthM: cableModel.cableLengthM,
+    markerCostPerUnit: laborModel.markerCostPerUnit,
+  });
   const computedMaterialsCost = cableMaterials + trayAndFasteners + resourceMaterials;
+  const routingMaterialsCost = surveyRoutingAdjustment.materialsCost;
   const materialCost =
     projectOverrides.equipmentOverride.materialsCost > 0
       ? projectOverrides.equipmentOverride.materialsCost
-      : computedMaterialsCost;
+      : computedMaterialsCost + routingMaterialsCost;
 
   const materialsBase = equipmentCost + materialCost;
   const laborBase = laborModel.workAfterConditions * regionalCoef;
-  const workTotal = laborModel.workTotal;
+  const routingWorkCost = surveyRoutingAdjustment.workCost;
+  const workTotal = laborModel.workTotal + routingWorkCost;
   const workCharges = Math.max(workTotal - laborBase, 0);
   const designBase = projectInPlace ? 0 : laborModel.designAfterConditions * regionalCoef;
   const designTotal = projectInPlace ? 0 : laborModel.designTotal;
@@ -387,7 +502,7 @@ export function calculateSystemWithBreakdown(
   const pnrWeight = toNumber(rules?.laborSplit?.pnr, 0.25);
   const splitTotal = Math.max(smrWeight + pnrWeight, 0.001);
   const works = {
-    smr: laborBase * (smrWeight / splitTotal),
+    smr: laborBase * (smrWeight / splitTotal) + routingWorkCost,
     pnr: laborBase * (pnrWeight / splitTotal),
     design: designBase,
     integration: quantities.integrationPoints * 0.45 * laborModel.markerCostPerUnit,
@@ -471,7 +586,7 @@ export function calculateSystemWithBreakdown(
     workBase: laborModel.workBase,
     workCharges,
     workTotal,
-    executionHours: laborModel.executionHours,
+    executionHours: laborModel.executionHours + routingWorkCost / 650,
     executionTeamSize: laborModel.crewSize,
     executionDurationDays: laborModel.executionDays,
     executionDurationMonths: laborModel.executionMonths,
@@ -517,6 +632,7 @@ export function calculateSystemWithBreakdown(
         cable: cableMaterials,
         trayAndFasteners,
         resourceMaterials,
+        routingSurvey: routingMaterialsCost,
       },
       resources: breakdownResources,
     },
@@ -534,6 +650,7 @@ export function calculateSystemWithBreakdown(
       conduitLengthM: knsModel.conduitLengthM,
       fastenerUnits: knsModel.fastenerUnits,
       penetrationUnits: knsModel.penetrationUnits,
+      surveyRoutingAdjustment,
       validationErrors: normalizedInput.errors,
       validationWarnings: normalizedInput.warnings,
       autoQuantities: {
@@ -599,7 +716,26 @@ export function calculateSystemWithBreakdown(
 
   return {
     ...systemResult,
-    formulaRows: [...vendorRows, ...explainability.formulaRows],
+    formulaRows: [
+      ...vendorRows,
+      ...(surveyRoutingAdjustment.zoneCount
+        ? [
+            {
+              key: "surveyRoutingMaterials",
+              label: "Надбавка материалов по обследованию трасс",
+              value: routingMaterialsCost,
+              useCase: `Фото коридоров и ответы по лоткам/фальш-полу/запотолочному пространству добавили материалы на ${routingMaterialsCost} руб.`,
+            },
+            {
+              key: "surveyRoutingWorks",
+              label: "Надбавка работ по обследованию трасс",
+              value: routingWorkCost,
+              useCase: `Уточнённые способы прокладки добавили работы на ${routingWorkCost} руб. по ${surveyRoutingAdjustment.zoneCount} зонам.`,
+            },
+          ]
+        : []),
+      ...explainability.formulaRows,
+    ],
     coefficientInsights: [
       ...vendorRows.map((item) => ({
         ...item,
@@ -608,9 +744,25 @@ export function calculateSystemWithBreakdown(
             ? "Повышенный коэффициент оправдан для сложных и интеграционно насыщенных объектов."
             : "Коэффициент в базовом диапазоне.",
       })),
+      ...(surveyRoutingAdjustment.zoneCount
+        ? [
+            {
+              key: "surveyRoutingImpact",
+              label: "AI-обследование трасс",
+              value: surveyRoutingAdjustment.zoneCount,
+              useCase: "Фото коридоров и ответы чек-листа уточнили способ прокладки кабельных линий и добавили прямые поправки в смету материалов и СМР.",
+              recommended: surveyRoutingAdjustment.labels.slice(0, 3).join("; "),
+            },
+          ]
+        : []),
       ...marketAndAiInsights,
       ...explainability.coefficientInsights,
     ],
-    explanation: explainability.explanation,
+    explanation: [
+      ...explainability.explanation,
+      ...(surveyRoutingAdjustment.zoneCount
+        ? [`AI-обследование маршрутов прокладки учтено в смете: материалы +${routingMaterialsCost} руб., работы +${routingWorkCost} руб.`]
+        : []),
+    ],
   };
 }
