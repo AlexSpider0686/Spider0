@@ -320,7 +320,11 @@ export const MANUFACTURER_SOURCES = {
       preferSearch: true,
     },
     Бастион: { website: "https://bast.ru" },
-    Рубеж: { website: "https://rubezh.ru" },
+    Рубеж: {
+      website: "https://products.rubezh.ru",
+      searchPathTemplate: "/search/?q={query}",
+      preferSearch: true,
+    },
     Болид: {
       website: "https://shop.bolid.ru",
       searchPathTemplate: "/search/?q={query}",
@@ -353,7 +357,11 @@ export const MANUFACTURER_SOURCES = {
       searchPathTemplate: "/search/?q={query}",
       preferSearch: true,
     },
-    Рубеж: { website: "https://rubezh.ru" },
+    Рубеж: {
+      website: "https://products.rubezh.ru",
+      searchPathTemplate: "/search/?q={query}",
+      preferSearch: true,
+    },
     "Аргус-Спектр": { website: "https://argus-spectr.ru" },
     Simplex: { website: "https://www.johnsoncontrols.com/fire-detection/simplex" },
     Siemens: { website: "https://www.siemens.com/global/en/products/buildings/fire-safety.html" },
@@ -365,7 +373,11 @@ export const MANUFACTURER_SOURCES = {
       searchPathTemplate: "/search/?q={query}",
       preferSearch: true,
     },
-    Рубеж: { website: "https://rubezh.ru" },
+    Рубеж: {
+      website: "https://products.rubezh.ru",
+      searchPathTemplate: "/search/?q={query}",
+      preferSearch: true,
+    },
     Roxton: { website: "https://roxton-audio.com" },
   },
 };

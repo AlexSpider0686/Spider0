@@ -447,7 +447,9 @@ function buildSourceUrls(source, queries, item) {
       if (source?.searchPathTemplate) {
         urlTargets.push(`${base}${source.searchPathTemplate.replace("{query}", encodeURIComponent(query))}`);
       } else {
+        urlTargets.push(`${base}/search/?q=${encodeURIComponent(query)}`);
         urlTargets.push(`${base}/search?q=${encodeURIComponent(query)}`);
+        urlTargets.push(`${base}/?s=${encodeURIComponent(query)}`);
       }
     }
   }

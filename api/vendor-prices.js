@@ -5,6 +5,7 @@ const MONEY_REGEX =
 const TINKO_PRODUCT_LINK_REGEX = /\/catalog\/product\/\d+\//gi;
 const BOLID_PRODUCT_LINK_REGEX = /\/catalog\/[^"'#\s]*\/tovar_[^"'#\s]+\.html/gi;
 const BOLID_RESULT_LINK_REGEX = /<a\s+href="([^"]*tovar_[^"]+\.html)"[^>]*class="good-item__title-link"[^>]*>([^<]+)<\/a>/giu;
+const GENERIC_ANCHOR_REGEX = /<a\b[^>]*href=(["'])(.*?)\1[^>]*>([\s\S]*?)<\/a>/giu;
 const UNIT_NEAR_PRICE_REGEX =
   /(?:\u20BD|\u0440\u0443\u0431\.?|RUB)\s*(?:\/|\u0437\u0430)?\s*(\u0448\u0442(?:\u0443\u043a)?|\u0435\u0434\.?|\u043a\u043e\u043c\u043f\u043b(?:\u0435\u043a\u0442)?|\u043c2|\u043c\u00b2|\u043c|\u043a\u0433|\u043b|\u0443\u043f(?:\u0430\u043a)?|\u043b\u0438\u0441\u0442(?:\u043e\u0432|\u0430)?)/giu;
 const UNIT_GENERIC_REGEX = /(?:\u0437\u0430|\/)\s*(\u0448\u0442(?:\u0443\u043a)?|\u0435\u0434\.?|\u043a\u043e\u043c\u043f\u043b(?:\u0435\u043a\u0442)?|\u043c2|\u043c\u00b2|\u043c|\u043a\u0433|\u043b|\u0443\u043f(?:\u0430\u043a)?|\u043b\u0438\u0441\u0442(?:\u043e\u0432|\u0430)?)/giu;
@@ -302,6 +303,44 @@ function decodeHtmlEntities(value) {
     .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)));
 }
 
+function stripHtml(value) {
+  return decodeHtmlEntities(String(value || "").replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+}
+
+function absolutizeUrl(baseUrl, pathOrUrl) {
+  try {
+    return new URL(String(pathOrUrl || ""), baseUrl).toString();
+  } catch {
+    return "";
+  }
+}
+
+function isLikelySearchUrl(url) {
+  try {
+    const parsed = new URL(String(url || ""));
+    if (/(^|\/)(search|find)(\/|$)/i.test(parsed.pathname)) return true;
+    return ["q", "query", "search", "text", "s"].some((key) => parsed.searchParams.get(key));
+  } catch {
+    return false;
+  }
+}
+
+function extractQueryTextFromSource(source = {}) {
+  try {
+    const parsed = new URL(String(source?.url || ""));
+    return decodeURIComponent(
+      parsed.searchParams.get("q") ||
+        parsed.searchParams.get("query") ||
+        parsed.searchParams.get("search") ||
+        parsed.searchParams.get("text") ||
+        parsed.searchParams.get("s") ||
+        ""
+    ).trim();
+  } catch {
+    return String(source?.body?.query || "").trim();
+  }
+}
+
 function extractBolidSearchResults(searchHtml) {
   const results = [];
   const seen = new Set();
@@ -336,6 +375,55 @@ function scoreBolidResult(result, queryText) {
   if (title.startsWith(normalizeSearchQuery(queryText))) score += 4;
 
   return score;
+}
+
+function scoreGenericResult(result, queryText) {
+  const title = normalizeSearchQuery(result?.title || "");
+  const href = normalizeSearchQuery(result?.url || "");
+  const combined = `${title} ${href}`.trim();
+  if (!combined) return 0;
+
+  const queryTokens = buildQueryTokens(queryText);
+  const modelToken = extractModelTokenWithArticleBias(queryText);
+  let score = 0;
+
+  if (modelToken && (isModelTokenInText(modelToken, title) || isModelTokenInText(modelToken, href))) score += 14;
+  for (const token of queryTokens) {
+    if (title.includes(token)) score += token.length >= 5 ? 3 : 1.5;
+    if (href.includes(token)) score += token.length >= 5 ? 2 : 1;
+  }
+  if (/\/(products?|catalog|product|item|goods?|tovar|shop)\//i.test(result?.url || "")) score += 4;
+  if (/\/(faq|news|about|support|download|docs|service|contacts?)\//i.test(result?.url || "")) score -= 6;
+  if (title.startsWith(normalizeSearchQuery(queryText))) score += 4;
+
+  return score;
+}
+
+function extractGenericProductUrls(searchHtml, searchUrl, queryText) {
+  const baseHost = hostFromUrl(searchUrl);
+  if (!baseHost) return [];
+
+  const candidates = [];
+  const seen = new Set();
+
+  for (const match of String(searchHtml || "").matchAll(GENERIC_ANCHOR_REGEX)) {
+    const absoluteUrl = absolutizeUrl(searchUrl, decodeHtmlEntities(match[2]));
+    if (!absoluteUrl || seen.has(absoluteUrl)) continue;
+    seen.add(absoluteUrl);
+
+    const host = hostFromUrl(absoluteUrl);
+    if (host !== baseHost) continue;
+    if (absoluteUrl === searchUrl) continue;
+    if (/\.(?:pdf|docx?|xlsx?|zip|rar|7z)(?:[?#]|$)/i.test(absoluteUrl)) continue;
+
+    const title = stripHtml(match[3]);
+    const score = scoreGenericResult({ url: absoluteUrl, title }, queryText);
+    if (score <= 0) continue;
+
+    candidates.push({ url: absoluteUrl, title, score });
+  }
+
+  return candidates.sort((a, b) => b.score - a.score || a.url.length - b.url.length).slice(0, 8).map((item) => item.url);
 }
 
 function normalizeSourceTarget(target) {
@@ -825,7 +913,8 @@ async function fetchPriceFromBolidSearch(searchUrl, fallbackPrice) {
 }
 
 async function fetchPriceFromGenericSource(source, fallbackPrice) {
-  const queryModelToken = extractModelTokenWithArticleBias(source?.url || "");
+  const queryText = extractQueryTextFromSource(source);
+  const queryModelToken = extractModelTokenWithArticleBias(queryText || source?.url || "");
   const method = source.method || "GET";
   const headers = { ...source.headers };
   let body = source.body;
@@ -876,6 +965,53 @@ async function fetchPriceFromGenericSource(source, fallbackPrice) {
   const text = await response.text();
   const price = selectBestPrice(extractPricesFromText(text), fallbackPrice);
   const unitHints = extractUnitHintsFromText(text);
+  if (!price && queryText && isLikelySearchUrl(source.url)) {
+    const productUrls = extractGenericProductUrls(text, source.url, queryText);
+    if (productUrls.length) {
+      const nestedPrices = [];
+      const nestedSources = [];
+      const nestedUnitHints = [...unitHints];
+
+      for (const url of productUrls.slice(0, 4)) {
+        try {
+          const candidateText = await fetchWithTimeout(
+            url,
+            {
+              method: "GET",
+              headers: {
+                accept: "text/html,application/xhtml+xml",
+              },
+            },
+            18000
+          ).then((candidateResponse) => candidateResponse.text());
+          const candidatePrice = selectBestPrice(extractPricesFromText(candidateText), fallbackPrice);
+          nestedUnitHints.push(...extractUnitHintsFromText(candidateText));
+          if (!candidatePrice) continue;
+          nestedPrices.push(candidatePrice);
+          nestedSources.push(url);
+          if (nestedPrices.length >= 2) break;
+        } catch {
+          // Move on to the next candidate product card.
+        }
+      }
+
+      const finalPrice = selectBestPrice(nestedPrices, fallbackPrice);
+      if (finalPrice) {
+        const winnerUrl = nestedSources[0] || productUrls[0] || source.url;
+        return {
+          prices: [finalPrice],
+          usedSources: [winnerUrl],
+          unitHints: unique(nestedUnitHints),
+          selectionMeta: {
+            sourceKind: "generic_search_follow",
+            modelToken: queryModelToken,
+            modelTokenMatched:
+              isModelTokenInText(queryModelToken, winnerUrl) || isModelTokenInText(queryModelToken, queryText),
+          },
+        };
+      }
+    }
+  }
   return price
     ? {
         prices: [price],

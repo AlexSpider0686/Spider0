@@ -92,28 +92,35 @@ function trimSlash(url) {
   return String(url || "").replace(/\/+$/, "");
 }
 
-function buildManufacturerUrl(source, item, searchQuery) {
+function buildManufacturerSearchTargets(source, item, searchQuery) {
   const website = trimSlash(source?.website);
-  if (!website) return "";
+  if (!website) return [];
 
   if (source?.preferSearch && source?.searchPathTemplate) {
-    return `${website}${source.searchPathTemplate.replace("{query}", encodeURIComponent(searchQuery))}`;
+    return [`${website}${source.searchPathTemplate.replace("{query}", encodeURIComponent(searchQuery))}`];
   }
 
   if (item.sourcePath) {
-    return `${website}${item.sourcePath}`;
+    return [`${website}${item.sourcePath}`];
   }
 
   if (source?.searchPathTemplate) {
-    return `${website}${source.searchPathTemplate.replace("{query}", encodeURIComponent(searchQuery))}`;
+    return [`${website}${source.searchPathTemplate.replace("{query}", encodeURIComponent(searchQuery))}`];
   }
 
-  return `${website}/search?q=${encodeURIComponent(searchQuery)}`;
+  const encoded = encodeURIComponent(searchQuery);
+  return dedupeStrings([
+    `${website}/search/?q=${encoded}`,
+    `${website}/search?q=${encoded}`,
+    `${website}/?s=${encoded}`,
+  ]);
 }
 
-function buildSourceTargets(source, item, queries, manufacturerUrl) {
+function buildSourceTargets(source, item, queries, manufacturerUrls) {
   const targets = [];
-  if (manufacturerUrl) targets.push(manufacturerUrl);
+  for (const manufacturerUrl of manufacturerUrls || []) {
+    if (manufacturerUrl) targets.push(manufacturerUrl);
+  }
 
   for (const query of dedupeStrings(queries).slice(0, 3)) {
     targets.push(buildTinkoSearchUrl(query));
@@ -155,8 +162,8 @@ export function buildPriceRequests(systemType, vendorName) {
   return equipment.map((item) => {
     const searchQueries = buildSearchQueries(vendorName, item);
     const searchQuery = searchQueries[0] || `${vendorName} ${item.searchTerm || item.label}`.trim();
-    const manufacturerUrl = buildManufacturerUrl(source, item, searchQuery);
-    const sourceUrls = buildSourceTargets(source, item, searchQueries, manufacturerUrl);
+    const manufacturerUrls = buildManufacturerSearchTargets(source, item, searchQuery);
+    const sourceUrls = buildSourceTargets(source, item, searchQueries, manufacturerUrls);
 
     return {
       key: `${systemType}:${vendorName}:${item.key}`,
