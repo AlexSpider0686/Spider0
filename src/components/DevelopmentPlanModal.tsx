@@ -91,7 +91,7 @@ export function DevelopmentPlanModal({ open, onClose }: DevelopmentPlanModalProp
             <div className="development-plan__eyebrow">Roadmap / Future Development</div>
             <h3>План разработки</h3>
             <p>
-              Сводка сформирована по незачеркнутым пунктам файла «ТЗ на мелкие доработки.docx» и показывает основные
+              Сводка сформирована на основании Технического задания на разработку/доработку и показывает основные
               направления следующего этапа развития платформы.
             </p>
           </div>
