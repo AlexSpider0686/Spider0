@@ -155,6 +155,46 @@ function toSourceHost(url) {
   }
 }
 
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+export function summarizePriceSnapshot(snapshot) {
+  const entries = Array.isArray(snapshot?.entries) ? snapshot.entries : [];
+  const checkedHosts = [...new Set(entries.flatMap((item) => item.checkedSourceHosts || []).filter(Boolean))];
+  const pricedHosts = [
+    ...new Set(
+      entries.flatMap((item) => item.matchedSourceHosts || item.usedSourceHosts || []).filter(Boolean)
+    ),
+  ];
+  const pricedEntries = entries.filter((item) => Number(item?.sourceCount || 0) > 0);
+  const recheckRequiredCount = entries.filter((item) => item?.recheckRequired).length;
+  const avgEntryConfidence = entries.length
+    ? entries.reduce((sum, item) => sum + Number(item?.priceConfidence || 0), 0) / entries.length
+    : 0;
+  const avgPricedConfidence = pricedEntries.length
+    ? pricedEntries.reduce((sum, item) => sum + Number(item?.priceConfidence || 0), 0) / pricedEntries.length
+    : 0;
+  const pricedCoverage = entries.length ? pricedEntries.length / entries.length : 0;
+  const hostCoverage = checkedHosts.length ? pricedHosts.length / checkedHosts.length : 0;
+  const recheckPenalty = pricedEntries.length ? recheckRequiredCount / pricedEntries.length : entries.length ? 1 : 0;
+  const confidenceBase = avgPricedConfidence || avgEntryConfidence || 0;
+  const confidencePercent = clamp(confidenceBase * 0.55 + pricedCoverage * 0.3 + hostCoverage * 0.15 - recheckPenalty * 0.2, 0, 0.98);
+
+  return {
+    checkedSourceCount: checkedHosts.length,
+    pricedSourceCount: pricedHosts.length,
+    checkedSourceHosts: checkedHosts,
+    pricedSourceHosts: pricedHosts,
+    recheckRequiredCount,
+    avgEntryConfidence,
+    avgPricedConfidence,
+    pricedEntryCount: pricedEntries.length,
+    totalEntryCount: entries.length,
+    confidencePercent: Number(confidencePercent.toFixed(2)),
+  };
+}
+
 export function buildPriceRequests(systemType, vendorName) {
   const source = getManufacturerSource(systemType, vendorName);
   const equipment = getCriticalEquipment(systemType);

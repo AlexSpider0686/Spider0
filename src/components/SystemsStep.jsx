@@ -3,6 +3,7 @@ import { Plus, Trash2, Shield, FileUp, RefreshCcw, Eye, EyeOff, CheckCircle2, Do
 import { SYSTEM_TYPES, VENDORS } from "../config/estimateConfig";
 import { getManufacturerSource, getVendorByName } from "../config/vendorsConfig";
 import { num, rub, toNumber } from "../lib/estimate";
+import { summarizePriceSnapshot } from "../lib/priceCollector";
 import VendorConfigurator from "./VendorConfigurator";
 
 function renderApsImportStatus(status) {
@@ -316,17 +317,12 @@ export default function SystemsStep({
           const showRecheck = Boolean(showRecheckBySystem[system.id]);
           const comparison = vendorComparisonsBySystem?.[system.id];
 
-          const pricedSourceCount =
-            snapshot?.entries
-              ?.filter((item) => (item.sourceCount || 0) > 0)
-              .reduce((sum, item) => sum + (item.sourceCount || 0), 0) || 0;
-          const checkedSourceCount =
-            snapshot?.entries?.reduce((sum, item) => sum + (item.checkedSources || item.sourceUrls?.length || 0), 0) || 0;
-          const checkedSourceHosts = [...new Set((snapshot?.entries || []).flatMap((item) => item.checkedSourceHosts || []))].slice(0, 10);
-          const recheckRequiredCount = (snapshot?.entries || []).filter((item) => item.recheckRequired).length;
-          const avgConfidence = snapshot?.entries?.length
-            ? snapshot.entries.reduce((sum, item) => sum + Number(item.priceConfidence || 0), 0) / snapshot.entries.length
-            : 0;
+          const marketMetrics = summarizePriceSnapshot(snapshot);
+          const pricedSourceCount = marketMetrics.pricedSourceCount;
+          const checkedSourceCount = marketMetrics.checkedSourceCount;
+          const checkedSourceHosts = marketMetrics.checkedSourceHosts.slice(0, 10);
+          const recheckRequiredCount = marketMetrics.recheckRequiredCount;
+          const avgConfidence = marketMetrics.confidencePercent;
           const strategy =
             snapshot?.entries && snapshot.entries.length
               ? snapshot.entries.map((item) => item.selectionStrategy).filter(Boolean).slice(0, 1)[0] || "average_all_sources"

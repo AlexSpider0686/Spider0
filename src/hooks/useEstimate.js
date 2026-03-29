@@ -3,7 +3,7 @@ import { DEFAULT_BUDGET, DEFAULT_SYSTEM, DEFAULT_ZONE, OBJECT_TYPES, SYSTEM_TYPE
 import { buildEstimateRows, downloadCsv, num, toNumber } from "../lib/estimate";
 import { calculateEstimateEngine } from "../lib/estimateEngine";
 import { buildZonesFromPreset, normalizeZoneAreas, rebalanceZoneAreasWithLocks, validateZoneDistribution } from "../lib/zoneEngine";
-import { fetchPricesByRequests, fetchVendorPrices } from "../lib/priceCollector";
+import { fetchPricesByRequests, fetchVendorPrices, summarizePriceSnapshot } from "../lib/priceCollector";
 import { VENDOR_EQUIPMENT } from "../config/vendorConfig";
 import { DEFAULT_REGION_NAME, getRegionCoef } from "../config/regionsConfig";
 import { validateEstimateInput } from "../lib/input-normalization";
@@ -845,12 +845,7 @@ export default function useEstimate() {
 
         const comparisonResult = systemsDetailed[systemIndex] || {};
         const snapshot = snapshotMap[vendor]?.priceSnapshot;
-        const pricedSourceCount =
-          snapshot?.entries
-            ?.filter((item) => (item.sourceCount || 0) > 0)
-            .reduce((sum, item) => sum + (item.sourceCount || 0), 0) || 0;
-        const checkedSourceCount =
-          snapshot?.entries?.reduce((sum, item) => sum + (item.checkedSources || item.sourceUrls?.length || 0), 0) || 0;
+        const marketMetrics = summarizePriceSnapshot(snapshot);
 
         return {
           vendor,
@@ -862,8 +857,8 @@ export default function useEstimate() {
           workTotal: toNumber(comparisonResult?.workTotal, 0),
           designTotal: toNumber(comparisonResult?.designTotal, 0),
           total: toNumber(comparisonResult?.total, 0),
-          checkedSourceCount,
-          pricedSourceCount,
+          checkedSourceCount: marketMetrics.checkedSourceCount,
+          pricedSourceCount: marketMetrics.pricedSourceCount,
         };
       });
 
