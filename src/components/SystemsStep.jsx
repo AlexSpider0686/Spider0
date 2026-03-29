@@ -139,6 +139,75 @@ function renderWorkCostPopover(result) {
   );
 }
 
+function renderVendorMetricPopover(kind, result) {
+  const unitPrice = toNumber(result?.equipmentData?.unitPrice, 0);
+  const equipmentCost = toNumber(result?.equipmentCost, 0);
+  const markerLabel = result?.unitWorkMarker?.label || "—";
+  const costPerUnit = toNumber(result?.unitWorkMarker?.costPerUnit, 0);
+  const selectionKey = result?.equipmentData?.selectionKey || "fallback";
+  const modeLabel = result?.estimateMode === "project_pdf" ? "по PDF-проекту" : "по внутренней модели";
+
+  if (kind === "unitPrice") {
+    return (
+      <span className="pricing-chip-popover work-cost-popover">
+        <span className="work-cost-popover__section">
+          <strong>Что такое «Ед. цена»</strong>
+          <span>Это расчетная стоимость одной базовой единицы оборудования для текущей системы.</span>
+        </span>
+        <span className="work-cost-popover__section">
+          <strong>Как рассчитано сейчас</strong>
+          <span>
+            Значение {rub(unitPrice)} получено из блока оборудования системы: общий бюджет оборудования {rub(equipmentCost)} сведен к
+            базовой единице расчета по текущему профилю вендора, типу системы и найденным рыночным источникам.
+          </span>
+          <span>
+            Ключ выбора: {selectionKey}. Режим расчета: {modeLabel}.
+          </span>
+        </span>
+      </span>
+    );
+  }
+
+  if (kind === "marker") {
+    return (
+      <span className="pricing-chip-popover work-cost-popover">
+        <span className="work-cost-popover__section">
+          <strong>Что такое «Маркер»</strong>
+          <span>
+            Это опорная единица трудозатрат, по которой система нормирует стоимость работ на одну условную единицу текущей системы.
+          </span>
+        </span>
+        <span className="work-cost-popover__section">
+          <strong>Как рассчитано сейчас</strong>
+          <span>
+            Для этой системы выбран маркер «{markerLabel}». Он определяется алгоритмом по типу системы, составу оборудования и режиму
+            расчета, чтобы привести работы к единой сравнимой базе.
+          </span>
+        </span>
+      </span>
+    );
+  }
+
+  return (
+    <span className="pricing-chip-popover work-cost-popover">
+      <span className="work-cost-popover__section">
+        <strong>Что такое «За единицу»</strong>
+        <span>Это стоимость работ в пересчете на один выбранный маркер трудоемкости.</span>
+      </span>
+      <span className="work-cost-popover__section">
+        <strong>Как рассчитано сейчас</strong>
+        <span>
+          Сейчас показатель равен {num(costPerUnit, 0)} и отражает, сколько рублей работ приходится на один маркер «{markerLabel}».
+        </span>
+        <span>
+          Значение формируется из общей стоимости СМР+ПНР, внутренней модели единичных расценок, поправок условий монтажа и проверки
+          рыночным floor.
+        </span>
+      </span>
+    </span>
+  );
+}
+
 export default function SystemsStep({
   systems,
   addSystem,
@@ -337,13 +406,25 @@ export default function SystemsStep({
                 <div className="vendor-hint vendor-hint-lg">
                   <div className="vendor-hint-top">
                     <p className="vendor-kpi">
-                      Ед. цена: <strong>{rub(result?.equipmentData?.unitPrice || 0)}</strong>
+                      <span className="pricing-chip-tooltip">
+                        <span>Ед. цена:</span>
+                        {renderVendorMetricPopover("unitPrice", result)}
+                      </span>{" "}
+                      <strong>{rub(result?.equipmentData?.unitPrice || 0)}</strong>
                     </p>
                     <p className="vendor-kpi">
-                      Маркер: <strong>{result?.unitWorkMarker?.label || "—"}</strong>
+                      <span className="pricing-chip-tooltip">
+                        <span>Маркер:</span>
+                        {renderVendorMetricPopover("marker", result)}
+                      </span>{" "}
+                      <strong>{result?.unitWorkMarker?.label || "—"}</strong>
                     </p>
                     <p className="vendor-kpi">
-                      За единицу: <strong>{num(result?.unitWorkMarker?.costPerUnit || 0, 0)}</strong>
+                      <span className="pricing-chip-tooltip">
+                        <span>За единицу:</span>
+                        {renderVendorMetricPopover("costPerUnit", result)}
+                      </span>{" "}
+                      <strong>{num(result?.unitWorkMarker?.costPerUnit || 0, 0)}</strong>
                     </p>
                   </div>
 
