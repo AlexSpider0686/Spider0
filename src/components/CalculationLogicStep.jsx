@@ -1,5 +1,8 @@
 import React, { useMemo } from "react";
+import { COEFFICIENT_GUIDE, SYSTEM_TYPES } from "../config/estimateConfig";
+import { LABOR_MARKET_GUARDRAILS, LABOR_UNIT_RATES } from "../config/costModelConfig";
 import { num, rub, toNumber } from "../lib/estimate";
+import { buildCoefficientLayer } from "../lib/coefficient-engine";
 
 function percent(value) {
   return `${num(toNumber(value, 0), 1)}%`;
@@ -7,6 +10,10 @@ function percent(value) {
 
 function coef(value) {
   return `x${num(toNumber(value, 1), 2)}`;
+}
+
+function getSystemLabel(systemType) {
+  return SYSTEM_TYPES.find((item) => item.code === systemType)?.name || systemType;
 }
 
 function summarizeAiGuard(systemResults) {
@@ -23,19 +30,19 @@ function summarizeAiGuard(systemResults) {
 
 export default function CalculationLogicStep({ objectData, effectiveObjectData, systems, systemResults, budget, totals, projectRisks = [] }) {
   const calcObjectData = effectiveObjectData || objectData;
-  const conditionFactor = useMemo(
+  const coefficientLayer = useMemo(
     () =>
-      toNumber(budget.heightCoef, 1) *
-      toNumber(budget.constrainedCoef, 1) *
-      toNumber(budget.operatingFacilityCoef, 1) *
-      toNumber(budget.nightWorkCoef, 1) *
-      toNumber(budget.routingCoef, 1) *
-      toNumber(budget.finishCoef, 1),
-    [budget]
+      buildCoefficientLayer({
+        budget,
+        buildingStatus: calcObjectData?.buildingStatus,
+        regionSubject: calcObjectData?.regionSubject,
+        regionCoef: calcObjectData?.regionCoef,
+      }),
+    [budget, calcObjectData]
   );
-
-  const exploitedBuildingCoef = calcObjectData?.buildingStatus === "operational" ? 1.2 : 1;
-  const regionalCoef = Math.max(toNumber(calcObjectData?.regionCoef, 1), 1);
+  const conditionFactor = toNumber(coefficientLayer.conditionLaborFactor, 1);
+  const exploitedBuildingCoef = toNumber(coefficientLayer.exploitedBuildingCoefficient, 1);
+  const regionalCoef = toNumber(coefficientLayer.regionalCoefficient, 1);
   const calculatedDesignRows = systemResults.filter((row) => !row.designSkipped);
   const totalDesignHours = calculatedDesignRows.reduce((sum, row) => sum + toNumber(row.designHours, 0), 0);
   const avgDesignTeam =
@@ -52,6 +59,119 @@ export default function CalculationLogicStep({ objectData, effectiveObjectData, 
   const totalProject = toNumber(totals.total, 0);
   const aiGuard = summarizeAiGuard(systemResults);
   const skippedDesignRows = systemResults.filter((row) => row.designSkipped);
+  const totalWorkBeforeRegion = systemResults.reduce((sum, row) => sum + toNumber(row?.laborDetails?.workTotalBeforeRegion, 0), 0);
+  const appliedObjectCoefficients = useMemo(() => {
+    const entries = [];
+    const guideMap = new Map(COEFFICIENT_GUIDE.map((item) => [item.key, item]));
+    const budgetKeys = ["cableCoef", "equipmentCoef", "laborCoef", "complexityCoef"];
+
+    budgetKeys.forEach((key) => {
+      const value = toNumber(budget?.[key], 1);
+      if (Math.abs(value - 1) < 0.001) return;
+      entries.push({
+        key,
+        label: guideMap.get(key)?.title || key,
+        value,
+        reason: guideMap.get(key)?.tip || "Применен в текущем расчете бюджета.",
+      });
+    });
+
+    (coefficientLayer.conditionRows || []).forEach((row) => {
+      const value = toNumber(row?.value, 1);
+      if (Math.abs(value - 1) < 0.001) return;
+      entries.push({
+        key: row.key,
+        label: row.label || guideMap.get(row.key)?.title || row.key,
+        value,
+        reason: row.wasSuppressed
+          ? "Введенное значение было нормализовано моделью, чтобы не допустить двойного учета коэффициентов."
+          : guideMap.get(row.key)?.tip || "Применен в текущем расчете бюджета.",
+      });
+    });
+
+    if (Math.abs(exploitedBuildingCoef - 1) > 0.001) {
+      entries.push({
+        key: "exploitedBuildingCoefficient",
+        label: "Коэффициент действующего здания",
+        value: exploitedBuildingCoef,
+        reason: "Применяется автоматически к трудозависимой части работ для действующего объекта.",
+      });
+    }
+
+    if (Math.abs(regionalCoef - 1) > 0.001) {
+      entries.push({
+        key: "regionalCoefficient",
+        label: "Региональный коэффициент",
+        value: regionalCoef,
+        reason: `Берется из карточки объекта для региона ${calcObjectData?.regionName || calcObjectData?.regionSubject || "объекта"}.`,
+      });
+    }
+
+    return entries;
+  }, [budget, calcObjectData, coefficientLayer.conditionRows, exploitedBuildingCoef, regionalCoef]);
+  const totalCharges = systemResults.reduce(
+    (sum, row) =>
+      sum +
+      toNumber(row?.laborDetails?.workChargesBeforeRegion?.overhead, 0) +
+      toNumber(row?.laborDetails?.workChargesBeforeRegion?.payrollTaxes, 0) +
+      toNumber(row?.laborDetails?.workChargesBeforeRegion?.utilization, 0) +
+      toNumber(row?.laborDetails?.workChargesBeforeRegion?.ppe, 0) +
+      toNumber(row?.laborDetails?.workChargesBeforeRegion?.admin, 0),
+    0
+  );
+  const detailedLaborBreakdown = useMemo(() => {
+    const totalSmr = systemResults.reduce((sum, row) => sum + toNumber(row?.laborDetails?.workBreakdown?.smrBase, 0), 0);
+    const totalPnr = systemResults.reduce((sum, row) => sum + toNumber(row?.laborDetails?.workBreakdown?.pnrBase, 0), 0);
+    const totalIntegration = systemResults.reduce((sum, row) => sum + toNumber(row?.laborDetails?.workBreakdown?.integrationBase, 0), 0);
+    const totalKns = systemResults.reduce((sum, row) => sum + toNumber(row?.laborDetails?.workBreakdown?.knsBase, 0), 0);
+    const totalWorkAfterConditions = systemResults.reduce((sum, row) => sum + toNumber(row?.laborDetails?.workAfterConditions, 0), 0);
+    const totalOverhead = systemResults.reduce((sum, row) => sum + toNumber(row?.laborDetails?.workChargesBeforeRegion?.overhead, 0), 0);
+    const totalPayrollTaxes = systemResults.reduce((sum, row) => sum + toNumber(row?.laborDetails?.workChargesBeforeRegion?.payrollTaxes, 0), 0);
+    const totalUtilization = systemResults.reduce((sum, row) => sum + toNumber(row?.laborDetails?.workChargesBeforeRegion?.utilization, 0), 0);
+    const totalPpe = systemResults.reduce((sum, row) => sum + toNumber(row?.laborDetails?.workChargesBeforeRegion?.ppe, 0), 0);
+    const totalAdmin = systemResults.reduce((sum, row) => sum + toNumber(row?.laborDetails?.workChargesBeforeRegion?.admin, 0), 0);
+    const totalNeuralFloor = systemResults.reduce((sum, row) => sum + toNumber(row?.laborDetails?.neuralCheck?.neuralFloorBase, 0), 0);
+    const totalRateFloor = systemResults.reduce((sum, row) => sum + toNumber(row?.laborDetails?.marketGuard?.marketFloorBaseByRates, 0), 0);
+    const totalMarkerFloor = systemResults.reduce((sum, row) => sum + toNumber(row?.laborDetails?.marketGuard?.marketFloorBaseByMarker, 0), 0);
+
+    return {
+      totalSmr,
+      totalPnr,
+      totalIntegration,
+      totalKns,
+      totalWorkAfterConditions,
+      totalOverhead,
+      totalPayrollTaxes,
+      totalUtilization,
+      totalPpe,
+      totalAdmin,
+      totalNeuralFloor,
+      totalRateFloor,
+      totalMarkerFloor,
+    };
+  }, [systemResults]);
+  const ratesDigest = useMemo(() => {
+    const seen = new Set();
+
+    return (systemResults || [])
+      .map((row) => row?.systemType)
+      .filter(Boolean)
+      .filter((systemType) => {
+        if (seen.has(systemType)) return false;
+        seen.add(systemType);
+        return true;
+      })
+      .map((systemType) => {
+        const rates = LABOR_UNIT_RATES[systemType] || LABOR_UNIT_RATES.sot;
+        const guard = LABOR_MARKET_GUARDRAILS[systemType] || LABOR_MARKET_GUARDRAILS.sot;
+        return {
+          systemType,
+          systemLabel: getSystemLabel(systemType),
+          rates,
+          guard,
+        };
+      });
+  }, [systemResults]);
 
   return (
     <section className="panel">
@@ -92,8 +212,44 @@ export default function CalculationLogicStep({ objectData, effectiveObjectData, 
         <article className="logic-card">
           <h3>5. Как считается стоимость работ</h3>
           <p>СМР+ПНР считаются по составу работ, а не по рублям за квадратный метр. База складывается из монтажа основных элементов, ПНР, контроллеров, кабельных работ, КНС и точек интеграции.</p>
-          <p>Единичные расценки откалиброваны в консервативном диапазоне по рынку РФ. Для защиты бюджета система применяет рыночный floor и не позволяет опустить итоговую трудовую часть ниже безопасного диапазона.</p>
+          <p>Источник базовых расценок — внутренняя нормативная конфигурация платформы: ставки по видам работ берутся из модели `LABOR_UNIT_RATES`, а нижние защитные пороги — из `LABOR_MARKET_GUARDRAILS`. Это утвержденная расчетная база текущей версии платформы, а не произвольные цифры из конкретной сметы.</p>
+          <p>
+            Порядок расчета по формуле: <strong>База работ = СМР + ПНР + интеграция + КНС</strong>.
+            СМР = первичные элементы × ставка монтажа + контроллеры × ставка монтажа контроллера + кабель × ставка за 1 м.
+            ПНР = первичные элементы × ставка ПНР + активные элементы × ставка ПНР на активный элемент.
+            Интеграция = точки интеграции × ставка интеграции.
+            КНС = метры КНС × ставка КНС + рабочие единицы КНС × 22% этой же ставки.
+          </p>
+          <p>
+            Далее система применяет цепочку: <strong>база работ × коэффициенты условий × коэффициент действующего здания = работы после условий</strong>,
+            затем на эту величину начисляются ОПР, ФОТ, утилизация, СИЗ и АХР, после чего применяется региональный коэффициент.
+            Итоговая база работ дополнительно защищается снизу тремя барьерами: минимумом по единичным ставкам, минимумом по маркеру системы и AI-floor.
+          </p>
           <p>База работ по текущему расчету: <strong>{rub(totalWorkBase)}</strong>. После начислений и коэффициентов: <strong>{rub(totalWorkWithCharges)}</strong>.</p>
+          <p>
+            Детализация по текущему расчету: СМР <strong>{rub(detailedLaborBreakdown.totalSmr)}</strong>, ПНР <strong>{rub(detailedLaborBreakdown.totalPnr)}</strong>,
+            интеграция <strong>{rub(detailedLaborBreakdown.totalIntegration)}</strong>, КНС <strong>{rub(detailedLaborBreakdown.totalKns)}</strong>.
+          </p>
+          <p>
+            После коэффициентов условий и статуса здания: <strong>{rub(detailedLaborBreakdown.totalWorkAfterConditions)}</strong>. Начисления:
+            ОПР <strong>{rub(detailedLaborBreakdown.totalOverhead)}</strong>, ФОТ <strong>{rub(detailedLaborBreakdown.totalPayrollTaxes)}</strong>,
+            утилизация <strong>{rub(detailedLaborBreakdown.totalUtilization)}</strong>, СИЗ <strong>{rub(detailedLaborBreakdown.totalPpe)}</strong>,
+            АХР <strong>{rub(detailedLaborBreakdown.totalAdmin)}</strong>.
+          </p>
+          <p>
+            Защитные пороги базы: по единичным расценкам <strong>{rub(detailedLaborBreakdown.totalRateFloor)}</strong>, по маркеру
+            <strong> {rub(detailedLaborBreakdown.totalMarkerFloor)}</strong>, AI floor <strong>{rub(detailedLaborBreakdown.totalNeuralFloor)}</strong>.
+          </p>
+          <div className="logic-equipment-list">
+            {ratesDigest.map((item) => (
+              <p key={`rates-${item.systemType}`}>
+                <strong>{item.systemLabel}:</strong> монтаж основного элемента {rub(item.rates.mountPrimary)}, ПНР основного элемента {rub(item.rates.pnrPrimary)},
+                монтаж контроллера {rub(item.rates.controllerMount)}, ПНР активного элемента {rub(item.rates.pnrActiveElement)}, кабель {rub(item.rates.cablePerMeter)}/м,
+                КНС {rub(item.rates.knsPerMeter)}/м, интеграция {rub(item.rates.integrationPoint)}/точка, проектирование {rub(item.rates.designHour)}/час.
+                Минимальная база по ставкам: x{num(item.guard.minBaseFactor, 2)}, минимальный итог по маркеру: {rub(item.guard.minFinalPerMarker)}.
+              </p>
+            ))}
+          </div>
         </article>
 
         <article className="logic-card">
@@ -114,6 +270,22 @@ export default function CalculationLogicStep({ objectData, effectiveObjectData, 
           <h3>8. Коэффициенты и начисления</h3>
           <p>После расчета базы работ система применяет коэффициенты условий выполнения, коэффициент действующего здания и региональный коэффициент. Региональная часть ограничена floor-логикой и не может искусственно удешевить труд ниже базы.</p>
           <p>Сводный коэффициент условий: <strong>{coef(conditionFactor)}</strong>. Начисления: ФОТ {percent(budget.payrollTaxesPercent)}, утилизация {percent(budget.utilizationPercent)}, СИЗ {percent(budget.ppePercent)}, АХР {percent(budget.adminPercent)}.</p>
+          {appliedObjectCoefficients.length ? (
+            <div className="logic-equipment-list">
+              {appliedObjectCoefficients.map((item) => (
+                <p key={item.key}>
+                  <strong>{item.label}:</strong> {coef(item.value)}. {item.reason}
+                </p>
+              ))}
+            </div>
+          ) : (
+            <p>По текущему объекту все ручные коэффициенты стоят в базовом значении x1.00; дополнительно применяются только встроенные базовые настройки модели.</p>
+          )}
+          <p>
+            Сумма начислений по текущему расчету: <strong>{rub(totalCharges)}</strong>. До регионального коэффициента:
+            <strong> {rub(totalWorkBeforeRegion)}</strong>; после регионального коэффициента:
+            <strong> {rub(totalWorkWithCharges)}</strong>.
+          </p>
         </article>
 
         <article className="logic-card">

@@ -1,7 +1,7 @@
 import React from "react";
 import { toNumber } from "../lib/estimate";
 
-export default function SliderControl({ label, value, min, max, step = 0.01, tooltip, onChange, warning }) {
+export default function SliderControl({ label, value, min, max, step = 0.01, tooltip, onChange, warning, helperLines = [] }) {
   return (
     <div className="input-card">
       <label title={tooltip}>{label}</label>
@@ -23,6 +23,11 @@ export default function SliderControl({ label, value, min, max, step = 0.01, too
           onChange={(e) => onChange(toNumber(e.target.value, min))}
         />
       </div>
+      {helperLines.map((line, index) => (
+        <small key={`${label}-${index}`} className="hint-inline">
+          {line}
+        </small>
+      ))}
       {warning ? <small className="warn-inline">{warning}</small> : null}
     </div>
   );
