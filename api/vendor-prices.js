@@ -900,7 +900,7 @@ async function fetchPriceForTarget(target, fallbackPrice) {
   if (source.url.includes("tinko.ru/search/")) {
     return fetchPriceFromTinkoSearch(source.url, fallbackPrice);
   }
-  if (source.url.includes("shop.bolid.ru/search/")) {
+  if (source.url.includes("shop.bolid.ru/search")) {
     return fetchPriceFromBolidSearch(source.url, fallbackPrice);
   }
   return fetchPriceFromGenericSource(source, fallbackPrice);

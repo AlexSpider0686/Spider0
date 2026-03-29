@@ -388,7 +388,11 @@ function buildSourceUrls(source, queries, item) {
 
   if (base) {
     for (const query of queryPool.slice(0, 2)) {
-      urlTargets.push(`${base}/search?q=${encodeURIComponent(query)}`);
+      if (source?.searchPathTemplate) {
+        urlTargets.push(`${base}${source.searchPathTemplate.replace("{query}", encodeURIComponent(query))}`);
+      } else {
+        urlTargets.push(`${base}/search?q=${encodeURIComponent(query)}`);
+      }
     }
   }
 
