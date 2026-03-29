@@ -1050,12 +1050,14 @@ export async function resolveVendorPrices(requests = []) {
       const closestRows = selectedPrice
         ? selectionPool.filter((item) => Math.abs(item.price - selectedPrice) <= Math.max(1, selectedPrice * 0.03))
         : [];
-      const selectedRows = closestRows.length ? closestRows : selectionPool;
+        const selectedRows = closestRows.length ? closestRows : selectionPool;
 
-      const selectedUsedSources = unique(selectedRows.flatMap((item) => item.usedSources || []).filter(Boolean));
-      const selectedUnits = unique(selectedRows.flatMap((item) => item.unitHints || []).filter(Boolean));
+        const matchedSources = unique(candidateRows.flatMap((item) => item.usedSources || []).filter(Boolean));
+        const matchedSourceHosts = unique(candidateRows.map((item) => item.sourceHost).filter(Boolean));
+        const selectedUsedSources = unique(selectedRows.flatMap((item) => item.usedSources || []).filter(Boolean));
+        const selectedUnits = unique(selectedRows.flatMap((item) => item.unitHints || []).filter(Boolean));
 
-      if (selectedPrice && candidateRows.length > 0) {
+        if (selectedPrice && candidateRows.length > 0) {
         const baseConfidence =
           selectionStrategy === "article_exact_match"
             ? 0.97
@@ -1069,15 +1071,17 @@ export async function resolveVendorPrices(requests = []) {
         return {
           key,
           price: selectedPrice,
-          status: selectionPool.length > 1 ? "fetched_multi" : "fetched",
-          sourceCount: selectedUsedSources.length,
-          checkedSources: targets.length,
-          usedSources: selectedUsedSources,
-          unitHints: selectedUnits,
-          selectionStrategy,
-          modelToken,
-          recheckRequired,
-          priceConfidence: Number(baseConfidence.toFixed(2)),
+            status: selectionPool.length > 1 ? "fetched_multi" : "fetched",
+            sourceCount: selectedUsedSources.length,
+            checkedSources: targets.length,
+            usedSources: selectedUsedSources,
+            matchedSources,
+            matchedSourceHosts,
+            unitHints: selectedUnits,
+            selectionStrategy,
+            modelToken,
+            recheckRequired,
+            priceConfidence: Number(baseConfidence.toFixed(2)),
         };
       }
 
@@ -1085,14 +1089,16 @@ export async function resolveVendorPrices(requests = []) {
         key,
         price: fallbackPrice ?? null,
         status: "fallback",
-        reason: "price_not_found",
-        sourceCount: 0,
-        checkedSources: targets.length,
-        usedSources: [],
-        unitHints: [],
-        selectionStrategy,
-        modelToken,
-        recheckRequired: false,
+          reason: "price_not_found",
+          sourceCount: 0,
+          checkedSources: targets.length,
+          usedSources: [],
+          matchedSources: [],
+          matchedSourceHosts: [],
+          unitHints: [],
+          selectionStrategy,
+          modelToken,
+          recheckRequired: false,
         priceConfidence: 0,
       };
     })

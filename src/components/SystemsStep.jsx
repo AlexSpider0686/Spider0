@@ -248,10 +248,16 @@ export default function SystemsStep({
               ? snapshot.entries.map((item) => item.selectionStrategy).filter(Boolean).slice(0, 1)[0] || "average_all_sources"
               : "average_all_sources";
           const manufacturerChecked = manufacturerHost ? checkedSourceHosts.includes(manufacturerHost) : false;
-          const manufacturerUsedUrls = manufacturerHost
-            ? [...new Set((snapshot?.entries || []).flatMap((item) => item.usedSources || []).filter((url) => toHost(url) === manufacturerHost))]
+          const manufacturerMatchedUrls = manufacturerHost
+            ? [
+                ...new Set(
+                  (snapshot?.entries || [])
+                    .flatMap((item) => item.matchedSources || item.usedSources || [])
+                    .filter((url) => toHost(url) === manufacturerHost)
+                ),
+              ]
             : [];
-          const manufacturerSuccess = manufacturerUsedUrls.length > 0;
+          const manufacturerSuccess = manufacturerMatchedUrls.length > 0;
           const recheckRows = (snapshot?.entries || []).filter((item) => item.recheckRequired);
           const detectedVendor = apsSnapshot?.detectedVendor || system.vendor;
 

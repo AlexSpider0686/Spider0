@@ -356,6 +356,10 @@ export async function fetchPricesByRequests(requests = []) {
       const checkedSourceUrls = (request.sourceUrls || []).map(extractSourceUrl).filter(Boolean);
       const checkedSourceHosts = [...new Set(checkedSourceUrls.map(toSourceHost).filter(Boolean))];
       const usedSourceHosts = [...new Set((result.usedSources || []).map(toSourceHost).filter(Boolean))];
+      const matchedSources = Array.isArray(result.matchedSources) ? result.matchedSources.filter(Boolean) : [];
+      const matchedSourceHosts = [
+        ...new Set((Array.isArray(result.matchedSourceHosts) ? result.matchedSourceHosts : matchedSources.map(toSourceHost)).filter(Boolean)),
+      ];
       return {
         ...request,
         price: sanitized.price,
@@ -371,6 +375,8 @@ export async function fetchPricesByRequests(requests = []) {
         checkedSourceHosts,
         usedSources: result.usedSources || [],
         usedSourceHosts,
+        matchedSources,
+        matchedSourceHosts,
         unitHints,
       };
     }),
