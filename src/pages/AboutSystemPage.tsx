@@ -163,9 +163,6 @@ export function AboutSystemPage() {
       <section className="about-system-hero">
         <div className="about-system-hero__backdrop" />
         <div className="container about-system-hero__container">
-          <Link className="about-system-page__back" to="/">
-            ← На главную
-          </Link>
           <div className="about-system-hero__eyebrow">Project.Core™ / О системе</div>
           <h1>Полное описание платформы Project.Core™</h1>
           <p className="about-system-hero__lead">
@@ -179,6 +176,9 @@ export function AboutSystemPage() {
         <div className="container about-system-layout">
           <aside className="about-system-toc">
             <div className="about-system-toc__card">
+              <Link className="about-system-toc__back" to="/">
+                ← На главную
+              </Link>
               <div className="about-system-toc__title">Оглавление</div>
               <nav>
                 {chapters.map((chapter, index) => (

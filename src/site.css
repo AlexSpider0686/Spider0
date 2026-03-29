@@ -1477,6 +1477,26 @@ html {
   font-weight: 700;
 }
 
+.app-shell .about-system-toc__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  color: #dff2ff;
+  font-size: 14px;
+  font-weight: 700;
+  background: rgba(89, 208, 255, 0.08);
+  border: 1px solid rgba(89, 208, 255, 0.18);
+}
+
+.app-shell .about-system-toc__back:hover {
+  text-decoration: none;
+  transform: translateX(2px);
+  background: rgba(89, 208, 255, 0.12);
+}
+
 .app-shell .about-system-hero__eyebrow {
   display: inline-flex;
   padding: 10px 16px;
