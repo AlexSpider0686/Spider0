@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Building2, Layers, Wallet, Download, PieChart, FileText, Ruler, ShieldAlert } from "lucide-react";
+import { Building2, Layers, Wallet, Download, PieChart, FileText, Ruler, ShieldAlert, CalendarRange } from "lucide-react";
 import useEstimate from "../hooks/useEstimate";
 import ObjectStep from "./ObjectStep";
 import SystemsStep from "./SystemsStep";
@@ -10,6 +10,7 @@ import ProjectRisksStep from "./ProjectRisksStep";
 import CalculationLogicStep from "./CalculationLogicStep";
 import Summary from "./Summary";
 import AuthGate from "./AuthGate";
+import ProjectPlanModal from "./ProjectPlanModal";
 import { APP_VERSION_LABEL, BUILD_NUMBER } from "../config/estimateConfig";
 import { isStoredAuthTokenValid } from "../lib/authApi";
 
@@ -30,6 +31,7 @@ export default function EstimatorApp() {
   const [videoIndex, setVideoIndex] = useState(0);
   const [videoUnavailable, setVideoUnavailable] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
+  const [planModalOpen, setPlanModalOpen] = useState(false);
   const [authorized, setAuthorized] = useState(() => {
     if (typeof window === "undefined") return false;
     const storedToken = window.localStorage.getItem("smetacore_auth_token");
@@ -61,6 +63,11 @@ export default function EstimatorApp() {
       window.sessionStorage.setItem("smetacore_site_auth", "ok");
     }
     setAuthorized(true);
+  };
+
+  const handlePlanExport = async (format) => {
+    setPlanModalOpen(false);
+    await vm.generateProjectPlan(format);
   };
 
   return (
@@ -101,9 +108,14 @@ export default function EstimatorApp() {
             <h1>Project.Core™ — предварительный расчет бюджета систем безопасности</h1>
             <p>С AI-аудитом цен и трудозатрат, рыночной верификацией и защитой от недооценки бюджета.</p>
           </div>
-          <button className="primary-btn" onClick={vm.exportEstimate} type="button">
-            <Download size={16} /> Экспорт ТКП
-          </button>
+          <div className="hero-actions">
+            <button className="primary-btn" onClick={vm.exportEstimate} type="button">
+              <Download size={16} /> Экспорт ТКП
+            </button>
+            <button className="ghost-btn" onClick={() => setPlanModalOpen(true)} type="button">
+              <CalendarRange size={16} /> Сгенерировать план проекта
+            </button>
+          </div>
         </header>
 
         <section className="stepper-card">
@@ -152,6 +164,7 @@ export default function EstimatorApp() {
       </div>
 
       {!authorized ? <AuthGate onAuthorized={handleAuthorized} /> : null}
+      <ProjectPlanModal open={authorized && planModalOpen} onClose={() => setPlanModalOpen(false)} onSelectFormat={handlePlanExport} />
     </div>
   );
 }

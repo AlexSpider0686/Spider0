@@ -1,4 +1,5 @@
 import PptxGenJS from "pptxgenjs";
+import { buildProjectTimeline } from "./projectTimeline";
 
 const COLORS = {
   bg: "EEF4FC",
@@ -451,7 +452,7 @@ function buildTimeline(systemResults, objectData, totals) {
 }
 
 function addGanttSlide(slide, systemResults, objectData, totals) {
-  const { bars, totalMonths } = buildTimeline(systemResults, objectData, totals);
+  const { bars, totalMonths } = buildProjectTimeline(systemResults, objectData, totals);
   const chartX = 3.1;
   const chartY = 1.65;
   const chartW = 8.6;

@@ -934,6 +934,47 @@ export default function useEstimate() {
     }
   };
 
+  const generateProjectPlan = async (format = "pptx") => {
+    try {
+      const objectTypeLabel = OBJECT_TYPES.find((item) => item.value === objectData.objectType)?.label || objectData.objectType;
+      const apsProjectExports = systems
+        .map((system) => {
+          const snapshot = apsProjectSnapshots?.[system.id];
+          if (!snapshot?.active) return null;
+          return {
+            systemId: system.id,
+            systemType: system.type,
+            systemName: SYSTEM_TYPES.find((item) => item.code === system.type)?.name || system.type,
+            vendor: snapshot?.detectedVendor || snapshot?.vendorName || system.vendor,
+            fileName: snapshot.fileName || "",
+            gostStandard: snapshot.gostStandard || "",
+            recognitionRate: snapshot.sourceStats?.recognitionRate || 0,
+            items: Array.isArray(snapshot.items) ? snapshot.items : [],
+          };
+        })
+        .filter(Boolean);
+
+      const payload = {
+        objectData: { ...effectiveObjectData, objectTypeLabel },
+        budget,
+        zones,
+        recalculatedArea,
+        systemResults,
+        totals,
+        projectRisks,
+        apsProjectExports,
+        technicalRecommendations,
+        vendorComparisons: Object.values(vendorComparisonsBySystem || {}).filter((item) => item?.state === "success" && item?.rows?.length),
+      };
+
+      const { exportProjectPlan } = await import("../lib/projectPlanExport");
+      await exportProjectPlan(payload, format);
+    } catch (error) {
+      window.alert(`Ошибка генерации плана проекта: ${error?.message || "неизвестная ошибка"}`);
+      throw error;
+    }
+  };
+
   const exportEstimateCsv = () => {
     const objectTypeLabel = OBJECT_TYPES.find((item) => item.value === objectData.objectType)?.label || objectData.objectType;
     const rows = buildEstimateRows({ objectData: { ...effectiveObjectData, objectTypeLabel }, recalculatedArea, systemResults, totals });
@@ -1263,6 +1304,7 @@ export default function useEstimate() {
     resetAiSurveySection,
     updateTechnicalSpecOverride,
     exportEstimate,
+    generateProjectPlan,
     exportEstimateCsv,
     exportSystemSpecification,
     setZones,
