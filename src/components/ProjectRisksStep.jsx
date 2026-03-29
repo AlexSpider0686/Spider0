@@ -2,6 +2,7 @@ import React from "react";
 
 function severityLabel(value) {
   if (value === "high") return "Критичный";
+  if (value === "low") return "Низкий";
   return "Повышенный";
 }
 
@@ -23,8 +24,11 @@ export default function ProjectRisksStep({ projectRisks = [] }) {
             <article className="logic-card" key={risk.id || index}>
               <div className="summary-row">
                 <strong>{index + 1}. {risk.title}</strong>
-                <span className={`status-pill ${risk.severity === "high" ? "warn" : ""}`}>{severityLabel(risk.severity)}</span>
+                <span className={`status-pill risk-severity-pill risk-severity-pill--${risk.severity || "medium"}`}>{severityLabel(risk.severity)}</span>
               </div>
+              <p>
+                <strong>Оценка риска:</strong> {risk.score || 0} / 100
+              </p>
               <p>{risk.summary}</p>
               <p><strong>Что это значит:</strong> {risk.impact}</p>
             </article>

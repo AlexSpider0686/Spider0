@@ -2026,6 +2026,46 @@ body.ai-survey-open .object-photo-card {
   margin-bottom: 0;
 }
 
+.summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  border: 1px solid rgba(141, 163, 196, 0.28);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.risk-severity-pill--low {
+  color: #0f8a55;
+  background: rgba(16, 185, 129, 0.14);
+  border-color: rgba(16, 185, 129, 0.22);
+}
+
+.risk-severity-pill--medium {
+  color: #b15b00;
+  background: rgba(245, 158, 11, 0.16);
+  border-color: rgba(245, 158, 11, 0.22);
+}
+
+.risk-severity-pill--high {
+  color: #b42318;
+  background: rgba(239, 68, 68, 0.14);
+  border-color: rgba(239, 68, 68, 0.22);
+}
+
 .logic-totals {
   margin-top: 8px;
   display: grid;
