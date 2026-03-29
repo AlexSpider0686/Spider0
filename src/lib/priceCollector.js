@@ -279,6 +279,11 @@ export async function fetchPricesByRequests(requests = []) {
     const fallback = Number(request?.fallbackPrice);
     const fetchedRaw = Number(result?.price);
     const fetched = normalizeFetchedByUnit(request, fetchedRaw, fallback);
+    const manufacturerHost = toSourceHost(request?.manufacturerWebsite || "");
+    const usedSourceHosts = [...new Set((result?.usedSources || []).map(toSourceHost).filter(Boolean))];
+    const fromManufacturerSource =
+      (result?.selectionStrategy || "").includes("manufacturer_source_bias") ||
+      (manufacturerHost && usedSourceHosts.includes(manufacturerHost));
     if (!Number.isFinite(fetched) || fetched <= 0) {
       return {
         price: Number.isFinite(fallback) ? fallback : null,
@@ -290,7 +295,7 @@ export async function fetchPricesByRequests(requests = []) {
 
     if (isStrictModelPrice) {
       if (Number.isFinite(fallback) && fallback > 0) {
-        if (fetched > fallback * 4 || fetched < fallback * 0.2) {
+        if ((fetched > fallback * 4 || fetched < fallback * 0.2) && !fromManufacturerSource) {
           return {
             price: fallback,
             status: "fallback",
@@ -325,7 +330,7 @@ export async function fetchPricesByRequests(requests = []) {
     const minAllowed = fallback * minRatio;
     const maxAllowed = fallback * maxRatio;
 
-    if (fetched < minAllowed || fetched > maxAllowed) {
+    if ((fetched < minAllowed || fetched > maxAllowed) && !fromManufacturerSource) {
       return {
         price: fallback,
         status: "fallback_outlier",
