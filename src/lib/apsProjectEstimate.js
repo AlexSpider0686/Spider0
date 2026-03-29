@@ -124,10 +124,66 @@ const MODEL_FALLBACK_PRICE_HINTS = [
   },
 ];
 
+const APS_VENDOR_INFERENCE_RULES = [
+  {
+    vendor: "Болид",
+    patterns: [/\b(?:с|c)2000[\w-]*/iu, /\bсигнал-?20[\w-]*/iu, /\borion\b/iu, /\bорион\b/iu, /\bуо-?4с\b/iu],
+    aliases: ["болид", "bolid"],
+  },
+  {
+    vendor: "Рубеж",
+    patterns: [/\bрубеж\b/iu, /\brubezh\b/iu, /\br3[-\w]*/iu, /\bипр?\s?513\b/iu],
+    aliases: ["рубеж", "rubezh"],
+  },
+  {
+    vendor: "Аргус-Спектр",
+    patterns: [/\bаргус\b/iu, /\bargus\b/iu, /\bстрелец\b/iu, /\bstrelets\b/iu],
+    aliases: ["аргус", "argus", "аргус-спектр"],
+  },
+  {
+    vendor: "Simplex",
+    patterns: [/\bsimplex\b/iu, /\b4100es\b/iu, /\b4098[-\w]*/iu],
+    aliases: ["simplex"],
+  },
+  {
+    vendor: "Siemens",
+    patterns: [/\bsiemens\b/iu, /\bcerberus\b/iu, /\bop720\b/iu],
+    aliases: ["siemens"],
+  },
+];
+
 const ARTICLE_TOKEN_REGEX = /\d{1,4}(?:[-/.]\d{2,4}){2,}/gu;
 
 function trimSlash(url) {
   return String(url || "").replace(/\/+$/, "");
+}
+
+function normalizeVendorCandidate(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function inferApsVendor(pricedItems = [], fallbackVendor = "Базовый") {
+  const scores = new Map();
+
+  APS_VENDOR_INFERENCE_RULES.forEach((rule) => scores.set(rule.vendor, 0));
+
+  for (const item of pricedItems) {
+    const text = `${item?.name || ""} ${item?.model || ""} ${item?.mark || item?.brand || ""} ${item?.rawLine || ""}`.toLowerCase();
+    APS_VENDOR_INFERENCE_RULES.forEach((rule) => {
+      let score = scores.get(rule.vendor) || 0;
+      if (rule.aliases.some((alias) => text.includes(alias))) score += 4;
+      if (rule.patterns.some((pattern) => pattern.test(text))) score += 3;
+      scores.set(rule.vendor, score);
+    });
+  }
+
+  const ranked = [...scores.entries()].sort((left, right) => right[1] - left[1]);
+  const [bestVendor, bestScore] = ranked[0] || [];
+  const normalizedFallback = normalizeVendorCandidate(fallbackVendor);
+
+  if (bestVendor && bestScore > 0) return bestVendor;
+  if (normalizedFallback && normalizedFallback !== normalizeVendorCandidate("Базовый")) return fallbackVendor;
+  return "Базовый";
 }
 
 function buildTinkoSearchUrl(query) {
@@ -670,12 +726,15 @@ function buildSnapshotPayload({
   };
   const unitMatch = buildUnitMatchSummary(pricedItems);
   const aiQuality = parsedProject?.aiQuality || null;
+  const detectedVendor = inferApsVendor(pricedItems, vendorName);
+  const resolvedVendorName = detectedVendor || vendorName;
 
   return {
     active: true,
     source: "project_pdf",
     systemType: "aps",
-    vendorName,
+    vendorName: resolvedVendorName,
+    detectedVendor: resolvedVendorName,
     fileName,
     parsedAt: parsedProject.parsedAt,
     gostStandard: parsedProject.gostStandard || "\u0413\u041e\u0421\u0422 21.110-2013",

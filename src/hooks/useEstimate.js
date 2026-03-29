@@ -438,12 +438,12 @@ export default function useEstimate() {
           prev.map((item) =>
             item.id === system.id
               ? {
-                  ...item,
-                  vendor: refreshedSnapshot.detectedVendor || item.vendor,
-                  baseVendor: refreshedSnapshot.detectedVendor || item.baseVendor || item.vendor,
-                }
-              : item
-          )
+                ...item,
+                vendor: refreshedSnapshot.detectedVendor || refreshedSnapshot.vendorName || item.vendor,
+                baseVendor: refreshedSnapshot.detectedVendor || refreshedSnapshot.vendorName || item.baseVendor || item.vendor,
+              }
+            : item
+        )
         );
         setVendorPriceSnapshots((prev) => ({ ...prev, [system.id]: priceSnapshot }));
         setApsImportStatuses((prev) => ({
@@ -519,8 +519,8 @@ export default function useEstimate() {
           item.id === systemId
             ? {
                 ...item,
-                vendor: snapshot.detectedVendor || item.vendor,
-                baseVendor: snapshot.detectedVendor || item.baseVendor || item.vendor,
+                vendor: snapshot.detectedVendor || snapshot.vendorName || item.vendor,
+                baseVendor: snapshot.detectedVendor || snapshot.vendorName || item.baseVendor || item.vendor,
               }
             : item
         )
@@ -701,8 +701,10 @@ export default function useEstimate() {
     }
 
     const apsSnapshot = apsProjectSnapshots?.[systemId];
-    const currentVendor = apsSnapshot?.detectedVendor || system.vendor;
-    const candidateVendors = [currentVendor, ...(VENDORS[system.type] || []).filter((vendor) => vendor !== currentVendor)].slice(0, 3);
+    const rawCurrentVendor = apsSnapshot?.detectedVendor || apsSnapshot?.vendorName || system.vendor;
+    const vendorPool = (VENDORS[system.type] || []).filter((vendor) => vendor !== "Базовый");
+    const currentVendor = rawCurrentVendor === "Базовый" ? vendorPool[0] || rawCurrentVendor : rawCurrentVendor;
+    const candidateVendors = [currentVendor, ...vendorPool.filter((vendor) => vendor !== currentVendor)].slice(0, 3);
 
     if (candidateVendors.length < 2) {
       setVendorComparisonsBySystem((prev) => ({
@@ -754,6 +756,7 @@ export default function useEstimate() {
       }
 
       const rows = candidateVendors.map((vendor) => {
+        const systemIndex = systems.findIndex((item) => item.id === systemId);
         const comparisonSystems = systems.map((item) =>
           item.id === systemId
             ? {
@@ -780,7 +783,7 @@ export default function useEstimate() {
           technicalSolution.appliedAnswers
         );
 
-        const comparisonResult = systemsDetailed.find((item) => item.systemId === systemId) || {};
+        const comparisonResult = systemsDetailed[systemIndex] || {};
         const snapshot = snapshotMap[vendor];
         const pricedSourceCount =
           snapshot?.entries
@@ -845,7 +848,7 @@ export default function useEstimate() {
             systemId: system.id,
             systemType: system.type,
             systemName: SYSTEM_TYPES.find((item) => item.code === system.type)?.name || system.type,
-            vendor: system.vendor,
+            vendor: snapshot?.detectedVendor || snapshot?.vendorName || system.vendor,
             fileName: snapshot.fileName || "",
             gostStandard: snapshot.gostStandard || "",
             recognitionRate: snapshot.sourceStats?.recognitionRate || 0,

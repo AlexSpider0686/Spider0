@@ -1463,7 +1463,7 @@ body.ai-survey-open .object-photo-card {
 
 .system-control-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -1600,10 +1600,15 @@ body.ai-survey-open .object-photo-card {
   font-size: 10px;
 }
 
+.comparison-trigger-row {
+  margin-top: 8px;
+}
+
 .comparison-trigger-card {
   display: grid;
   gap: 6px;
   align-content: start;
+  max-width: 320px;
 }
 
 .comparison-trigger-btn {

@@ -343,7 +343,7 @@ export default function SystemsStep({
             : [];
           const manufacturerSuccess = manufacturerMatchedUrls.length > 0;
           const recheckRows = (snapshot?.entries || []).filter((item) => item.recheckRequired);
-          const detectedVendor = apsSnapshot?.detectedVendor || system.vendor;
+          const detectedVendor = apsSnapshot?.detectedVendor || apsSnapshot?.vendorName || system.vendor;
           const vendorLockedByProject = Boolean(projectBasedMode && detectedVendor);
 
           return (
@@ -423,13 +423,15 @@ export default function SystemsStep({
                         onChange={(event) => updateSystem(system.id, "customVendorIndex", toNumber(event.target.value, 1))}
                       />
                     </div>
+                  </div>
+                  <div className="comparison-trigger-row">
                     <div className="input-card compact comparison-trigger-card">
                       <label>Сравнение цен</label>
                       <button className="ghost-btn comparison-trigger-btn" type="button" onClick={() => handleCompare(system)} disabled={isComparing}>
                         <BarChart3 size={16} />
                         {isComparing ? "Собираем цены..." : "Сравнить 3 вендора"}
                       </button>
-                      <small className="hint-inline">Текущий вендор и две альтернативы с пересчетом итоговой стоимости системы.</small>
+                      <small className="hint-inline">Сравниваются текущий вендор и две реальные альтернативы без базового профиля.</small>
                     </div>
                   </div>
                 </div>
