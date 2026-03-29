@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties } from "react";
-import { Maximize2, Minimize2, Pause, Play, RotateCcw, Volume2, VolumeX, X } from "lucide-react";
 
 type PromoReelPlayerProps = {
   open: boolean;
@@ -9,138 +8,70 @@ type PromoReelPlayerProps = {
 type PromoScene = {
   id: string;
   title: string;
-  eyebrow: string;
   subtitle: string;
-  body: string;
-  bullets: string[];
   voice: string;
   duration: number;
   accent: [string, string];
-  mediaType: "video" | "image";
-  mediaPath: string;
 };
 
-const ASSET_BASE = import.meta.env.BASE_URL || "/";
+type PlayerWindowSize = {
+  width: number;
+  height: number;
+};
 
-function assetUrl(path: string) {
-  const normalizedBase = ASSET_BASE.endsWith("/") ? ASSET_BASE : `${ASSET_BASE}/`;
-  return `${normalizedBase}${String(path).replace(/^\/+/, "")}`;
-}
+const PLAYER_ASPECT_RATIO = 16 / 9;
+const PLAYER_MAX_WIDTH = 960;
+const PLAYER_MAX_HEIGHT_RATIO = 0.82;
+const PLAYER_MAX_WIDTH_RATIO = 0.88;
 
 const PROMO_SCENES: PromoScene[] = [
   {
-    id: "purpose",
-    eyebrow: "Стратегическая цель",
-    title: "Зачем создана платформа",
-    subtitle: "Project.Core убирает Excel-хаос и превращает подготовку бюджета систем безопасности в управляемый цифровой процесс.",
-    body:
-      "Платформа нужна для того, чтобы за считанные минуты собрать структуру объекта, понять инженерный контекст, проверить рынок и получить аргументированный предварительный бюджет без ручного свода десятков таблиц.",
-    bullets: [
-      "Сокращает время подготовки бюджета и ТКП.",
-      "Снижает риск недооценки оборудования и работ.",
-      "Дает единый контур для пресейла, проектирования и защиты бюджета.",
-    ],
-    voice:
-      "Project Core создан для того, чтобы заменить хаотичный ручной расчет по таблицам управляемым цифровым процессом и быстро готовить аргументированный бюджет систем безопасности.",
-    duration: 7,
-    accent: ["#84d4ff", "#1b6dc9"],
-    mediaType: "video",
-    mediaPath: "assets/background/manhattan-loop-2min.mp4",
+    id: "intro",
+    title: "Project.Core",
+    subtitle: "Предварительный бюджет по системам безопасности за 5-10 минут",
+    voice: "Project.Core собирает предварительный бюджет по системам безопасности за 5-10 минут.",
+    duration: 4.6,
+    accent: ["#6de2ff", "#0e79b2"],
   },
   {
-    id: "audience",
-    eyebrow: "Для кого",
-    title: "Кому платформа дает эффект",
-    subtitle: "Интеграторам, пресейлу, проектировщикам, техдиректорам, сметчикам и заказчикам, которым нужен прозрачный бюджет и внятная логика цифр.",
-    body:
-      "Модуль помогает быстро сравнивать сценарии оснащения объекта, готовить коммерческое предложение, валидировать проектную спецификацию и заранее видеть точки, где возможны удорожание или сдвиг сроков.",
-    bullets: [
-      "Пресейл и продажи: быстрее готовят ТКП.",
-      "Проектные команды: раньше видят узкие места.",
-      "Финансовый контур: понимает, откуда взялась каждая сумма.",
-    ],
-    voice:
-      "Платформа рассчитана на интеграторов, проектные команды, технических директоров, сметчиков и заказчиков, которым нужен прозрачный бюджет и понятная логика его формирования.",
-    duration: 7,
-    accent: ["#8ff7d3", "#118a67"],
-    mediaType: "image",
-    mediaPath: "assets/background/development-lab.jpg",
+    id: "object",
+    title: "Объект и зоны",
+    subtitle: "Площадь, этажность, защищаемая площадь, состав систем и профиль объекта",
+    voice: "Пользователь задает объект, зоны, этажность и состав инженерных систем.",
+    duration: 5.2,
+    accent: ["#7fffd4", "#0d8f6d"],
   },
   {
     id: "survey",
-    eyebrow: "AI-обследование",
-    title: "Как система собирает инженерный контекст",
-    subtitle: "Адаптивные чек-листы, фотофиксация помещений и коридоров, анализ маршрутов прокладки кабеля и учет ограничений монтажа.",
-    body:
-      "Платформа спрашивает не только про объект, но и про реальные условия работ. Она анализирует коридоры, уточняет наличие лотков, фальш-полов, запотолочного пространства и использует эти данные в техрешении, спецификации, СМР и сроках.",
-    bullets: [
-      "Определяет вероятный способ трассировки кабельных линий.",
-      "Учитывает доступы, отделку, высоты и сложность монтажа.",
-      "Собирает данные для более точного техрешения и плана работ.",
-    ],
-    voice:
-      "AI обследование собирает реальные условия монтажа: фотографии помещений и коридоров, ответы по лоткам, фальш-полам и запотолочному пространству, после чего уточняет техническое решение, стоимость и сроки.",
-    duration: 8,
-    accent: ["#ffd27d", "#d96b00"],
-    mediaType: "image",
-    mediaPath: "assets/object-types/warehouse.jpg",
+    title: "AI-обследование",
+    subtitle: "Чек-листы, фотофиксация, планы эвакуации, ЗКСПС, зоны оповещения и охраны",
+    voice: "AI обследование собирает фото, планы эвакуации и автоматически определяет зоны для технического решения.",
+    duration: 5.4,
+    accent: ["#ffd36d", "#d96b00"],
   },
   {
-    id: "algorithms",
-    eyebrow: "Уникальные алгоритмы",
-    title: "Что делает платформу сильной",
-    subtitle: "Параметрический расчет, AI-аудит рынка, Risk Guard AI, PDF-распознавание спецификаций и полная рассчитываемая спецификация по каждой системе.",
-    body:
-      "Внутри Project.Core работает не одна формула, а набор связанных алгоритмов: от классификации объекта и расчета объемов до выбора ценовых источников, проверки трудозатрат и формирования детальной спецификации оборудования и материалов.",
-    bullets: [
-      "AI-аудит цен по поставщикам и сайтам производителей.",
-      "Risk Guard AI для защиты от недооценки.",
-      "Импорт APS PDF и автоматическое определение вендора по проекту.",
-    ],
-    voice:
-      "Платформа объединяет несколько уникальных алгоритмов: расчет инженерных объемов, AI аудит рынка, защиту от недооценки, распознавание проектных спецификаций и автоматическое формирование полной спецификации по системе.",
-    duration: 8,
-    accent: ["#9bb4ff", "#4357ff"],
-    mediaType: "image",
-    mediaPath: "assets/metrics/risk-guard.jpg",
+    id: "budget",
+    title: "Движок расчета",
+    subtitle: "Оборудование, материалы, СМР, ПНР, проектирование и рыночная проверка",
+    voice: "Расчетный движок собирает оборудование, материалы, работы, проектирование и сверяет рынок.",
+    duration: 5.2,
+    accent: ["#82b1ff", "#3957ff"],
   },
   {
-    id: "planning",
-    eyebrow: "AI-планирование",
-    title: "От бюджета к плану проекта",
-    subtitle: "Платформа теперь строит и детальный план реализации: мероприятия, фазы, сроки и оговорки по допущениям.",
-    body:
-      "По одной кнопке система выпускает план проекта в PowerPoint или MS Project XML. Верхнеуровневые сроки синхронизированы с ТКП, а каждая фаза декомпозируется на понятные мероприятия: обследование, техрешение, закупку, поставку, монтаж, ПНР и сдачу материалов.",
-    bullets: [
-      "График совпадает по фазам с экспортом ТКП.",
-      "Есть оговорка о предварительном характере сроков.",
-      "Подходит для согласования и дальнейшей календарной проработки.",
-    ],
-    voice:
-      "После расчета платформа может сразу выпустить детальный план проекта в формате PowerPoint или MS Project, синхронизированный по фазам со сроками, указанными в коммерческой презентации.",
-    duration: 7.5,
-    accent: ["#ff9ec1", "#b83280"],
-    mediaType: "image",
-    mediaPath: "assets/metrics/time-window.jpg",
+    id: "risk",
+    title: "Risk Guard AI",
+    subtitle: "Контроль недооценки, региональные коэффициенты и защитный floor",
+    voice: "Отдельный контур проверяет риски недооценки и удерживает бюджет в безопасном диапазоне.",
+    duration: 4.8,
+    accent: ["#ff8ea1", "#db2b5b"],
   },
   {
     id: "result",
-    eyebrow: "Что получает пользователь",
-    title: "Результат на выходе",
-    subtitle: "Не просто цифру, а полный пакет для принятия решения: бюджет, техрешение, спецификацию, риски, сравнение цен и план проекта.",
-    body:
-      "На выходе команда получает готовую основу для коммерческого предложения и внутренней защиты проекта: расчет по системам, объяснимую структуру затрат, полную спецификацию, выявленные риски, сравнительный анализ по вендорам и детальный проектный план.",
-    bullets: [
-      "Бюджет и ТКП с объяснимой логикой.",
-      "Полная спецификация и выгрузки.",
-      "AI-риски проекта и план реализации.",
-    ],
-    voice:
-      "На выходе пользователь получает не просто предварительную сумму, а готовую основу для коммерческого предложения: бюджет, техническое решение, полную спецификацию, проектные риски и детальный план реализации.",
-    duration: 7,
-    accent: ["#94f7bd", "#1f9b63"],
-    mediaType: "video",
-    mediaPath: "assets/background/city-loop.mp4",
+    title: "Результат",
+    subtitle: "Готовый бюджет, техрешение и база для ТКП без Excel-хаоса",
+    voice: "На выходе команда получает понятный бюджет, техническое решение и базу для коммерческого предложения.",
+    duration: 4.8,
+    accent: ["#8ef7b8", "#1fa463"],
   },
 ];
 
@@ -150,11 +81,21 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
-function formatTime(value: number) {
-  const safe = Math.max(Math.floor(value), 0);
-  const minutes = Math.floor(safe / 60);
-  const seconds = safe % 60;
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+export function calculatePromoWindowSize(viewportWidth: number, viewportHeight: number): PlayerWindowSize {
+  const maxWidth = Math.min(PLAYER_MAX_WIDTH, Math.floor(viewportWidth * PLAYER_MAX_WIDTH_RATIO));
+  const maxHeight = Math.floor(viewportHeight * PLAYER_MAX_HEIGHT_RATIO);
+  let width = maxWidth;
+  let height = Math.round(width / PLAYER_ASPECT_RATIO);
+
+  if (height > maxHeight) {
+    height = maxHeight;
+    width = Math.round(height * PLAYER_ASPECT_RATIO);
+  }
+
+  return {
+    width: Math.max(width, 320),
+    height: Math.max(height, 180),
+  };
 }
 
 function getSceneAtTime(time: number) {
@@ -167,6 +108,7 @@ function getSceneAtTime(time: number) {
         scene,
         start,
         end,
+        localTime: time - start,
         progress: clamp((time - start) / scene.duration, 0, 1),
       };
     }
@@ -178,32 +120,191 @@ function getSceneAtTime(time: number) {
     scene: last,
     start: TOTAL_DURATION - last.duration,
     end: TOTAL_DURATION,
+    localTime: last.duration,
     progress: 1,
   };
 }
 
-function choosePreferredMaleVoice(voices: SpeechSynthesisVoice[]) {
-  const lowerPriority = [
-    "male",
-    "man",
-    "dmitry",
-    "alek",
-    "alex",
-    "pavel",
-    "yuri",
-    "maxim",
-    "nikolay",
-    "ru-ru",
-    "russian",
-  ];
+function formatTime(value: number) {
+  const safe = Math.max(Math.floor(value), 0);
+  const minutes = Math.floor(safe / 60);
+  const seconds = safe % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
 
-  const russianVoices = voices.filter((voice) => voice.lang?.toLowerCase().startsWith("ru"));
-  const preferred = russianVoices.find((voice) => {
-    const descriptor = `${voice.name} ${voice.voiceURI}`.toLowerCase();
-    return lowerPriority.some((token) => descriptor.includes(token));
+function roundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + width, y, x + width, y + height, r);
+  ctx.arcTo(x + width, y + height, x, y + height, r);
+  ctx.arcTo(x, y + height, x, y, r);
+  ctx.arcTo(x, y, x + width, y, r);
+  ctx.closePath();
+}
+
+function drawBackdrop(ctx: CanvasRenderingContext2D, width: number, height: number, accent: [string, string], pulse: number) {
+  const gradient = ctx.createLinearGradient(0, 0, width, height);
+  gradient.addColorStop(0, "#07111c");
+  gradient.addColorStop(0.5, "#0f1e32");
+  gradient.addColorStop(1, "#081421");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, width, height);
+
+  const radial = ctx.createRadialGradient(width * 0.78, height * 0.22, 10, width * 0.78, height * 0.22, width * 0.45);
+  radial.addColorStop(0, `${accent[0]}90`);
+  radial.addColorStop(1, "transparent");
+  ctx.fillStyle = radial;
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.strokeStyle = "rgba(255,255,255,0.07)";
+  ctx.lineWidth = 1;
+  for (let x = 0; x < width; x += 44) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, height);
+    ctx.stroke();
+  }
+  for (let y = 0; y < height; y += 44) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(width, y);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = `${accent[1]}55`;
+  ctx.beginPath();
+  ctx.arc(width * 0.15, height * 0.18, 42 + pulse * 8, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawStatsCard(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, title: string, value: string) {
+  roundedRect(ctx, x, y, width, height, 18);
+  ctx.fillStyle = "rgba(255,255,255,0.08)";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,0.12)";
+  ctx.stroke();
+
+  ctx.fillStyle = "#9fc0db";
+  ctx.font = "600 15px Manrope, sans-serif";
+  ctx.fillText(title, x + 18, y + 28);
+
+  ctx.fillStyle = "#f4fbff";
+  ctx.font = "800 28px Manrope, sans-serif";
+  ctx.fillText(value, x + 18, y + 66);
+}
+
+function drawBars(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, values: number[], colors: string[], labels: string[], progress: number) {
+  values.forEach((value, index) => {
+    const barHeight = 14;
+    const rowY = y + index * 34;
+    roundedRect(ctx, x, rowY, width, barHeight, 8);
+    ctx.fillStyle = "rgba(255,255,255,0.08)";
+    ctx.fill();
+    roundedRect(ctx, x, rowY, width * clamp(value * progress, 0, 1), barHeight, 8);
+    ctx.fillStyle = colors[index];
+    ctx.fill();
+    ctx.fillStyle = "#d7e8fb";
+    ctx.font = "600 14px Manrope, sans-serif";
+    ctx.fillText(labels[index], x, rowY - 8);
+  });
+}
+
+function renderScene(ctx: CanvasRenderingContext2D, width: number, height: number, currentTime: number) {
+  const { scene, progress } = getSceneAtTime(currentTime);
+  const pulse = Math.sin(currentTime * 2.2) * 0.5 + 0.5;
+
+  drawBackdrop(ctx, width, height, scene.accent, pulse);
+
+  ctx.fillStyle = "rgba(4,12,20,0.62)";
+  roundedRect(ctx, width * 0.06, height * 0.08, width * 0.88, height * 0.84, 30);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,0.12)";
+  ctx.stroke();
+
+  ctx.fillStyle = "#9fdfff";
+  ctx.font = "700 16px Manrope, sans-serif";
+  ctx.fillText("Project.Core Promo Reel", width * 0.1, height * 0.16);
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "800 44px Manrope, sans-serif";
+  ctx.fillText(scene.title, width * 0.1, height * 0.27);
+
+  ctx.fillStyle = "#d8e8f8";
+  ctx.font = "600 22px Manrope, sans-serif";
+  const subtitleLines = scene.subtitle.match(/.{1,44}(\s|$)/g) || [scene.subtitle];
+  subtitleLines.slice(0, 2).forEach((line, index) => {
+    ctx.fillText(line.trim(), width * 0.1, height * (0.35 + index * 0.06));
   });
 
-  return preferred || russianVoices[0] || voices[0] || null;
+  if (scene.id === "object") {
+    drawStatsCard(ctx, width * 0.1, height * 0.48, width * 0.22, height * 0.18, "Площадь", "15 000 м²");
+    drawStatsCard(ctx, width * 0.35, height * 0.48, width * 0.22, height * 0.18, "Этажность", "5 этажей");
+    drawStatsCard(ctx, width * 0.6, height * 0.48, width * 0.22, height * 0.18, "Систем", "6");
+  } else if (scene.id === "survey") {
+    drawBars(
+      ctx,
+      width * 0.1,
+      height * 0.52,
+      width * 0.46,
+      [0.92, 0.84, 0.76],
+      ["#6de2ff", "#ffd36d", "#8ef7b8"],
+      ["Планы эвакуации", "Фото поверхностей", "Чек-листы зон"],
+      progress
+    );
+    drawStatsCard(ctx, width * 0.64, height * 0.48, width * 0.2, height * 0.18, "ЗКСПС", "9");
+  } else if (scene.id === "budget") {
+    drawBars(
+      ctx,
+      width * 0.1,
+      height * 0.5,
+      width * 0.58,
+      [0.82, 0.68, 0.56, 0.34],
+      ["#6de2ff", "#7fffd4", "#ffd36d", "#ff8ea1"],
+      ["Оборудование", "Материалы", "Работы", "Проектирование"],
+      progress
+    );
+    drawStatsCard(ctx, width * 0.72, height * 0.48, width * 0.15, height * 0.18, "Итого", "15,6 млн");
+  } else if (scene.id === "risk") {
+    ctx.strokeStyle = "rgba(255,255,255,0.16)";
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(width * 0.18, height * 0.72);
+    ctx.lineTo(width * 0.18, height * 0.48);
+    ctx.lineTo(width * 0.3, height * 0.38);
+    ctx.lineTo(width * 0.42, height * 0.48);
+    ctx.lineTo(width * 0.42, height * 0.72);
+    ctx.lineTo(width * 0.3, height * 0.82);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.fillStyle = `${scene.accent[0]}55`;
+    ctx.fill();
+    drawStatsCard(ctx, width * 0.52, height * 0.48, width * 0.16, height * 0.18, "Risk AI", "12%");
+    drawStatsCard(ctx, width * 0.7, height * 0.48, width * 0.16, height * 0.18, "Floor", "включен");
+  } else if (scene.id === "result") {
+    drawStatsCard(ctx, width * 0.1, height * 0.5, width * 0.24, height * 0.18, "ТКП", "готово");
+    drawStatsCard(ctx, width * 0.38, height * 0.5, width * 0.24, height * 0.18, "AI-решение", "уточнено");
+    drawStatsCard(ctx, width * 0.66, height * 0.5, width * 0.18, height * 0.18, "Срок", "минуты");
+  } else {
+    drawBars(
+      ctx,
+      width * 0.1,
+      height * 0.54,
+      width * 0.54,
+      [0.9, 0.74, 0.64],
+      ["#6de2ff", "#82b1ff", "#8ef7b8"],
+      ["Пресейл", "Бюджет", "Защита рисков"],
+      progress
+    );
+  }
+
+  const progressBarY = height * 0.88;
+  roundedRect(ctx, width * 0.1, progressBarY, width * 0.8, 10, 8);
+  ctx.fillStyle = "rgba(255,255,255,0.08)";
+  ctx.fill();
+  roundedRect(ctx, width * 0.1, progressBarY, width * 0.8 * clamp(currentTime / TOTAL_DURATION, 0, 1), 10, 8);
+  ctx.fillStyle = scene.accent[0];
+  ctx.fill();
 }
 
 function stopSpeech() {
@@ -211,57 +312,45 @@ function stopSpeech() {
   window.speechSynthesis.cancel();
 }
 
-function speakScene(scene: PromoScene, enabled: boolean, voice: SpeechSynthesisVoice | null) {
+function speakScene(scene: PromoScene, enabled: boolean) {
   if (!enabled || typeof window === "undefined" || !("speechSynthesis" in window)) return;
   stopSpeech();
   const utterance = new SpeechSynthesisUtterance(scene.voice);
   utterance.lang = "ru-RU";
-  utterance.rate = 0.96;
-  utterance.pitch = 0.88;
+  utterance.rate = 1.02;
+  utterance.pitch = 1.0;
   utterance.volume = 0.9;
-  if (voice) utterance.voice = voice;
   window.speechSynthesis.speak(utterance);
 }
 
-function playAmbientTone(audioContext: AudioContext, frequency: number, when: number, duration: number, volume: number) {
+function playAccentTone(audioContext: AudioContext, frequency: number, when: number, duration: number, volume: number) {
   const oscillator = audioContext.createOscillator();
   const gain = audioContext.createGain();
-  const filter = audioContext.createBiquadFilter();
-  oscillator.type = "sine";
+  oscillator.type = "triangle";
   oscillator.frequency.setValueAtTime(frequency, when);
-  filter.type = "lowpass";
-  filter.frequency.setValueAtTime(1400, when);
   gain.gain.setValueAtTime(0.0001, when);
-  gain.gain.exponentialRampToValueAtTime(volume, when + 0.08);
-  gain.gain.exponentialRampToValueAtTime(volume * 0.65, when + duration * 0.6);
+  gain.gain.exponentialRampToValueAtTime(volume, when + 0.01);
   gain.gain.exponentialRampToValueAtTime(0.0001, when + duration);
-  oscillator.connect(filter);
-  filter.connect(gain);
+  oscillator.connect(gain);
   gain.connect(audioContext.destination);
   oscillator.start(when);
-  oscillator.stop(when + duration + 0.06);
+  oscillator.stop(when + duration + 0.04);
 }
 
 function startMusicLoop(audioContext: AudioContext) {
-  const progression = [
-    [220, 329.63, 440],
-    [246.94, 369.99, 493.88],
-    [196, 293.66, 392],
-    [174.61, 261.63, 349.23],
-  ];
+  const notes = [220, 261.63, 329.63, 293.66, 392, 329.63, 261.63, 246.94];
   let step = 0;
   const interval = window.setInterval(() => {
     const now = audioContext.currentTime + 0.02;
-    const chord = progression[step % progression.length];
-    chord.forEach((freq, index) => {
-      playAmbientTone(audioContext, freq, now + index * 0.02, 2.8, index === 0 ? 0.028 : 0.018);
-    });
+    playAccentTone(audioContext, notes[step % notes.length], now, 0.34, 0.03);
+    playAccentTone(audioContext, notes[(step + 2) % notes.length] / 2, now, 0.42, 0.018);
     step += 1;
-  }, 2200);
+  }, 420);
   return () => window.clearInterval(interval);
 }
 
 export function PromoReelPlayer({ open, onClose }: PromoReelPlayerProps) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const frameRef = useRef<number | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const timeRef = useRef(0);
@@ -269,25 +358,37 @@ export function PromoReelPlayer({ open, onClose }: PromoReelPlayerProps) {
   const lastSceneIdRef = useRef<string>("");
   const audioContextRef = useRef<AudioContext | null>(null);
   const stopMusicRef = useRef<null | (() => void)>(null);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [viewportBounds, setViewportBounds] = useState<PlayerWindowSize>(() =>
+    typeof window === "undefined" ? { width: 1280, height: 800 } : { width: window.innerWidth, height: window.innerHeight }
+  );
 
   const sceneInfo = useMemo(() => getSceneAtTime(currentTime), [currentTime]);
-  const selectedVoice = useMemo(() => choosePreferredMaleVoice(voices), [voices]);
+  const baseWindowSize = useMemo(
+    () => calculatePromoWindowSize(viewportBounds.width, viewportBounds.height),
+    [viewportBounds.height, viewportBounds.width]
+  );
+  const playerSize = useMemo(
+    () =>
+      isFullscreen
+        ? {
+            width: Math.max(viewportBounds.width, 320),
+            height: Math.max(viewportBounds.height - 116, 180),
+          }
+        : baseWindowSize,
+    [baseWindowSize, isFullscreen, viewportBounds.height, viewportBounds.width]
+  );
 
   useEffect(() => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return undefined;
-
-    const updateVoices = () => setVoices(window.speechSynthesis.getVoices());
-    updateVoices();
-    window.speechSynthesis.addEventListener?.("voiceschanged", updateVoices);
-
-    return () => window.speechSynthesis.removeEventListener?.("voiceschanged", updateVoices);
+    if (typeof window === "undefined") return undefined;
+    const handleResize = () => setViewportBounds({ width: window.innerWidth, height: window.innerHeight });
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   useEffect(() => {
@@ -298,10 +399,24 @@ export function PromoReelPlayer({ open, onClose }: PromoReelPlayerProps) {
   }, []);
 
   useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const pixelRatio = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
+    canvas.width = Math.round(playerSize.width * pixelRatio);
+    canvas.height = Math.round(playerSize.height * pixelRatio);
+    canvas.style.width = `${playerSize.width}px`;
+    canvas.style.height = `${playerSize.height}px`;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    renderScene(ctx, playerSize.width, playerSize.height, currentTime);
+  }, [playerSize.height, playerSize.width, currentTime]);
+
+  useEffect(() => {
     if (!open) {
       setPlaying(false);
-      setCurrentTime(0);
       timeRef.current = 0;
+      setCurrentTime(0);
       lastTickRef.current = null;
       lastSceneIdRef.current = "";
       stopSpeech();
@@ -323,7 +438,10 @@ export function PromoReelPlayer({ open, onClose }: PromoReelPlayerProps) {
       const activeScene = getSceneAtTime(timeRef.current).scene;
       if (activeScene.id !== lastSceneIdRef.current) {
         lastSceneIdRef.current = activeScene.id;
-        speakScene(activeScene, !muted, selectedVoice);
+        if (audioContextRef.current && !muted) {
+          playAccentTone(audioContextRef.current, 480, audioContextRef.current.currentTime + 0.01, 0.18, 0.06);
+        }
+        speakScene(activeScene, !muted);
       }
 
       if (timeRef.current >= TOTAL_DURATION) {
@@ -344,7 +462,7 @@ export function PromoReelPlayer({ open, onClose }: PromoReelPlayerProps) {
         frameRef.current = null;
       }
     };
-  }, [open, playing, muted, selectedVoice]);
+  }, [open, playing, muted]);
 
   useEffect(() => {
     if (!open || muted) {
@@ -367,20 +485,11 @@ export function PromoReelPlayer({ open, onClose }: PromoReelPlayerProps) {
     return undefined;
   }, [open, playing, muted]);
 
-  useEffect(
-    () => () => {
-      stopSpeech();
-      if (stopMusicRef.current) stopMusicRef.current();
-      audioContextRef.current?.close().catch(() => undefined);
-    },
-    []
-  );
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video || sceneInfo.scene.mediaType !== "video") return;
-    video.currentTime = sceneInfo.progress * Math.max(video.duration || sceneInfo.scene.duration, 0);
-  }, [sceneInfo]);
+  useEffect(() => () => {
+    stopSpeech();
+    if (stopMusicRef.current) stopMusicRef.current();
+    audioContextRef.current?.close().catch(() => undefined);
+  }, []);
 
   const handlePlayPause = async () => {
     if (!open) return;
@@ -397,7 +506,7 @@ export function PromoReelPlayer({ open, onClose }: PromoReelPlayerProps) {
     }
 
     if (!playing) {
-      speakScene(sceneInfo.scene, !muted, selectedVoice);
+      speakScene(sceneInfo.scene, !muted);
     } else {
       stopSpeech();
       if (stopMusicRef.current) {
@@ -416,7 +525,7 @@ export function PromoReelPlayer({ open, onClose }: PromoReelPlayerProps) {
     lastTickRef.current = null;
     lastSceneIdRef.current = "";
     if (playing) {
-      speakScene(PROMO_SCENES[0], !muted, selectedVoice);
+      speakScene(PROMO_SCENES[0], !muted);
     }
   };
 
@@ -439,104 +548,67 @@ export function PromoReelPlayer({ open, onClose }: PromoReelPlayerProps) {
 
   if (!open) return null;
 
-  const currentScene = sceneInfo.scene;
-  const mediaUrl = assetUrl(currentScene.mediaPath);
-
   return (
-    <div className="promo-reel" role="dialog" aria-modal="true" aria-label="Видео о возможностях платформы">
+    <div className="promo-reel" role="dialog" aria-modal="true" aria-label="Видео о возможностях системы">
       <div className="promo-reel__backdrop" onClick={onClose} />
-      <div className={`promo-reel__window ${isFullscreen ? "is-fullscreen" : ""}`} ref={containerRef}>
+      <div
+        className={`promo-reel__window ${isFullscreen ? "is-fullscreen" : ""}`}
+        ref={containerRef}
+        style={
+          {
+            "--promo-width": `${playerSize.width}px`,
+            "--promo-height": `${playerSize.height}px`,
+          } as CSSProperties
+        }
+      >
         <div className="promo-reel__frame">
-          <div className="promo-reel__media">
-            {currentScene.mediaType === "video" ? (
-              <video ref={videoRef} key={currentScene.id} src={mediaUrl} muted playsInline preload="auto" />
-            ) : (
-              <div className="promo-reel__image" key={currentScene.id} style={{ backgroundImage: `url(${mediaUrl})` }} />
-            )}
-            <div
-              className="promo-reel__media-overlay"
-              style={
-                {
-                  "--promo-accent-start": currentScene.accent[0],
-                  "--promo-accent-end": currentScene.accent[1],
-                } as CSSProperties
-              }
-            />
-          </div>
-
+          <canvas ref={canvasRef} aria-hidden="true" />
           <div className="promo-reel__hud">
-            <div className="promo-reel__eyebrow">Обзор платформы Project.Core</div>
+            <div className="promo-reel__eyebrow">Видео-обзор платформы</div>
             <button className="promo-reel__close" type="button" onClick={onClose} aria-label="Закрыть ролик">
-              <X size={20} />
+              ×
             </button>
           </div>
-
-          <div className="promo-reel__content">
-            <div className="promo-reel__chapter">{currentScene.eyebrow}</div>
-            <h3>{currentScene.title}</h3>
-            <p className="promo-reel__subtitle">{currentScene.subtitle}</p>
-            <p className="promo-reel__body">{currentScene.body}</p>
-            <ul className="promo-reel__bullets">
-              {currentScene.bullets.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          </div>
-
           <div className="promo-reel__caption">
-            <strong>{currentScene.title}</strong>
-            <span>{currentScene.subtitle}</span>
+            <strong>{sceneInfo.scene.title}</strong>
+            <span>{sceneInfo.scene.subtitle}</span>
           </div>
         </div>
 
         <div className="promo-reel__controls">
           <div className="promo-reel__buttons">
             <button type="button" className="btn btn--primary" onClick={handlePlayPause}>
-              {playing ? <Pause size={16} /> : <Play size={16} />}
               {playing ? "Пауза" : "Старт ролика"}
             </button>
             <button type="button" className="btn btn--ghost-light" onClick={handleRestart}>
-              <RotateCcw size={16} /> Сначала
+              Сначала
             </button>
             <button type="button" className="btn btn--ghost-light" onClick={() => setMuted((value) => !value)}>
-              {muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
               {muted ? "Звук выкл." : "Звук вкл."}
             </button>
             <button type="button" className="btn btn--ghost-light" onClick={handleFullscreen}>
-              {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
               {isFullscreen ? "Свернуть" : "Полный экран"}
             </button>
           </div>
 
           <div className="promo-reel__timeline">
             <span>{formatTime(currentTime)}</span>
-            <input type="range" min={0} max={TOTAL_DURATION} step={0.1} value={currentTime} onChange={handleSeek} aria-label="Позиция ролика" />
+            <input
+              type="range"
+              min={0}
+              max={TOTAL_DURATION}
+              step={0.1}
+              value={currentTime}
+              onChange={handleSeek}
+              aria-label="Позиция ролика"
+            />
             <span>{formatTime(TOTAL_DURATION)}</span>
           </div>
 
-          <div className="promo-reel__chapters">
-            {PROMO_SCENES.map((scene) => (
-              <button
-                key={scene.id}
-                type="button"
-                className={`promo-reel__chapter-chip ${scene.id === currentScene.id ? "is-active" : ""}`}
-                onClick={() => {
-                  const start = PROMO_SCENES.slice(0, PROMO_SCENES.findIndex((item) => item.id === scene.id)).reduce((sum, item) => sum + item.duration, 0);
-                  timeRef.current = start;
-                  setCurrentTime(start);
-                  lastTickRef.current = null;
-                  lastSceneIdRef.current = "";
-                }}
-              >
-                {scene.eyebrow}
-              </button>
-            ))}
-          </div>
-
           <div className="promo-reel__meta">
+            <span>Базовое окно: {baseWindowSize.width} × {baseWindowSize.height}</span>
             <span>Формат: 16:9</span>
-            <span>Озвучка: приятный мужской голос браузера, если доступен</span>
-            <span>Подложка: мягкий ambient score</span>
+            <span>Движок: Canvas + WebAudio + Fullscreen API</span>
           </div>
         </div>
       </div>
