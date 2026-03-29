@@ -10,6 +10,12 @@ type AuthModalProps = {
 
 const CODE_LENGTH = 6;
 const LEGAL_WARNING = "Для продолжения нужно подтвердить согласие с условиями использования сервиса и обработкой персональных данных.";
+const SYSTEM_WINDOW_FEATURES = "popup=yes,width=1440,height=960,left=120,top=80,resizable=yes,scrollbars=yes";
+
+function openSystemWindow() {
+  if (typeof window === "undefined") return null;
+  return window.open("", "projectcore-system-window", SYSTEM_WINDOW_FEATURES);
+}
 
 export function AuthModal({ open, onClose }: AuthModalProps) {
   const navigate = useNavigate();
@@ -101,6 +107,7 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
     setBusy(true);
     setError("");
     verifyingRef.current = true;
+    const systemWindow = openSystemWindow();
 
     try {
       const result = await verifyAuthCode({
@@ -113,9 +120,20 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
         window.localStorage.setItem("smetacore_auth_token", result.accessToken);
         window.sessionStorage.setItem("smetacore_site_auth", "ok");
       }
+      if (systemWindow && !systemWindow.closed) {
+        systemWindow.location.href = siteConfig.systemPath;
+        try {
+          systemWindow.focus();
+        } catch {
+        }
+      } else {
+        navigate(siteConfig.systemPath);
+      }
       resetAndClose();
-      navigate(siteConfig.systemPath);
     } catch (verifyError: any) {
+      if (systemWindow && !systemWindow.closed) {
+        systemWindow.close();
+      }
       setError(verifyError?.message || "Код не подтвержден.");
       setOtpDigits(Array.from({ length: CODE_LENGTH }, () => ""));
       setTimeout(() => focusOtpIndex(0), 0);
