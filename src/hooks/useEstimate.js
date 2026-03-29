@@ -57,9 +57,9 @@ function deriveSurveyAreaRefinement(photoAnalyses = {}, fallbackTotalArea = 0) {
 
   const aggregate = Array.from(byZone.values()).reduce(
     (sum, item) => {
-      sum.userTotalArea += num(item?.userTotalArea, 0);
-      sum.predictedTotalArea += num(item?.predictedTotalArea, 0);
-      sum.recognizedAverageFloorArea += num(item?.recognizedAverageFloorArea, 0);
+      sum.userTotalArea += toNumber(item?.userTotalArea, 0);
+      sum.predictedTotalArea += toNumber(item?.predictedTotalArea, 0);
+      sum.recognizedAverageFloorArea += toNumber(item?.recognizedAverageFloorArea, 0);
       return sum;
     },
     {
@@ -69,7 +69,7 @@ function deriveSurveyAreaRefinement(photoAnalyses = {}, fallbackTotalArea = 0) {
     }
   );
 
-  const userTotalArea = aggregate.userTotalArea || num(fallbackTotalArea, 0);
+  const userTotalArea = aggregate.userTotalArea || toNumber(fallbackTotalArea, 0);
   const predictedTotalArea = aggregate.predictedTotalArea || userTotalArea;
   const adjustedTotalArea = Number(((predictedTotalArea * 0.75 + userTotalArea * 0.25) || userTotalArea).toFixed(1));
   const deviationPercent = userTotalArea > 0 ? Number((((adjustedTotalArea - userTotalArea) / userTotalArea) * 100).toFixed(1)) : 0;
@@ -840,7 +840,7 @@ export default function useEstimate() {
             acceptedFiles.length > 0
               ? Number(
                   (
-                    acceptedFiles.reduce((sum, item) => sum + num(item?.confidence, 0), 0) /
+                    acceptedFiles.reduce((sum, item) => sum + toNumber(item?.confidence, 0), 0) /
                     acceptedFiles.length
                   ).toFixed(2)
                 )
