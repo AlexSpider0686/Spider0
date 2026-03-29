@@ -57,9 +57,13 @@ export function downloadSystemSpecificationExcel({ objectData, system, systemRes
             <tr>
               <th>№</th>
               <th>Позиция</th>
+              <th>Категория</th>
+              <th>Источник</th>
               <th>Основание</th>
               <th>Кол-во</th>
               <th>Ед. изм.</th>
+              <th>Цена за ед.</th>
+              <th>Сумма</th>
             </tr>
           </thead>
           <tbody>
@@ -69,9 +73,13 @@ export function downloadSystemSpecificationExcel({ objectData, system, systemRes
                   <tr>
                     <td>${index + 1}</td>
                     <td>${escapeHtml(row.name)}</td>
+                    <td>${escapeHtml(row.category === "equipment" ? "Оборудование" : "Материалы")}</td>
+                    <td>${escapeHtml(row.source || "algorithm")}</td>
                     <td>${escapeHtml(row.basis)}</td>
                     <td>${escapeHtml(row.qty)}</td>
                     <td>${escapeHtml(row.unit)}</td>
+                    <td>${escapeHtml(Number(row.unitPrice || 0).toFixed(2))}</td>
+                    <td>${escapeHtml(Number(row.total || 0).toFixed(2))}</td>
                   </tr>
                 `
               )

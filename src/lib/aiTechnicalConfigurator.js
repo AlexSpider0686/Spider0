@@ -255,6 +255,207 @@ function buildZoneMaterials(systemType, zones, answers) {
   });
 }
 
+function roundMoney(value) {
+  return Number(num(value, 0).toFixed(2));
+}
+
+function detectSpecCategory(name = "", fallback = "equipment") {
+  const normalized = String(name || "").toLowerCase();
+  if (
+    normalized.includes("кабель") ||
+    normalized.includes("лот") ||
+    normalized.includes("гофр") ||
+    normalized.includes("труб") ||
+    normalized.includes("короб") ||
+    normalized.includes("креп") ||
+    normalized.includes("подвес") ||
+    normalized.includes("анкер") ||
+    normalized.includes("материал") ||
+    normalized.includes("заклад")
+  ) {
+    return "material";
+  }
+  return fallback;
+}
+
+function inferSurveyUnitPrice(row) {
+  const normalized = String(row?.name || "").toLowerCase();
+  if (normalized.includes("лот")) return 420;
+  if (normalized.includes("короб")) return 310;
+  if (normalized.includes("гофр") || normalized.includes("труб")) return 180;
+  if (normalized.includes("анкер") || normalized.includes("креп")) return 65;
+  if (normalized.includes("подмост") || normalized.includes("подъем")) return 6900;
+  if (normalized.includes("зкспс") || normalized.includes("зональ")) return 850;
+  if (normalized.includes("фальш-пол")) return 2600;
+  if (normalized.includes("запотол")) return 2400;
+  if (normalized.includes("вертикаль")) return 4200;
+  if (normalized.includes("запас")) return 950;
+  if (row?.unit === "м") return 180;
+  if (row?.unit === "шт") return 120;
+  if (row?.unit === "компл.") return 3200;
+  if (row?.unit === "зон") return 850;
+  return 1000;
+}
+
+function finalizeSpecRows(rows, overrideMap = {}) {
+  return rows.map((row, index) => {
+    const override = overrideMap?.[row.key] || {};
+    const qty = override.qty !== undefined ? Math.max(num(override.qty, row.qty), 0) : Math.max(num(row.qty, 0), 0);
+    const unitPrice = roundMoney(row.unitPrice);
+    return {
+      ...row,
+      order: row.order ?? index,
+      qty,
+      unitPrice,
+      total: roundMoney(qty * unitPrice),
+      category: row.category || "material",
+      source: row.source || "algorithm",
+    };
+  });
+}
+
+function buildPricedEquipmentRows(systemType, result, apsSnapshot) {
+  if (systemType === "aps" && apsSnapshot?.active && Array.isArray(apsSnapshot.items) && apsSnapshot.items.length) {
+    return apsSnapshot.items.map((item, index) => ({
+      key: item.id || `${systemType}-pdf-${index + 1}`,
+      name: item.model ? `${item.name} (${item.model})` : item.name,
+      qty: Math.max(num(item.qty, 0), 0),
+      unit: item.unit || "шт",
+      basis: item.position ? `Позиция ${item.position} из проектной спецификации` : "Проектная спецификация APS",
+      unitPrice: num(item.unitPrice, 0),
+      category: item.category === "materials" ? "material" : "equipment",
+      source: "project_pdf",
+    }));
+  }
+
+  const bom = Array.isArray(result?.bom) ? result.bom : [];
+  if (bom.length) {
+    return bom.map((item, index) => ({
+      key: item.code || `${systemType}-bom-${index + 1}`,
+      name: item.name,
+      qty: Math.max(num(item.qty, 0), 0),
+      unit: "шт",
+      basis: "Расчетный BOM системы",
+      unitPrice: num(item.unitPrice, 0),
+      category: detectSpecCategory(item.name, "equipment"),
+      source: "model_bom",
+    }));
+  }
+
+  const keyEquipment = Array.isArray(result?.equipmentData?.keyEquipment) ? result.equipmentData.keyEquipment : [];
+  return keyEquipment.map((item, index) => ({
+    key: item.code || `${systemType}-key-${index + 1}`,
+    name: item.label || item.name || `Позиция ${index + 1}`,
+    qty: Math.max(num(item.qty, result?.units || 0), 0),
+    unit: "шт",
+    basis: "Ключевое оборудование по конфигуратору системы",
+    unitPrice: num(item.unitPrice, 0),
+    category: "equipment",
+    source: "key_equipment",
+  }));
+}
+
+function buildInfrastructureRows(systemType, result) {
+  if (!result) return [];
+
+  const rows = [];
+  const cableQty = Math.max(num(result?.cable, 0), 0);
+  if (cableQty > 0) {
+    rows.push({
+      key: `${systemType}-cable-line`,
+      name: "Кабельные линии системы",
+      qty: Number(cableQty.toFixed(1)),
+      unit: "м",
+      unitPrice: cableQty > 0 ? num(result?.cableMaterials, 0) / cableQty : 0,
+      basis: "Рассчитано по длинам трасс системы, этажности и структуре зон.",
+      category: "material",
+      source: "cable_model",
+    });
+  }
+
+  const trayQty = Math.max(num(result?.trayLength, result?.trace?.trayLengthM), 0);
+  if (trayQty > 0) {
+    rows.push({
+      key: `${systemType}-tray-line`,
+      name: "Кабельные лотки",
+      qty: Number(trayQty.toFixed(1)),
+      unit: "м",
+      unitPrice: 95,
+      basis: "Лотковая часть трасс рассчитана по маршрутам прокладки и КНС-модели.",
+      category: "material",
+      source: "kns_model",
+    });
+  }
+
+  const conduitQty = Math.max(num(result?.conduitLength, result?.trace?.conduitLengthM), 0);
+  if (conduitQty > 0) {
+    rows.push({
+      key: `${systemType}-conduit-line`,
+      name: "Гофра / труба для кабельных линий",
+      qty: Number(conduitQty.toFixed(1)),
+      unit: "м",
+      unitPrice: 88,
+      basis: "Трубная часть трасс рассчитана по маршрутам прокладки и КНС-модели.",
+      category: "material",
+      source: "kns_model",
+    });
+  }
+
+  const fastenerQty = Math.max(num(result?.fastenerUnits, result?.trace?.fastenerUnits), 0);
+  if (fastenerQty > 0) {
+    rows.push({
+      key: `${systemType}-fasteners`,
+      name: "Крепеж и подвесы",
+      qty: Math.round(fastenerQty),
+      unit: "шт",
+      unitPrice: 6,
+      basis: "Количество крепежа определено по длинам трасс, вертикальным участкам и монтажным условиям.",
+      category: "material",
+      source: "kns_model",
+    });
+  }
+
+  const penetrationQty = Math.max(num(result?.penetrationUnits, result?.trace?.penetrationUnits), 0);
+  if (penetrationQty > 0) {
+    rows.push({
+      key: `${systemType}-penetrations`,
+      name: "Проходки и узлы пересечения",
+      qty: Math.round(penetrationQty),
+      unit: "шт",
+      unitPrice: 240,
+      basis: "Проходки рассчитаны по этажности, вертикальным трассам и переходам между зонами.",
+      category: "material",
+      source: "kns_model",
+    });
+  }
+
+  const resourceMaterialsTotal = Math.max(num(result?.breakdown?.materials?.resourceMaterials, 0), 0);
+  const resourceUnits = Math.max(num(result?.units, 0), 1);
+  if (resourceMaterialsTotal > 0) {
+    rows.push({
+      key: `${systemType}-resource-materials`,
+      name: "Расходные материалы и коммутация",
+      qty: resourceUnits,
+      unit: "компл.",
+      unitPrice: resourceMaterialsTotal / resourceUnits,
+      basis: "Алгоритмически рассчитанный комплект расходных материалов по составу системы.",
+      category: "material",
+      source: "resource_model",
+    });
+  }
+
+  return rows;
+}
+
+function buildSurveySpecRows(materialRows = []) {
+  return materialRows.map((row) => ({
+    ...row,
+    unitPrice: inferSurveyUnitPrice(row),
+    category: "material",
+    source: "survey_ai",
+  }));
+}
+
 function buildBaseSpecRows(systemType, result, apsSnapshot) {
   if (systemType === "aps" && apsSnapshot?.active && Array.isArray(apsSnapshot.items) && apsSnapshot.items.length) {
     return apsSnapshot.items.map((item, index) => ({
@@ -321,7 +522,6 @@ export function buildAiTechnicalRecommendations({
   return (systems || []).map((system, index) => {
     const result = systemResults?.[index];
     const markerUnits = Math.max(num(result?.unitWorkMarker?.qty, result?.units), 1);
-    const baseRows = buildBaseSpecRows(system.type, result, apsProjectSnapshots?.[system.id]);
     const recognizedPlanData = collectRecognizedPlanData(photoAnalyses, system.type);
     const fallbackZoneModel =
       recognizedPlanData.totalZones > 0 || !["aps", "soue", "sots"].includes(system.type)
@@ -355,13 +555,14 @@ export function buildAiTechnicalRecommendations({
       ...buildPlanSpecRows(system.type, effectiveZoneData),
     ];
 
-    const combinedRows = [...baseRows, ...materialRows].map((row) => {
-      const override = specOverrides?.[system.id]?.[row.key] || {};
-      return {
-        ...row,
-        qty: override.qty !== undefined ? Math.max(num(override.qty, row.qty), 0) : row.qty,
-      };
-    });
+    const combinedRows = finalizeSpecRows(
+      [
+        ...buildPricedEquipmentRows(system.type, result, apsProjectSnapshots?.[system.id]),
+        ...buildInfrastructureRows(system.type, result),
+        ...buildSurveySpecRows(materialRows),
+      ],
+      specOverrides?.[system.id] || {}
+    );
 
     const integrationCount = num(surveyAnswers?.[`system-${system.id}-integration-count`], result?.unitWorkMarker?.qty ? 1 : 0);
     const lowCurrentRooms = num(surveyAnswers?.["object-low-current-rooms"], 0);

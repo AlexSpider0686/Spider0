@@ -955,15 +955,21 @@ export default function SystemsStep({
                       <thead>
                         <tr>
                           <th>Позиция</th>
+                          <th>Категория</th>
+                          <th>Источник</th>
                           <th>Основание</th>
                           <th>Кол-во</th>
                           <th>Ед. изм</th>
+                          <th>Цена</th>
+                          <th>Сумма</th>
                         </tr>
                       </thead>
                       <tbody>
                         {(technicalRecommendation.specRows || []).map((row) => (
                           <tr key={`${system.id}-${row.key}`}>
                             <td>{row.name}</td>
+                            <td>{row.category === "equipment" ? "Оборудование" : "Материалы"}</td>
+                            <td>{row.source || "algorithm"}</td>
                             <td>{row.basis}</td>
                             <td>
                               <input
@@ -979,6 +985,8 @@ export default function SystemsStep({
                               />
                             </td>
                             <td>{row.unit}</td>
+                            <td>{rub(row.unitPrice || 0)}</td>
+                            <td>{rub(row.total || 0)}</td>
                           </tr>
                         ))}
                       </tbody>
