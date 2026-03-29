@@ -831,6 +831,7 @@ export default function useEstimate() {
           systems,
           objectData,
         });
+        const recognizedSystems = Array.isArray(aggregatedPlanRecognition?.systems) ? aggregatedPlanRecognition.systems : [];
 
         const acceptedFiles = perFileResults.filter((item) => item?.accepted !== false);
         result = {
@@ -846,7 +847,7 @@ export default function useEstimate() {
               : Number((perFileResults[0]?.confidence || 0.3).toFixed(2)),
           summary:
             acceptedFiles.length > 0
-              ? `Распознано ${aggregatedPlanRecognition.uploadedPlans} план(ов) из ${aggregatedPlanRecognition.expectedFloorCount}. ${aggregatedPlanRecognition.systems
+              ? `Распознано ${aggregatedPlanRecognition.uploadedPlans} план(ов) из ${aggregatedPlanRecognition.expectedFloorCount}. ${recognizedSystems
                   .map((item) => `${item.systemLabel}: ${item.zoneCount} ${item.zoneTerm}`)
                   .join(", ")}.`
               : perFileResults[0]?.summary || "Не удалось принять ни один план эвакуации.",
@@ -854,7 +855,7 @@ export default function useEstimate() {
             `Загружено планов: ${files.length}`,
             `Принято планов: ${aggregatedPlanRecognition.uploadedPlans}`,
             `Этажей по объекту/зоне: ${aggregatedPlanRecognition.expectedFloorCount}`,
-            ...aggregatedPlanRecognition.systems.map(
+            ...recognizedSystems.map(
               (item) =>
                 `${item.systemLabel}: ${item.zoneCount} ${item.zoneTerm} (${item.detectedZoneCount || 0} по планам, ${
                   item.forecastZoneCount || 0

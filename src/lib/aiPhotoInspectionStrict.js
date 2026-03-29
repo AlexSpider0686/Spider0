@@ -103,23 +103,6 @@ function analyzeRegion(imageData, width, xStart, xEnd, yStart, yEnd) {
   }
 
   if (!pixelCount) {
-    const detections =
-      prompt?.type === "corridor_scan" && corridorRouting
-        ? [
-            `Способ прокладки: ${corridorRouting.methods.join(", ")}`,
-            corridorRouting.hasTrayRouting ? "Определены признаки лотковых трасс" : "Явные признаки лотков не найдены",
-            corridorRouting.hasCeilingVoid ? "Определено запотолочное пространство" : "Запотолочное пространство не подтверждено",
-            corridorRouting.hasRaisedFloor ? "Определен фальш-пол" : "Фальш-пол не подтвержден",
-            `Оценка пригодности снимка: ${suitability.score}`,
-          ]
-        : [
-            `РЎС‚РµРЅС‹: ${wallMaterial}`,
-            `РџРѕС‚РѕР»РѕРє: ${ceilingType}`,
-            heightEstimate ? `Р’С‹СЃРѕС‚Р° РїРѕРјРµС‰РµРЅРёСЏ: РѕРєРѕР»Рѕ ${heightEstimate.value} Рј` : "Р’С‹СЃРѕС‚Р° РїРѕРјРµС‰РµРЅРёСЏ: РЅСѓР¶РµРЅ СЂСѓС‡РЅРѕР№ РІРІРѕРґ",
-            `РћС†РµРЅРєР° РїСЂРёРіРѕРґРЅРѕСЃС‚Рё СЃРЅРёРјРєР°: ${suitability.score}`,
-            "Р—Р°С‰РёС‚Р° Р°РєС‚РёРІРЅР°: РЅРµРїРѕРґС…РѕРґСЏС‰РёРµ С„РѕС‚Рѕ РЅРµ РїРѕРїР°РґР°СЋС‚ РІ С‡РµРє-Р»РёСЃС‚",
-          ];
-
     return {
       brightness: 0,
       contrast: 0,
@@ -706,6 +689,23 @@ async function executeAnalysis({ file, prompt, zones, systems, objectData, photo
     }
 
     const corridorRouting = prompt?.type === "corridor_scan" ? inferCorridorRouting(meta, ceilingType) : null;
+    const detections =
+      prompt?.type === "corridor_scan" && corridorRouting
+        ? [
+            `Способ прокладки: ${corridorRouting.methods.join(", ")}`,
+            corridorRouting.hasTrayRouting ? "Определены признаки лотковых трасс" : "Явные признаки лотков не найдены",
+            corridorRouting.hasCeilingVoid ? "Определено запотолочное пространство" : "Запотолочное пространство не подтверждено",
+            corridorRouting.hasRaisedFloor ? "Определен фальш-пол" : "Фальш-пол не подтвержден",
+            `Оценка пригодности снимка: ${suitability.score}`,
+            "Защита активна: неподходящие фото не попадают в чек-лист",
+          ]
+        : [
+            `Стены: ${wallMaterial}`,
+            `Потолок: ${ceilingType}`,
+            heightEstimate ? `Высота помещения: около ${heightEstimate.value} м` : "Высота помещения: нужен ручной ввод",
+            `Оценка пригодности снимка: ${suitability.score}`,
+            "Защита активна: неподходящие фото не попадают в чек-лист",
+          ];
     const suggestedAnswers =
       prompt?.type === "corridor_scan" && corridorRouting
         ? [
@@ -729,13 +729,7 @@ async function executeAnalysis({ file, prompt, zones, systems, objectData, photo
         prompt?.type === "corridor_scan" && corridorRouting
           ? `Определены вероятные способы прокладки: ${corridorRouting.methods.join(", ")}.`
           : buildSurfaceSummary(wallMaterial, ceilingType, heightEstimate),
-      detections: prompt?.type === "corridor_scan" && corridorRouting ? detections : [
-        `Стены: ${wallMaterial}`,
-        `Потолок: ${ceilingType}`,
-        heightEstimate ? `Высота помещения: около ${heightEstimate.value} м` : "Высота помещения: нужен ручной ввод",
-        `Оценка пригодности снимка: ${suitability.score}`,
-        "Защита активна: неподходящие фото не попадают в чек-лист",
-      ],
+      detections,
       suggestedAnswers,
       estimatedCeilingHeight: heightEstimate?.value ?? null,
       estimatedCeilingHeightConfidence: heightEstimate?.confidence ?? null,

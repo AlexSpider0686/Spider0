@@ -786,6 +786,10 @@ export default function ObjectStep({
                   <div className="ai-photo-prompt-grid">
                     {aiSurveyPlan.photoPrompts.map((prompt) => {
                       const analysis = technicalSolution?.photoAnalyses?.[prompt.id];
+                      const analysisDetections = Array.isArray(analysis?.detections) ? analysis.detections : [];
+                      const planWarnings = Array.isArray(analysis?.planRecognition?.warnings) ? analysis.planRecognition.warnings : [];
+                      const planSystems = Array.isArray(analysis?.planRecognition?.systems) ? analysis.planRecognition.systems : [];
+                      const fileResults = Array.isArray(analysis?.fileResults) ? analysis.fileResults : [];
                       return (
                         <div className="ai-photo-card" key={prompt.id}>
                           <div className="ai-photo-card__head">
@@ -845,9 +849,9 @@ export default function ObjectStep({
                             </div>
                           ) : null}
 
-                          {analysis?.detections?.length ? (
+                          {analysisDetections.length ? (
                             <div className="ai-detection-list">
-                              {analysis.detections.map((item) => (
+                              {analysisDetections.map((item) => (
                                 <span className={`pricing-source-chip ${analysis?.accepted === false ? "warn" : "ok"}`} key={`${prompt.id}-${item}`}>
                                   {item}
                                 </span>
@@ -855,9 +859,9 @@ export default function ObjectStep({
                             </div>
                           ) : null}
 
-                          {analysis?.planRecognition?.warnings?.length ? (
+                          {planWarnings.length ? (
                             <div className="ai-summary-list" style={{ marginTop: 10 }}>
-                              {analysis.planRecognition.warnings.map((warning) => (
+                              {planWarnings.map((warning) => (
                                 <div key={`${prompt.id}-${warning.message}`}>
                                   <X size={16} />
                                   <span>{warning.message}</span>
@@ -909,7 +913,7 @@ export default function ObjectStep({
                             </div>
                           ) : null}
 
-                          {analysis?.planRecognition?.systems?.length ? (
+                          {planSystems.length ? (
                             <div className="ai-summary-list" style={{ marginTop: 10 }}>
                               <div>
                                 <CheckCircle2 size={16} />
@@ -919,7 +923,7 @@ export default function ObjectStep({
                                   {analysis.planRecognition.forecastedFloors || 0}.
                                 </span>
                               </div>
-                              {analysis.planRecognition.systems.flatMap((systemPlan) => {
+                              {planSystems.flatMap((systemPlan) => {
                                 const headline = (
                                   <div key={`${prompt.id}-${systemPlan.systemType}-headline`}>
                                     <CheckCircle2 size={16} />
@@ -942,9 +946,9 @@ export default function ObjectStep({
                             </div>
                           ) : null}
 
-                          {analysis?.fileResults?.length ? (
+                          {fileResults.length ? (
                             <div className="ai-summary-list" style={{ marginTop: 10 }}>
-                              {analysis.fileResults.map((fileResult) => (
+                              {fileResults.map((fileResult) => (
                                 <div key={`${prompt.id}-${fileResult.floorIndex}-${fileResult.fileName}`}>
                                   <CheckCircle2 size={16} />
                                   <span>
