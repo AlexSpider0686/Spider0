@@ -269,6 +269,7 @@ html {
   flex-direction: column;
   align-items: flex-start;
   text-align: left;
+  color: #eff6ff;
   width: 100%;
   min-height: 164px;
   padding: 18px;
@@ -303,14 +304,17 @@ html {
 }
 
 .app-shell .metric-card__value {
+  color: #f7fbff;
   font-size: 28px;
   font-weight: 800;
+  text-shadow: 0 1px 10px rgba(2, 10, 18, 0.24);
 }
 
 .app-shell .metric-card__label {
   margin-top: 8px;
-  color: var(--muted);
+  color: #d7e8fb;
   font-size: 14px;
+  font-weight: 700;
 }
 
 .app-shell .metric-card__teaser {
