@@ -509,6 +509,9 @@ export default function SystemsStep({
                         <span className="pricing-source-chip muted">
                           <strong>PPTX:</strong> таблица будет включена в выгрузку
                         </span>
+                        <button className="ghost-btn" type="button" onClick={() => clearVendorComparison(system.id)}>
+                          ������ ��������� ���
+                        </button>
                       </div>
 
                       <div className="table-wrap compact comparison-table-wrap">
@@ -517,13 +520,9 @@ export default function SystemsStep({
                             <tr>
                               <th>Роль</th>
                               <th>Вендор</th>
-                              <th>Ед. цена</th>
                               <th>Оборудование</th>
                               <th>Материалы</th>
-                              <th>СМР+ПНР</th>
-                              <th>Проектир.</th>
                               <th>Итог</th>
-                              <th>Источники</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -531,16 +530,10 @@ export default function SystemsStep({
                               <tr key={`${system.id}-${row.vendor}`}>
                                 <td>{row.role}</td>
                                 <td>{row.vendor}</td>
-                                <td>{rub(row.unitPrice)}</td>
                                 <td>{rub(row.equipmentCost)}</td>
                                 <td>{rub(row.materialCost)}</td>
-                                <td>{rub(row.workTotal)}</td>
-                                <td>{rub(row.designTotal)}</td>
                                 <td>
                                   <strong>{rub(row.total)}</strong>
-                                </td>
-                                <td>
-                                  {row.pricedSourceCount}/{row.checkedSourceCount}
                                 </td>
                               </tr>
                             ))}
@@ -1196,3 +1189,4 @@ export default function SystemsStep({
     </section>
   );
 }
+
