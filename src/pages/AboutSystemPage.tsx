@@ -163,6 +163,9 @@ export function AboutSystemPage() {
       <section className="about-system-hero">
         <div className="about-system-hero__backdrop" />
         <div className="container about-system-hero__container">
+          <Link className="about-system-page__back" to="/">
+            ← На главную
+          </Link>
           <div className="about-system-hero__eyebrow">Project.Core™ / О системе</div>
           <h1>Полное описание платформы Project.Core™</h1>
           <p className="about-system-hero__lead">
