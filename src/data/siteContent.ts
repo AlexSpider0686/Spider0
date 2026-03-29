@@ -13,12 +13,73 @@ export const siteConfig = {
   videoPoster: "/assets/manhattan-poster.svg",
 };
 
-export const metrics = [
-  { label: "Систем в одном расчете", value: "6" },
-  { label: "Среднее время оценки", value: "5-10 мин" },
-  { label: "Региональные коэффициенты", value: "85+ субъектов" },
-  { label: "Проверяет рынок и снимает риск недооценки", value: "Risk Guard AI" },
-  { label: "Формат доступа", value: "Браузер / планшет / смартфон" },
+export type MetricSpotlight = {
+  id: string;
+  label: string;
+  value: string;
+  teaser: string;
+  modalBadge: string;
+  modalTitle: string;
+  modalDescription: string;
+  modalImage: string;
+};
+
+export const metrics: MetricSpotlight[] = [
+  {
+    id: "systems",
+    label: "Систем в одном расчете",
+    value: "6",
+    teaser: "Единая сметная картина по ключевым подсистемам безопасности.",
+    modalBadge: "Unified Estimate",
+    modalTitle: "Шесть систем в одном расчете",
+    modalDescription:
+      "Платформа сводит АПС, СОУЭ, СОТС, СОТ, СКУД и ССОИ в один расчетный сценарий, чтобы пресейл-команда сразу видела общий бюджет, состав работ и влияние каждой подсистемы на итог.",
+    modalImage: "/assets/metrics/systems-overview.jpg",
+  },
+  {
+    id: "speed",
+    label: "Среднее время оценки",
+    value: "5-10 мин",
+    teaser: "Быстрый пресейл без недельной подготовки и Excel-цепочек.",
+    modalBadge: "Rapid Presale",
+    modalTitle: "Предварительная оценка за 5-10 минут",
+    modalDescription:
+      "Система собирает исходные параметры объекта, автоматически применяет инженерную логику и за минуты формирует бюджетную картину, которая обычно требует долгой ручной сборки по нескольким источникам.",
+    modalImage: "/assets/metrics/time-window.jpg",
+  },
+  {
+    id: "regions",
+    label: "Региональные коэффициенты",
+    value: "85+ субъектов",
+    teaser: "Региональный контур учитывается сразу в базовой модели расчета.",
+    modalBadge: "Regional Layer",
+    modalTitle: "85+ субъектов с региональной поправкой",
+    modalDescription:
+      "В платформу встроен региональный слой по субъектам РФ, поэтому трудозатраты и защитные коэффициенты не считаются в отрыве от реальной географии проекта и не дают искусственно занизить бюджет.",
+    modalImage: "/assets/metrics/regional-map.jpg",
+  },
+  {
+    id: "risk-guard",
+    label: "Проверяет рынок и снимает риск недооценки",
+    value: "Risk Guard AI",
+    teaser: "AI-контур перепроверяет рынок и страхует трудовую часть бюджета.",
+    modalBadge: "Risk Guard",
+    modalTitle: "Risk Guard AI защищает бюджет от недооценки",
+    modalDescription:
+      "Алгоритм сверяет найденные цены, оценивает надежность совпадений, включает анти-недооценочный контур и помогает не провалить коммерческое предложение из-за заниженных трудозатрат или спорных рыночных позиций.",
+    modalImage: "/assets/metrics/risk-guard.jpg",
+  },
+  {
+    id: "access",
+    label: "Формат доступа",
+    value: "Браузер / планшет / смартфон",
+    teaser: "Один интерфейс под рабочее место, выезд и быстрый просмотр на ходу.",
+    modalBadge: "Any Device",
+    modalTitle: "Доступ с браузера, планшета и смартфона",
+    modalDescription:
+      "Интерфейс рассчитан на работу в офисе, в дороге и на объекте: руководитель, инженер и пресейл-специалист могут возвращаться к одному расчету с разных устройств без потери логики и структуры данных.",
+    modalImage: "/assets/metrics/multi-device.jpg",
+  },
 ];
 
 export const comparisonCards = [

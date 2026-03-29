@@ -264,6 +264,13 @@ html {
 }
 
 .app-shell .metric-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  width: 100%;
+  min-height: 164px;
   padding: 18px;
   border-radius: 24px;
   background: rgba(8, 18, 30, 0.7);
@@ -304,6 +311,47 @@ html {
   margin-top: 8px;
   color: var(--muted);
   font-size: 14px;
+}
+
+.app-shell .metric-card__teaser {
+  margin-top: 14px;
+  color: #d8e8f8;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.app-shell .metric-card__hint {
+  margin-top: auto;
+  padding-top: 14px;
+  color: #7cceff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.app-shell .metric-card--interactive {
+  cursor: pointer;
+}
+
+.app-shell .metric-card--interactive::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(89, 208, 255, 0.08), transparent 38%);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+
+.app-shell .metric-card--interactive:hover::after,
+.app-shell .metric-card--interactive:focus-visible::after {
+  opacity: 1;
+}
+
+.app-shell .metric-card--interactive:focus-visible {
+  outline: 2px solid rgba(126, 218, 255, 0.74);
+  outline-offset: 2px;
 }
 
 .app-shell .hero__legal-note {
@@ -1106,6 +1154,110 @@ html {
   font-size: 15px;
 }
 
+.app-shell .metric-spotlight {
+  position: fixed;
+  inset: 0;
+  z-index: 57;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.app-shell .metric-spotlight__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(2, 9, 16, 0.84);
+  backdrop-filter: blur(12px);
+}
+
+.app-shell .metric-spotlight__window {
+  position: relative;
+  z-index: 1;
+  width: min(920px, calc(100vw - 48px));
+  overflow: hidden;
+  border-radius: 32px;
+  background: linear-gradient(180deg, rgba(6, 18, 30, 0.97), rgba(7, 22, 37, 0.99));
+  border: 1px solid rgba(132, 212, 255, 0.22);
+  box-shadow: 0 28px 84px rgba(0, 0, 0, 0.46);
+}
+
+.app-shell .metric-spotlight__close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 3;
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(4, 15, 25, 0.72);
+  color: #f4fbff;
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.app-shell .metric-spotlight__hero {
+  position: relative;
+  min-height: 420px;
+  padding: 34px;
+  background-position: center;
+  background-size: cover;
+}
+
+.app-shell .metric-spotlight__hero-overlay {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(3, 14, 23, 0.18) 0%, rgba(5, 17, 28, 0.58) 45%, rgba(5, 17, 28, 0.96) 100%),
+    radial-gradient(circle at 14% 18%, rgba(89, 208, 255, 0.22), transparent 28%);
+}
+
+.app-shell .metric-spotlight__hero-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 352px;
+  max-width: 620px;
+}
+
+.app-shell .metric-spotlight__eyebrow {
+  display: inline-flex;
+  width: fit-content;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #d7efff;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.app-shell .metric-spotlight__value {
+  margin-top: 16px;
+  font-size: clamp(34px, 5vw, 60px);
+  font-weight: 800;
+  line-height: 0.95;
+  color: #f7fbff;
+}
+
+.app-shell .metric-spotlight__hero-content h3 {
+  margin: 14px 0 12px;
+  font-size: clamp(30px, 4vw, 48px);
+  line-height: 1;
+  color: #f7fbff;
+}
+
+.app-shell .metric-spotlight__hero-content p {
+  margin: 0;
+  color: #deebf7;
+  font-size: 17px;
+  line-height: 1.7;
+}
+
 .app-shell .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -1595,6 +1747,27 @@ html {
     max-height: calc(100vh - 300px);
     grid-template-columns: 1fr;
     padding: 18px 18px 22px;
+  }
+
+  .app-shell .metric-spotlight {
+    padding: 12px;
+  }
+
+  .app-shell .metric-spotlight__window {
+    width: calc(100vw - 24px);
+  }
+
+  .app-shell .metric-spotlight__hero {
+    min-height: 360px;
+    padding: 22px 20px 24px;
+  }
+
+  .app-shell .metric-spotlight__hero-content {
+    min-height: 314px;
+  }
+
+  .app-shell .metric-card {
+    min-height: 184px;
   }
 
   .app-shell .hero h1 {

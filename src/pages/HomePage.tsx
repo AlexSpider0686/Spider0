@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { AuthModal } from "../components/AuthModal";
 import { DevelopmentPlanModal } from "../components/DevelopmentPlanModal";
 import { HeroVideo } from "../components/HeroVideo";
+import { MetricSpotlightModal } from "../components/MetricSpotlightModal";
 import { PromoReelPlayer } from "../components/PromoReelPlayer";
 import { SectionHeader } from "../components/SectionHeader";
 import { comparisonCards, growthPoints, metrics, siteConfig } from "../data/siteContent";
@@ -182,6 +183,7 @@ export function HomePage() {
   const [authOpen, setAuthOpen] = useState(false);
   const [promoOpen, setPromoOpen] = useState(false);
   const [developmentPlanOpen, setDevelopmentPlanOpen] = useState(false);
+  const [activeMetric, setActiveMetric] = useState<(typeof metrics)[number] | null>(null);
 
   return (
     <main>
@@ -216,10 +218,12 @@ export function HomePage() {
           </div>
           <div className="hero__grid">
             {metrics.map((metric) => (
-              <div className="metric-card" key={metric.label}>
+              <button className="metric-card metric-card--interactive" type="button" key={metric.id} onClick={() => setActiveMetric(metric)}>
                 <div className="metric-card__value">{metric.value}</div>
                 <div className="metric-card__label">{metric.label}</div>
-              </div>
+                <div className="metric-card__teaser">{metric.teaser}</div>
+                <div className="metric-card__hint">Нажмите, чтобы раскрыть</div>
+              </button>
             ))}
           </div>
           <div className="hero__legal-note">
@@ -236,6 +240,7 @@ export function HomePage() {
 
       <PromoReelPlayer open={promoOpen} onClose={() => setPromoOpen(false)} />
       <DevelopmentPlanModal open={developmentPlanOpen} onClose={() => setDevelopmentPlanOpen(false)} />
+      <MetricSpotlightModal metric={activeMetric} onClose={() => setActiveMetric(null)} />
 
       <section className="section section--dark" id="comparison">
         <div className="container">
