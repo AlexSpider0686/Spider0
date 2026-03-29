@@ -8,6 +8,13 @@ import { hasProjectForSystem } from "../lib/designSurveyEngine";
 import { getZonePercentSum, normalizeZoneAreas } from "../lib/zoneEngine";
 import { num, toNumber } from "../lib/estimate";
 
+const ASSET_BASE = import.meta.env.BASE_URL || "/";
+
+function assetUrl(path) {
+  const normalizedBase = ASSET_BASE.endsWith("/") ? ASSET_BASE : `${ASSET_BASE}/`;
+  return `${normalizedBase}${String(path).replace(/^\/+/, "")}`;
+}
+
 function makeFallbackImage(topColor, bottomColor, accentColor) {
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid slice">
@@ -32,12 +39,12 @@ function makeFallbackImage(topColor, bottomColor, accentColor) {
 }
 
 const OBJECT_TYPE_IMAGES = {
-  production: "/assets/object-types/production.jpg",
-  warehouse: "/assets/object-types/warehouse.jpg",
-  public: "/assets/object-types/public.jpg",
-  residential: "/assets/object-types/residential.jpg",
-  transport: "/assets/object-types/transport.jpg",
-  energy: "/assets/object-types/energy.jpg",
+  production: assetUrl("assets/object-types/production.jpg"),
+  warehouse: assetUrl("assets/object-types/warehouse.jpg"),
+  public: assetUrl("assets/object-types/public.jpg"),
+  residential: assetUrl("assets/object-types/residential.jpg"),
+  transport: assetUrl("assets/object-types/transport.jpg"),
+  energy: assetUrl("assets/object-types/energy.jpg"),
 };
 
 const OBJECT_TYPE_IMAGE_FALLBACKS = {

@@ -13,7 +13,17 @@ import AuthGate from "./AuthGate";
 import { APP_VERSION_LABEL, BUILD_NUMBER } from "../config/estimateConfig";
 import { isStoredAuthTokenValid } from "../lib/authApi";
 
-const BACKGROUND_VIDEO_URLS = ["/assets/background/city-loop.mp4"];
+const ASSET_BASE = import.meta.env.BASE_URL || "/";
+
+function assetUrl(path) {
+  const normalizedBase = ASSET_BASE.endsWith("/") ? ASSET_BASE : `${ASSET_BASE}/`;
+  return `${normalizedBase}${String(path).replace(/^\/+/, "")}`;
+}
+
+const BACKGROUND_VIDEO_URLS = [
+  assetUrl("assets/background/city-loop.mp4"),
+  assetUrl("assets/background/manhattan-loop-2min.mp4"),
+];
 
 export default function EstimatorApp() {
   const vm = useEstimate();
@@ -99,7 +109,11 @@ export default function EstimatorApp() {
         <section className="stepper-card">
           <div className="stepper">
             {stepRows.map((row, rowIndex) => (
-              <div className="stepper-row" key={`step-row-${rowIndex}`}>
+              <div
+                className="stepper-row"
+                key={`step-row-${rowIndex}`}
+                style={{ gridTemplateColumns: `repeat(${row.length}, minmax(0, 1fr))` }}
+              >
                 {row.map((item) => {
                   const index = steps.findIndex((step) => step.key === item.key);
                   const Icon = item.icon;

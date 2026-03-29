@@ -723,17 +723,19 @@ body.ai-survey-open .object-photo-card {
 }
 
 .stepper-card {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  align-items: center;
-  flex-wrap: wrap;
+  display: block;
 }
 
 .stepper {
-  display: flex;
+  display: grid;
   gap: 8px;
-  flex-wrap: wrap;
+  width: 100%;
+}
+
+.stepper-row {
+  display: grid;
+  gap: 8px;
+  width: 100%;
 }
 
 .step-chip {
@@ -741,15 +743,19 @@ body.ai-survey-open .object-photo-card {
   background: linear-gradient(180deg, #ffffff, #eef6ff);
   color: var(--text);
   border-radius: 10px;
-  padding: 6px 8px;
+  padding: 8px 10px;
+  width: 100%;
+  min-height: 38px;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   cursor: pointer;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), var(--shadow-soft);
   transition: 0.2s ease;
   font-size: 11px;
   font-weight: 600;
+  text-align: center;
 }
 
 .step-chip:hover {
