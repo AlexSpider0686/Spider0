@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Building2, Layers, Wallet, Download, PieChart, FileText, Ruler, ShieldAlert } from "lucide-react";
+import { Link } from "react-router-dom";
 import useEstimate from "../hooks/useEstimate";
 import ObjectStep from "./ObjectStep";
 import SystemsStep from "./SystemsStep";
@@ -107,6 +108,12 @@ export default function EstimatorApp() {
         </header>
 
         <section className="stepper-card">
+          <div className="stepper-card__top">
+            <Link className="stepper-home-link" to="/">
+              ← На главную
+            </Link>
+            <div className="stepper-card__title">Оглавление раздела</div>
+          </div>
           <div className="stepper">
             {stepRows.map((row, rowIndex) => (
               <div
