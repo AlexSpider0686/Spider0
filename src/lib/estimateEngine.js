@@ -8,7 +8,8 @@ export function calculateEstimateEngine(
   objectData,
   vendorPriceSnapshots = {},
   projectSpecSnapshots = {},
-  surveyAnswers = {}
+  surveyAnswers = {},
+  photoAnalyses = {}
 ) {
   const systemsDetailed = systems.map((system) =>
     calculateSystemWithBreakdown(
@@ -19,7 +20,8 @@ export function calculateEstimateEngine(
       vendorPriceSnapshots?.[system.id] || null,
       projectSpecSnapshots?.[system.id] || null,
       systems,
-      surveyAnswers
+      surveyAnswers,
+      photoAnalyses
     )
   );
   const totals = calculateTotals(systemsDetailed);

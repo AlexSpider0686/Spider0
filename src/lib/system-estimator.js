@@ -58,12 +58,18 @@ function buildZoneDemand(zoneContexts, systemType, densityMap) {
 function estimateAps(context) {
   const { driver, zoneDemand } = context;
   const detectors = safeCeil(zoneDemand.total, 1);
-  const loops = safeCeil(detectors / Math.max(driver.detectorsPerLoop, 1), 1);
+  const loops = Math.max(
+    safeCeil(detectors / Math.max(driver.detectorsPerLoop, 1), 1),
+    safeCeil(context.effectiveZoneCount / 16, 1)
+  );
   const panels = safeCeil(loops / Math.max(driver.loopsPerPanel, 1), 1);
-  const notification = safeCeil(detectors * toNumber(driver.notificationPerPrimary, 0.15), 1);
+  const notification = Math.max(
+    safeCeil(detectors * toNumber(driver.notificationPerPrimary, 0.15), 1),
+    safeCeil(context.effectiveZoneCount * 0.6, 1)
+  );
   const powerUnits = safeCeil(detectors * toNumber(driver.powerPerPrimary, 0.005), 1);
   const integrationPoints = safeCeil(
-    context.mandatoryZoneCount * toNumber(driver.integrationPointsPerZone, 0.2),
+    context.effectiveZoneCount * toNumber(driver.integrationPointsPerZone, 0.2),
     1
   );
 
@@ -101,7 +107,7 @@ function estimateSoue(context) {
   const peopleFactor = 1 + zoneContexts.reduce((sum, zone) => sum + zone.occupancyDensity, 0) / Math.max(zoneContexts.length, 1) * 1.8;
   const speakers = safeCeil(zoneDemand.total * peopleFactor, 1);
   const amplifiers = safeCeil(speakers * toNumber(driver.amplifiersPerPrimary, 1 / 36), 1);
-  const alarmZones = Math.max(context.mandatoryZoneCount, 1);
+  const alarmZones = Math.max(context.effectiveZoneCount, 1);
   const controllers = safeCeil(amplifiers * toNumber(driver.controllersPerAmplifier, 0.25) + alarmZones / 6, 1);
   const integrationPoints = safeCeil(alarmZones * toNumber(driver.integrationPointsPerZone, 0.2), 1);
 
@@ -136,10 +142,13 @@ function estimateSoue(context) {
 function estimateSots(context) {
   const { driver, zoneDemand } = context;
   const sensors = safeCeil(zoneDemand.total, 1);
-  const boundaries = safeCeil(sensors * toNumber(driver.boundariesPerPrimary, 1 / 20), 1);
+  const boundaries = Math.max(
+    safeCeil(sensors * toNumber(driver.boundariesPerPrimary, 1 / 20), 1),
+    safeCeil(context.effectiveZoneCount, 1)
+  );
   const controllers = safeCeil(boundaries * toNumber(driver.controllerPerBoundary, 0.1), 1);
   const cabinets = safeCeil(controllers * toNumber(driver.cabinetsPerController, 0.25), 1);
-  const integrationPoints = safeCeil(context.mandatoryZoneCount * toNumber(driver.integrationPointsPerZone, 0.16), 1);
+  const integrationPoints = safeCeil(context.effectiveZoneCount * toNumber(driver.integrationPointsPerZone, 0.16), 1);
 
   const designHours =
     sensors * driver.designHours.primary +
@@ -339,10 +348,12 @@ export function estimateSystemQuantities({
   zoneContexts,
   objectClassification,
   activeSystemTypes = [],
+  recognizedZoneCount = 0,
 }) {
   const driver = SYSTEM_DRIVER_CONFIG[systemType] || SYSTEM_DRIVER_CONFIG.sot;
   const zoneDemand = buildZoneDemand(zoneContexts, systemType, driver.densityPer1000 || {});
   const mandatoryZoneCount = zoneContexts.filter((zone) => zone.systemRule?.mandatory).length;
+  const effectiveZoneCount = Math.max(mandatoryZoneCount, toNumber(recognizedZoneCount, 0), 0);
 
   const estimator = SYSTEM_ESTIMATORS[systemType] || SYSTEM_ESTIMATORS.sot;
   const raw = estimator({
@@ -351,6 +362,8 @@ export function estimateSystemQuantities({
     zoneDemand,
     objectClassification,
     mandatoryZoneCount,
+    effectiveZoneCount,
+    recognizedZoneCount: Math.max(toNumber(recognizedZoneCount, 0), 0),
     activeSystemTypes,
   });
 
@@ -370,6 +383,9 @@ export function estimateSystemQuantities({
     activeElements: Math.max(toNumber(raw.activeElements, raw.primaryUnits), 0),
     integrationPoints: Math.max(toNumber(raw.integrationPoints, 0), 0),
     designHoursBase: Math.max(toNumber(raw.designHoursBase, 0), 0),
+    mandatoryZoneCount,
+    recognizedZoneCount: Math.max(toNumber(recognizedZoneCount, 0), 0),
+    effectiveZoneCount,
     zonePrimaryUnits: zoneDemand.zonePrimaryUnits,
     zoneDrivers: zoneDemand.drivers,
     routeComplexityAverage: clamp(routeComplexityAverage, 0.7, 2.8),

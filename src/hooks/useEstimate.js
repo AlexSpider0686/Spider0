@@ -48,6 +48,14 @@ function hasKeys(value) {
   return Boolean(value && Object.keys(value).length);
 }
 
+function buildFallbackPriceSnapshot() {
+  return {
+    fetchedAt: new Date().toISOString(),
+    entries: [],
+    warning: "price_collection_unavailable_fallback_mode",
+  };
+}
+
 function deriveSurveyAreaRefinement(photoAnalyses = {}, fallbackTotalArea = 0) {
   const byZone = new Map();
 
@@ -172,8 +180,27 @@ export default function useEstimate() {
   const protectedAreaMeta = useMemo(() => calculateProtectedArea(effectiveObjectData), [effectiveObjectData]);
   const recalculatedArea = protectedAreaMeta.protectedAreaM2;
   const { systemsDetailed: systemResults, totals } = useMemo(
-    () => calculateEstimateEngine(systems, zones, budget, effectiveObjectData, vendorPriceSnapshots, apsProjectSnapshots, technicalSolution.appliedAnswers),
-    [systems, zones, budget, effectiveObjectData, vendorPriceSnapshots, apsProjectSnapshots, technicalSolution.appliedAnswers]
+    () =>
+      calculateEstimateEngine(
+        systems,
+        zones,
+        budget,
+        effectiveObjectData,
+        vendorPriceSnapshots,
+        apsProjectSnapshots,
+        technicalSolution.appliedAnswers,
+        technicalSolution.appliedPhotoAnalyses
+      ),
+    [
+      systems,
+      zones,
+      budget,
+      effectiveObjectData,
+      vendorPriceSnapshots,
+      apsProjectSnapshots,
+      technicalSolution.appliedAnswers,
+      technicalSolution.appliedPhotoAnalyses,
+    ]
   );
   const zoneDistribution = useMemo(() => validateZoneDistribution(zones, recalculatedArea), [zones, recalculatedArea]);
   const aiSurveyPlan = useMemo(
@@ -396,6 +423,21 @@ export default function useEstimate() {
 
   const updateBudget = (key, value) => setBudget((prev) => ({ ...prev, [key]: value }));
 
+  const loadApsProjectPrices = async (requests) => {
+    try {
+      const priceSnapshot = await fetchPricesByRequests(requests);
+      return {
+        priceSnapshot,
+        fallbackNotice: "",
+      };
+    } catch (error) {
+      return {
+        priceSnapshot: buildFallbackPriceSnapshot(),
+        fallbackNotice: error?.message || "Сервис сбора цен временно недоступен, использованы fallback-цены.",
+      };
+    }
+  };
+
   const refreshVendorPricing = async (system) => {
     const apsSnapshot = apsProjectSnapshots?.[system?.id];
     setVendorComparisonsBySystem((prev) => removeById(prev, system?.id));
@@ -425,7 +467,7 @@ export default function useEstimate() {
         };
 
         const requests = buildApsProjectPriceRequests(originalItems, system.vendor);
-        const priceSnapshot = await fetchPricesByRequests(requests);
+        const { priceSnapshot, fallbackNotice } = await loadApsProjectPrices(requests);
         let refreshedSnapshot = buildApsProjectSnapshot({
           fileName: apsSnapshot.fileName || "aps-project.pdf",
           parsedProject,
@@ -455,8 +497,10 @@ export default function useEstimate() {
         setApsImportStatuses((prev) => ({
           ...prev,
           [system.id]: {
-            state: "success",
-            message: `Обновлено: позиций с ценой поставщика ${refreshedSnapshot.sourceStats.itemsWithSupplierPrice}, без цены ${refreshedSnapshot.sourceStats.itemsWithoutPrice}.`,
+            state: fallbackNotice ? "error" : "success",
+            message: fallbackNotice
+              ? `PDF обновлен, но сбор цен завершился в fallback-режиме. ${fallbackNotice}`
+              : `Обновлено: позиций с ценой поставщика ${refreshedSnapshot.sourceStats.itemsWithSupplierPrice}, без цены ${refreshedSnapshot.sourceStats.itemsWithoutPrice}.`,
           },
         }));
       } catch (error) {
@@ -509,7 +553,7 @@ export default function useEstimate() {
 
       const parsedProject = await parseApsProjectPdf(file);
       const requests = buildApsProjectPriceRequests(parsedProject.items, system.vendor);
-      const priceSnapshot = await fetchPricesByRequests(requests);
+      const { priceSnapshot, fallbackNotice } = await loadApsProjectPrices(requests);
       const snapshot = buildApsProjectSnapshot({
         fileName: file.name,
         parsedProject,
@@ -534,8 +578,10 @@ export default function useEstimate() {
       setApsImportStatuses((prev) => ({
         ...prev,
         [systemId]: {
-          state: "success",
-          message: `Позиции в спецификации: ${snapshot.items.length}. С ценой от поставщиков: ${snapshot.sourceStats.itemsWithSupplierPrice}. Без цены: ${snapshot.sourceStats.itemsWithoutPrice}.`,
+          state: fallbackNotice ? "error" : "success",
+          message: fallbackNotice
+            ? `PDF распознан, но сбор цен завершился в fallback-режиме. ${fallbackNotice}`
+            : `Позиции в спецификации: ${snapshot.items.length}. С ценой от поставщиков: ${snapshot.sourceStats.itemsWithSupplierPrice}. Без цены: ${snapshot.sourceStats.itemsWithoutPrice}.`,
         },
       }));
     } catch (error) {
@@ -840,7 +886,8 @@ export default function useEstimate() {
           effectiveObjectData,
           comparisonSnapshots,
           comparisonProjectSnapshots,
-          technicalSolution.appliedAnswers
+          technicalSolution.appliedAnswers,
+          technicalSolution.appliedPhotoAnalyses
         );
 
         const comparisonResult = systemsDetailed[systemIndex] || {};

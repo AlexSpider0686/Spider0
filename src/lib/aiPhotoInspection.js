@@ -372,67 +372,131 @@ function parseHeightFromTokens(tokens) {
 function estimateHeightByFeatures(meta, ceilingType) {
   const top = meta?.features?.topRegion;
   const middle = meta?.features?.middleRegion;
+  const wall = meta?.features?.wallRegion;
   const bottom = meta?.features?.bottomRegion;
-  if (!top || !middle || !bottom) return null;
+  const layout = meta?.features?.spatialLayout;
+  if (!top || !middle || !wall || !bottom || !layout) return null;
 
-  let height = 3.2;
-  let confidence = 0.42;
-
+  let height = 3.25;
+  let confidence = 0.46;
   switch (ceilingType) {
     case "Армстронг":
-      height = 3.0;
+      height = 3.1;
       confidence = 0.68;
       break;
     case "ГКЛ":
-      height = 3.1;
-      confidence = 0.63;
+      height = 2.95;
+      confidence = 0.64;
       break;
     case "Монолит":
-      height = 3.5;
-      confidence = 0.58;
+      height = 3.55;
+      confidence = 0.6;
       break;
     case "Грильято":
-      height = 3.9;
-      confidence = 0.72;
+      height = 4.0;
+      confidence = 0.74;
       break;
     case "Открытый":
-      height = 4.8;
-      confidence = 0.76;
+      height = 4.9;
+      confidence = 0.78;
       break;
     default:
-      height = 3.4;
-      confidence = 0.4;
+      height = 3.25;
+      confidence = 0.46;
       break;
   }
 
+  const brightnessGap = Math.max(Math.abs(top.brightness - wall.brightness), 0);
+  const topTexture = top.edgeDensity + top.horizontalEdgeDensity + top.verticalEdgeDensity;
+  const wallTexture = wall.edgeDensity + wall.verticalEdgeDensity;
+  const roomDepthScore =
+    Math.max(layout.perspectiveDepth || 0, 0) +
+    Math.max(layout.verticality || 0, 0) * 1.2 +
+    Math.max(layout.horizontality || 0, 0) * 0.45;
+  const openCeilingScore =
+    (ceilingType === "Открытый" ? 0.4 : 0) +
+    (ceilingType === "Грильято" ? 0.22 : 0) +
+    (top.brightness < 124 ? 0.18 : 0) +
+    (top.contrast > 34 ? 0.16 : 0) +
+    (topTexture > 0.26 ? 0.14 : 0);
+  const suspendedCeilingScore =
+    (ceilingType === "Армстронг" ? 0.24 : 0) +
+    (ceilingType === "ГКЛ" ? 0.18 : 0) +
+    (top.brightness > 162 ? 0.12 : 0) +
+    (top.saturation < 0.11 ? 0.08 : 0) +
+    (top.edgeDensity < 0.11 ? 0.08 : 0);
+
   if (meta.orientation === "portrait" && meta.height >= meta.width * 1.2) {
-    height += 0.4;
-    confidence += 0.08;
+    height += 0.26;
+    confidence += 0.06;
+  }
+
+  const visibleCeiling = layout.ceilingVisibleRatio;
+  if (visibleCeiling != null) {
+    if (visibleCeiling > 0.37) {
+      height += 0.85;
+      confidence += 0.08;
+    } else if (visibleCeiling > 0.29) {
+      height += 0.55;
+      confidence += 0.07;
+    } else if (visibleCeiling < 0.16) {
+      height -= 0.16;
+      confidence += 0.03;
+    }
+  }
+
+  if (roomDepthScore > 0.42) {
+    height += 0.55;
+    confidence += 0.07;
+  } else if (roomDepthScore > 0.28) {
+    height += 0.3;
+    confidence += 0.05;
+  }
+
+  if (brightnessGap > 24) {
+    height += 0.16;
+    confidence += 0.04;
+  } else if (brightnessGap < 8) {
+    confidence -= 0.06;
   }
 
   if (top.brightness < 122 && top.contrast > 34) {
-    height += 0.5;
+    height += 0.22;
     confidence += 0.05;
   }
 
   if (top.edgeDensity > 0.21 || middle.verticalEdgeDensity > 0.11) {
-    height += 0.3;
+    height += 0.18;
     confidence += 0.04;
   }
 
-  if (bottom.edgeDensity < 0.08 && top.brightness > 170 && top.edgeDensity < 0.09) {
-    height -= 0.2;
-    confidence += 0.02;
+  if (openCeilingScore > 0.48) {
+    height += 0.45;
+    confidence += 0.05;
+  } else if (suspendedCeilingScore > 0.34) {
+    height -= 0.12;
+    confidence += 0.03;
   }
 
-  if (ceilingType === "Смешанный") {
+  if (bottom.brightness > top.brightness + 34 && roomDepthScore > 0.3) {
+    height += 0.18;
+    confidence += 0.03;
+  }
+
+  if (wallTexture < 0.03 && visibleCeiling != null && visibleCeiling < 0.18) {
     confidence -= 0.08;
   }
 
-  const boundedHeight = Math.min(Math.max(height, 2.4), 9.5);
-  const boundedConfidence = Math.min(Math.max(confidence, 0), 0.9);
+  if ((layout.boundaryConfidence || 0) < 0.18) {
+    confidence -= 0.12;
+  } else if ((layout.boundaryConfidence || 0) > 0.32) {
+    confidence += 0.05;
+  }
 
-  if (boundedConfidence < 0.64) return null;
+  const boundedHeight = Math.min(Math.max(height, 2.45), ceilingType === "Открытый" ? 10.5 : 8.5);
+  const boundedConfidence = Math.min(Math.max(confidence, 0), 0.95);
+
+  if (boundedConfidence < 0.56) return null;
 
   return {
     value: Number(boundedHeight.toFixed(1)),

@@ -20,6 +20,31 @@ function sum(list, selector) {
   return (list || []).reduce((acc, item) => acc + selector(item), 0);
 }
 
+function collectRecognizedPlanZones(photoAnalyses = {}, systemType) {
+  const perZoneTotals = new Map();
+  let acceptedPlans = 0;
+  let expectedFloors = 0;
+
+  Object.values(photoAnalyses || {}).forEach((analysis, index) => {
+    const planRecognition = analysis?.planRecognition;
+    if (!planRecognition) return;
+
+    const systemPlan = (planRecognition.systems || []).find((item) => item.systemType === systemType);
+    if (!systemPlan) return;
+
+    const zoneKey = String(planRecognition.zoneId || analysis?.zoneId || index);
+    perZoneTotals.set(zoneKey, Math.max(perZoneTotals.get(zoneKey) || 0, toNumber(systemPlan.zoneCount, 0)));
+    acceptedPlans += toNumber(planRecognition.uploadedPlans, planRecognition.floorPlansAccepted || 0);
+    expectedFloors = Math.max(expectedFloors, toNumber(planRecognition.expectedFloorCount, 0));
+  });
+
+  return {
+    totalZones: Array.from(perZoneTotals.values()).reduce((sum, value) => sum + value, 0),
+    acceptedPlans,
+    expectedFloors,
+  };
+}
+
 function buildInvalidResult(system, objectData, errors = [], warnings = []) {
   const regionCoef = Math.max(toNumber(objectData?.regionCoef, 1), 0.5);
   return {
@@ -371,7 +396,8 @@ export function calculateSystemWithBreakdown(
   marketSnapshot = null,
   projectSnapshot = null,
   allSystems = [],
-  surveyAnswers = {}
+  surveyAnswers = {},
+  photoAnalyses = {}
 ) {
   const normalizedInput = normalizeEstimateInput({
     system,
@@ -391,12 +417,14 @@ export function calculateSystemWithBreakdown(
     zones: normalizedInput.zones,
     systemType: system.type,
   });
+  const recognizedPlanZones = collectRecognizedPlanZones(photoAnalyses, system.type);
 
   let quantities = estimateSystemQuantities({
     systemType: system.type,
     zoneContexts,
     objectClassification,
     activeSystemTypes: normalizedInput.activeSystemTypes,
+    recognizedZoneCount: recognizedPlanZones.totalZones,
   });
 
   let cableModel = estimateCableBySystem({
@@ -666,7 +694,11 @@ export function calculateSystemWithBreakdown(
         controllerUnits: quantities.controllerUnits,
         activeElements: quantities.activeElements,
         integrationPoints: quantities.integrationPoints,
+        mandatoryZoneCount: quantities.mandatoryZoneCount,
+        recognizedZoneCount: quantities.recognizedZoneCount,
+        effectiveZoneCount: quantities.effectiveZoneCount,
       },
+      recognizedPlanZones,
       designAdjustment,
     },
   };
