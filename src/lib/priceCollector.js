@@ -85,7 +85,7 @@ function buildSearchQueries(vendorName, item) {
     `${label}`.trim(),
     `${modelHint}`.trim(),
     `${vendor} ${modelHint}`.trim(),
-  ]).slice(0, 4);
+  ]).slice(0, 2);
 }
 
 function trimSlash(url) {
@@ -140,11 +140,11 @@ function buildManufacturerSearchTargets(source, item, searchQuery) {
 
 function buildSourceTargets(source, item, queries, manufacturerUrls) {
   const targets = [];
-  for (const manufacturerUrl of manufacturerUrls || []) {
+  for (const manufacturerUrl of (manufacturerUrls || []).slice(0, 5)) {
     if (manufacturerUrl) targets.push(manufacturerUrl);
   }
 
-  for (const query of dedupeStrings(queries).slice(0, 3)) {
+  for (const query of dedupeStrings(queries).slice(0, 2)) {
     targets.push(buildTinkoSearchUrl(query));
     targets.push(buildLuisSearchUrl(query));
     targets.push(buildGarantSearchUrl(query));
@@ -158,7 +158,7 @@ function buildSourceTargets(source, item, queries, manufacturerUrls) {
     targets.push(`${trimSlash(source.website)}${item.sourcePath}`);
   }
 
-  return dedupeSourceTargets(targets).slice(0, 14);
+  return dedupeSourceTargets(targets).slice(0, 10);
 }
 
 function extractSourceUrl(target) {
@@ -554,7 +554,11 @@ export async function fetchPricesByRequests(requests = [], options = {}) {
 
 export async function fetchVendorPrices(systemType, vendorName, options = {}) {
   const requests = buildPriceRequests(systemType, vendorName);
-  const snapshot = await fetchPricesByRequests(requests, options);
+  const snapshot = await fetchPricesByRequests(requests, {
+    ...options,
+    timeoutMs: Number(options?.timeoutMs) || 90000,
+    batchSize: Number(options?.batchSize) || Math.min(requests.length || 1, 3),
+  });
   return {
     ...snapshot,
     systemType,
