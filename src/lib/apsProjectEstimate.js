@@ -430,20 +430,22 @@ function buildSourceUrls(source, queries, item) {
   const base = trimSlash(source?.website || "");
   const urlTargets = [];
   const apiRequests = [];
-  const queryPool = dedupe(queries).slice(0, 4);
+  const queryPool = dedupe(queries).slice(0, 3);
 
-  for (const query of queryPool) {
+  for (const [index, query] of queryPool.entries()) {
     urlTargets.push(buildTinkoSearchUrl(query));
     urlTargets.push(buildLuisSearchUrl(query));
-    urlTargets.push(buildGarantSearchUrl(query));
-    urlTargets.push(buildGanimedSearchUrl(query));
-    if (query && query.length >= 3) {
+    if (index === 0) {
+      urlTargets.push(buildGarantSearchUrl(query));
+      urlTargets.push(buildGanimedSearchUrl(query));
+    }
+    if (query && query.length >= 3 && index < 2) {
       apiRequests.push(buildLuisApiRequest(query));
     }
   }
 
   if (base) {
-    for (const query of queryPool.slice(0, 2)) {
+    for (const query of queryPool.slice(0, 1)) {
       if (source?.searchPathTemplate) {
         urlTargets.push(`${base}${source.searchPathTemplate.replace("{query}", encodeURIComponent(query))}`);
       } else {
@@ -461,7 +463,7 @@ function buildSourceUrls(source, queries, item) {
     }
   }
 
-  return dedupeSourceRequests([...apiRequests, ...urlTargets]).slice(0, 16);
+  return dedupeSourceRequests([...apiRequests, ...urlTargets]).slice(0, 10);
 }
 
 function buildRequestKey(index, item) {

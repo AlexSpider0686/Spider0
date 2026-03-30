@@ -449,14 +449,18 @@ export default function useEstimate() {
   const updateBudget = (key, value) => setBudget((prev) => ({ ...prev, [key]: value }));
 
   const loadApsProjectPrices = async (requests, options = {}) => {
+    const normalizedOptions = {
+      batchSize: options?.batchSize || (requests.length > 12 ? 4 : requests.length > 6 ? 5 : undefined),
+      ...options,
+    };
     try {
-      const priceSnapshot = await fetchPricesByRequests(requests, options);
+      const priceSnapshot = await fetchPricesByRequests(requests, normalizedOptions);
       return {
         priceSnapshot,
         fallbackNotice: "",
       };
     } catch (error) {
-      if (options?.signal?.aborted || isAbortLikeError(error)) {
+      if (normalizedOptions?.signal?.aborted || isAbortLikeError(error)) {
         throw error;
       }
       return {
@@ -632,7 +636,28 @@ export default function useEstimate() {
         }),
       }));
       const requests = buildApsProjectPriceRequests(parsedProject.items, system.vendor);
-      const { priceSnapshot, fallbackNotice } = await loadApsProjectPrices(requests, { signal: taskSignal });
+      const { priceSnapshot, fallbackNotice } = await loadApsProjectPrices(requests, {
+        signal: taskSignal,
+        onProgress: (progress) => {
+          if (isApsImportTaskCancelled(systemId, taskToken)) return;
+          setApsImportStatuses((prev) => ({
+            ...prev,
+            [systemId]: buildApsImportStatus(
+              "loading",
+              `PDF распознан. Идет сбор цен по позициям... Батч ${progress.completedBatches}/${progress.totalBatches}, позиций ${progress.completedRequests}/${progress.totalRequests}.`,
+              {
+                stage: "pricing",
+                parsedItems: parsedProject.items?.length || 0,
+                completedBatches: progress.completedBatches,
+                totalBatches: progress.totalBatches,
+                completedRequests: progress.completedRequests,
+                totalRequests: progress.totalRequests,
+                startedAt: prev?.[systemId]?.startedAt || new Date().toISOString(),
+              }
+            ),
+          }));
+        },
+      });
       if (isApsImportTaskCancelled(systemId, taskToken)) return;
       const snapshot = buildApsProjectSnapshot({
         fileName: file.name,

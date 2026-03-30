@@ -181,6 +181,21 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+function chunkBySize(items = [], size = 1) {
+  const normalizedSize = Math.max(Number(size) || 1, 1);
+  const chunks = [];
+  for (let index = 0; index < items.length; index += normalizedSize) {
+    chunks.push(items.slice(index, index + normalizedSize));
+  }
+  return chunks;
+}
+
+function buildPriceApiTimeoutMs(requestCount = 0) {
+  const base = 25000;
+  const requestPenalty = Math.max(requestCount - 4, 0) * 3500;
+  return clamp(base + requestPenalty, 25000, 120000);
+}
+
 export function summarizePriceSnapshot(snapshot) {
   const entries = Array.isArray(snapshot?.entries) ? snapshot.entries : [];
   const checkedHosts = [...new Set(entries.flatMap((item) => item.checkedSourceHosts || []).filter(Boolean))];
@@ -306,6 +321,8 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 25000) {
 async function requestPriceApi(payload, options = {}) {
   const endpoints = buildApiEndpoints();
   const errors = [];
+  const requestCount = Array.isArray(payload?.requests) ? payload.requests.length : 0;
+  const timeoutMs = Number(options?.timeoutMs) || buildPriceApiTimeoutMs(requestCount);
 
   for (const endpoint of endpoints) {
     try {
@@ -314,7 +331,7 @@ async function requestPriceApi(payload, options = {}) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
         signal: options.signal,
-      });
+      }, timeoutMs);
 
       if (response.ok) {
         return await response.json();
@@ -388,7 +405,41 @@ function extractModelToken(request) {
 }
 
 export async function fetchPricesByRequests(requests = [], options = {}) {
-  const payload = await requestPriceApi({ requests }, options);
+  const totalRequests = Array.isArray(requests) ? requests.length : 0;
+  const batchSize =
+    Number(options?.batchSize) > 0
+      ? Number(options.batchSize)
+      : totalRequests > 12
+        ? 4
+        : totalRequests > 6
+          ? 5
+          : totalRequests || 1;
+  const batches = chunkBySize(requests, batchSize);
+  const resultRows = [];
+  let fetchedAt = new Date().toISOString();
+
+  for (let index = 0; index < batches.length; index += 1) {
+    const batch = batches[index];
+    const payload = await requestPriceApi(
+      { requests: batch },
+      {
+        ...options,
+        timeoutMs: Number(options?.timeoutMs) || buildPriceApiTimeoutMs(batch.length),
+      }
+    );
+    fetchedAt = payload?.fetchedAt || fetchedAt;
+    resultRows.push(...(payload?.results || []));
+    if (typeof options?.onProgress === "function") {
+      options.onProgress({
+        completedBatches: index + 1,
+        totalBatches: batches.length,
+        completedRequests: Math.min((index + 1) * batchSize, totalRequests),
+        totalRequests,
+      });
+    }
+  }
+
+  const payload = { fetchedAt, results: resultRows };
   const resultsByKey = new Map((payload.results || []).map((entry) => [entry.key, entry]));
 
   const sanitizePrice = (request, result) => {
