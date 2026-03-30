@@ -285,6 +285,20 @@ function readResponseJsonWithTimeout(response, timeoutMs = 12000) {
   return readResponseWithTimeout(response, () => response.json(), timeoutMs);
 }
 
+async function withOperationTimeout(task, timeoutMs = 25000, label = "Operation") {
+  let timer = null;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(task),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} timeout after ${timeoutMs}ms`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function absoluteTinkoUrl(pathOrUrl) {
   return pathOrUrl.startsWith("http") ? pathOrUrl : `https://www.tinko.ru${pathOrUrl}`;
 }
@@ -1109,7 +1123,15 @@ export async function resolveVendorPrices(requests = []) {
       }
 
       const modelToken = buildModelTokenFromEntry(entry);
-      const settled = await Promise.allSettled(targets.map((target) => fetchPriceForTarget(target, fallbackPrice)));
+      const settled = await Promise.allSettled(
+        targets.map((target) =>
+          withOperationTimeout(
+            () => fetchPriceForTarget(target, fallbackPrice),
+            25000,
+            `Source ${typeof target === "string" ? target : target?.url || "unknown"}`
+          )
+        )
+      );
       const candidateRows = [];
 
       settled.forEach((result, index) => {
