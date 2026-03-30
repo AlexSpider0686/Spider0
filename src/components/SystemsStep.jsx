@@ -386,13 +386,13 @@ export default function SystemsStep({
           const Icon = typeMeta?.icon || Shield;
           const vendorList = VENDORS[system.type] || ["Базовый"];
           const selectedVendor = getVendorByName(system.type, system.vendor);
-          const snapshot = vendorPriceSnapshots?.[system.id];
+          const apsSnapshot = apsProjectSnapshots?.[system.id];
           const result = systemResults[index];
           const keyEquipment = result?.equipmentData?.keyEquipment || [];
-          const apsSnapshot = apsProjectSnapshots?.[system.id];
           const apsStatus = apsImportStatuses?.[system.id];
           const technicalRecommendation = (technicalRecommendations || []).find((item) => item.systemId === system.id);
           const projectBasedMode = Boolean(apsSnapshot?.active || result?.projectInPlace);
+          const snapshot = projectBasedMode ? apsSnapshot?.priceSnapshot || vendorPriceSnapshots?.[system.id] : vendorPriceSnapshots?.[system.id];
           const unitAuditRows = (apsSnapshot?.items || []).filter((item) => (item?.unitAudit?.status || "unknown") !== "match");
             const manufacturerSource = getManufacturerSource(system.type, system.vendor);
             const manufacturerWebsite = manufacturerSource?.website || "";

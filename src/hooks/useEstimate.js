@@ -823,6 +823,9 @@ export default function useEstimate() {
 
     const timeout = setTimeout(async () => {
       const changed = systems.filter((system) => {
+        if (apsProjectSnapshots?.[system.id]?.active) {
+          return false;
+        }
         const signature = [
           system.type,
           system.vendor,
@@ -862,7 +865,7 @@ export default function useEstimate() {
       cancelled = true;
       clearTimeout(timeout);
     };
-  }, [systems]);
+  }, [systems, apsProjectSnapshots]);
 
   const compareVendorPrices = async (systemId) => {
     const system = systems.find((item) => item.id === systemId);
