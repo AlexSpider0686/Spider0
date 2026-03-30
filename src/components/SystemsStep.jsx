@@ -1154,6 +1154,7 @@ export default function SystemsStep({
                   </div>
                 </div>
 
+                {!projectBasedMode && keyEquipment.length ? (
                 <div className="calc-explain">
                   <h4>Ключевое оборудование, определяющее цену</h4>
                   <div className="table-wrap compact">
@@ -1191,6 +1192,7 @@ export default function SystemsStep({
                     </p>
                   </div>
                 </div>
+                ) : null}
               </div>
 
               {technicalRecommendation ? (

@@ -213,8 +213,8 @@ export function calculateLaborCost({
     },
     neuralCheck,
     modelSource: {
-      unitRatesConfig: "LABOR_UNIT_RATES / src/config/costModelConfig.js",
-      marketGuardConfig: "LABOR_MARKET_GUARDRAILS / src/config/costModelConfig.js",
+      unitRatesConfig: "Внутренняя модель единичных ставок по видам работ: монтаж, ПНР, кабельные линии, КНС, интеграция и проектирование.",
+      marketGuardConfig: "Внутренняя модель защитных порогов по трудовой части: минимальная база работ по системе и минимальный итог по маркеру трудоемкости.",
       scheduleCalibration:
         projectMode
           ? "APS PDF: трудоемкость и состав работ калибруются по распознанной проектной спецификации"

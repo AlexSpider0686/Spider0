@@ -191,9 +191,9 @@ function chunkBySize(items = [], size = 1) {
 }
 
 function buildPriceApiTimeoutMs(requestCount = 0) {
-  const base = 25000;
-  const requestPenalty = Math.max(requestCount - 4, 0) * 3500;
-  return clamp(base + requestPenalty, 25000, 120000);
+  const base = 45000;
+  const requestPenalty = Math.max(requestCount - 4, 0) * 6000;
+  return clamp(base + requestPenalty, 45000, 180000);
 }
 
 export function summarizePriceSnapshot(snapshot) {

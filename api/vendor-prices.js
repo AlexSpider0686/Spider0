@@ -256,6 +256,35 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 20000) {
   }
 }
 
+async function readResponseWithTimeout(response, readFn, timeoutMs = 12000) {
+  let timer = null;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(readFn),
+      new Promise((_, reject) => {
+        timer = setTimeout(async () => {
+          try {
+            await response.body?.cancel?.();
+          } catch {
+            // Ignore body cancellation errors and surface the timeout.
+          }
+          reject(new Error(`Response body timeout after ${timeoutMs}ms`));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function readResponseTextWithTimeout(response, timeoutMs = 12000) {
+  return readResponseWithTimeout(response, () => response.text(), timeoutMs);
+}
+
+function readResponseJsonWithTimeout(response, timeoutMs = 12000) {
+  return readResponseWithTimeout(response, () => response.json(), timeoutMs);
+}
+
 function absoluteTinkoUrl(pathOrUrl) {
   return pathOrUrl.startsWith("http") ? pathOrUrl : `https://www.tinko.ru${pathOrUrl}`;
 }
@@ -583,7 +612,7 @@ async function fetchLuisApiPrice(source, fallbackPrice) {
     20000
   );
 
-  const json = await response.json().catch(() => ({}));
+  const json = await readResponseJsonWithTimeout(response, 8000).catch(() => ({}));
   const items = Array.isArray(json?.items) ? json.items : [];
   if (!items.length) return { prices: [], usedSources: [], unitHints: [] };
 
@@ -661,7 +690,7 @@ async function fetchPriceFromTinkoSearch(searchUrl, fallbackPrice) {
     },
     18000
   );
-  const searchHtml = await searchResponse.text();
+  const searchHtml = await readResponseTextWithTimeout(searchResponse, 10000);
   const productUrls = extractTinkoProductUrls(searchHtml);
 
   if (!productUrls.length) {
@@ -692,7 +721,7 @@ async function fetchPriceFromTinkoSearch(searchUrl, fallbackPrice) {
           },
         },
         16000
-      ).then((response) => response.text())
+      ).then((response) => readResponseTextWithTimeout(response, 10000))
     )
   );
 
@@ -749,7 +778,7 @@ async function fetchPricesFromSearchProductPages(searchUrl, fallbackPrice, optio
     },
     18000
   );
-  const searchHtml = await searchResponse.text();
+  const searchHtml = await readResponseTextWithTimeout(searchResponse, 10000);
   const productUrls = typeof extractProductUrls === "function" ? extractProductUrls(searchHtml) : [];
 
   if (!productUrls.length) {
@@ -786,7 +815,7 @@ async function fetchPricesFromSearchProductPages(searchUrl, fallbackPrice, optio
             },
           },
           22000
-        ).then((response) => response.text());
+        ).then((response) => readResponseTextWithTimeout(response, 10000));
         const price = selectBestPrice(extractPricesFromText(text), fallbackPrice);
         unitHints.push(...extractUnitHintsFromText(text));
         if (!price) continue;
@@ -809,7 +838,7 @@ async function fetchPricesFromSearchProductPages(searchUrl, fallbackPrice, optio
             },
           },
           16000
-        ).then((response) => response.text())
+        ).then((response) => readResponseTextWithTimeout(response, 10000))
       )
     );
 
@@ -859,7 +888,7 @@ async function fetchPriceFromBolidSearch(searchUrl, fallbackPrice) {
     },
     18000
   );
-  const searchHtml = await searchResponse.text();
+  const searchHtml = await readResponseTextWithTimeout(searchResponse, 10000);
   const results = extractBolidSearchResults(searchHtml)
     .map((item) => ({ ...item, score: scoreBolidResult(item, queryText) }))
     .sort((a, b) => b.score - a.score || a.url.length - b.url.length);
@@ -885,7 +914,7 @@ async function fetchPriceFromBolidSearch(searchUrl, fallbackPrice) {
           },
         },
         22000
-      ).then((response) => response.text());
+      ).then((response) => readResponseTextWithTimeout(response, 10000));
       const price = selectBestPrice(extractPricesFromText(text), fallbackPrice);
       unitHints.push(...extractUnitHintsFromText(text));
       if (!price) continue;
@@ -942,7 +971,7 @@ async function fetchPriceFromGenericSource(source, fallbackPrice) {
 
   const contentType = String(response.headers.get("content-type") || "").toLowerCase();
   if (contentType.includes("application/json")) {
-    const json = await response.json().catch(() => ({}));
+    const json = await readResponseJsonWithTimeout(response, 8000).catch(() => ({}));
     const prices = [];
     const unitHints = [];
     extractPricesFromJsonLike(json, prices);
@@ -962,7 +991,7 @@ async function fetchPriceFromGenericSource(source, fallbackPrice) {
       : { prices: [], usedSources: [], unitHints: unique(unitHints) };
   }
 
-  const text = await response.text();
+  const text = await readResponseTextWithTimeout(response, 10000);
   const price = selectBestPrice(extractPricesFromText(text), fallbackPrice);
   const unitHints = extractUnitHintsFromText(text);
   if (!price && queryText && isLikelySearchUrl(source.url)) {
@@ -983,7 +1012,7 @@ async function fetchPriceFromGenericSource(source, fallbackPrice) {
               },
             },
             18000
-          ).then((candidateResponse) => candidateResponse.text());
+          ).then((candidateResponse) => readResponseTextWithTimeout(candidateResponse, 10000));
           const candidatePrice = selectBestPrice(extractPricesFromText(candidateText), fallbackPrice);
           nestedUnitHints.push(...extractUnitHintsFromText(candidateText));
           if (!candidatePrice) continue;
