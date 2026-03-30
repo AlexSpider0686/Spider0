@@ -470,6 +470,51 @@ export default function useEstimate() {
     }
   };
 
+  const resolveApsProjectPricing = async ({
+    parsedProject,
+    fileName,
+    vendorName,
+    signal,
+    onProgress,
+    buildApsProjectPriceRequests,
+    buildApsProjectSnapshot,
+  }) => {
+    const runForVendor = async (currentVendorName, progressPrefix = "") => {
+      const requests = buildApsProjectPriceRequests(parsedProject.items, currentVendorName);
+      const { priceSnapshot, fallbackNotice } = await loadApsProjectPrices(requests, {
+        signal,
+        onProgress: onProgress
+          ? (progress) =>
+              onProgress({
+                ...progress,
+                progressPrefix,
+              })
+          : undefined,
+      });
+      const snapshot = buildApsProjectSnapshot({
+        fileName,
+        parsedProject,
+        requests,
+        priceSnapshot,
+        objectData,
+        vendorName: currentVendorName,
+      });
+      return { requests, priceSnapshot, fallbackNotice, snapshot };
+    };
+
+    const initialResult = await runForVendor(vendorName);
+    const detectedVendor = initialResult.snapshot?.detectedVendor || initialResult.snapshot?.vendorName || vendorName;
+    if (!detectedVendor || detectedVendor === vendorName) {
+      return initialResult;
+    }
+
+    const refinedResult = await runForVendor(detectedVendor, `Уточнен вендор: ${detectedVendor}. `);
+    return {
+      ...refinedResult,
+      fallbackNotice: refinedResult.fallbackNotice || initialResult.fallbackNotice,
+    };
+  };
+
   const startApsImportTask = (systemId) => {
     const token = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const controller = new AbortController();
@@ -536,16 +581,14 @@ export default function useEstimate() {
           aiQuality: apsSnapshot.aiQuality || null,
         };
 
-        const requests = buildApsProjectPriceRequests(originalItems, system.vendor);
-        const { priceSnapshot, fallbackNotice } = await loadApsProjectPrices(requests);
-        let refreshedSnapshot = buildApsProjectSnapshot({
-          fileName: apsSnapshot.fileName || "aps-project.pdf",
+        const { priceSnapshot, fallbackNotice, snapshot: resolvedSnapshot } = await resolveApsProjectPricing({
           parsedProject,
-          requests,
-          priceSnapshot,
-          objectData,
+          fileName: apsSnapshot.fileName || "aps-project.pdf",
           vendorName: system.vendor,
+          buildApsProjectPriceRequests,
+          buildApsProjectSnapshot,
         });
+        let refreshedSnapshot = resolvedSnapshot;
 
         if (apsSnapshot.itemOverrides && Object.keys(apsSnapshot.itemOverrides).length) {
           refreshedSnapshot = recalculateApsProjectSnapshot(refreshedSnapshot, apsSnapshot.itemOverrides, objectData);
@@ -635,8 +678,8 @@ export default function useEstimate() {
           startedAt: prev?.[systemId]?.startedAt || new Date().toISOString(),
         }),
       }));
-      const requests = buildApsProjectPriceRequests(parsedProject.items, system.vendor);
-      const { priceSnapshot, fallbackNotice } = await loadApsProjectPrices(requests, {
+      const initialRequests = buildApsProjectPriceRequests(parsedProject.items, system.vendor);
+      const { priceSnapshot, fallbackNotice } = await loadApsProjectPrices(initialRequests, {
         signal: taskSignal,
         onProgress: (progress) => {
           if (isApsImportTaskCancelled(systemId, taskToken)) return;
@@ -644,7 +687,7 @@ export default function useEstimate() {
             ...prev,
             [systemId]: buildApsImportStatus(
               "loading",
-              `PDF распознан. Идет сбор цен по позициям... Батч ${progress.completedBatches}/${progress.totalBatches}, позиций ${progress.completedRequests}/${progress.totalRequests}.`,
+              `PDF ??????????????????. ???????? ???????? ?????? ???? ????????????????... ???????? ${progress.completedBatches}/${progress.totalBatches}, ?????????????? ${progress.completedRequests}/${progress.totalRequests}.`,
               {
                 stage: "pricing",
                 parsedItems: parsedProject.items?.length || 0,
@@ -659,23 +702,63 @@ export default function useEstimate() {
         },
       });
       if (isApsImportTaskCancelled(systemId, taskToken)) return;
-      const snapshot = buildApsProjectSnapshot({
+      const initialSnapshot = buildApsProjectSnapshot({
         fileName: file.name,
         parsedProject,
-        requests,
+        requests: initialRequests,
         priceSnapshot,
         objectData,
         vendorName: system.vendor,
       });
 
-      setApsProjectSnapshots((prev) => ({ ...prev, [systemId]: snapshot }));
+      let resolvedSnapshot = initialSnapshot;
+      let resolvedFallbackNotice = fallbackNotice;
+      const resolvedVendor = initialSnapshot.detectedVendor || initialSnapshot.vendorName || system.vendor;
+
+      if (resolvedVendor && resolvedVendor !== system.vendor) {
+        const vendorRequests = buildApsProjectPriceRequests(parsedProject.items, resolvedVendor);
+        const vendorPricing = await loadApsProjectPrices(vendorRequests, {
+          signal: taskSignal,
+          onProgress: (progress) => {
+            if (isApsImportTaskCancelled(systemId, taskToken)) return;
+            setApsImportStatuses((prev) => ({
+              ...prev,
+              [systemId]: buildApsImportStatus(
+                "loading",
+                `??????? ??????: ${resolvedVendor}. ???? ???? ??? ?? ????????... ???? ${progress.completedBatches}/${progress.totalBatches}, ??????? ${progress.completedRequests}/${progress.totalRequests}.`,
+                {
+                  stage: "pricing",
+                  parsedItems: parsedProject.items?.length || 0,
+                  completedBatches: progress.completedBatches,
+                  totalBatches: progress.totalBatches,
+                  completedRequests: progress.completedRequests,
+                  totalRequests: progress.totalRequests,
+                  startedAt: prev?.[systemId]?.startedAt || new Date().toISOString(),
+                }
+              ),
+            }));
+          },
+        });
+        if (isApsImportTaskCancelled(systemId, taskToken)) return;
+        resolvedFallbackNotice = vendorPricing.fallbackNotice || fallbackNotice;
+        resolvedSnapshot = buildApsProjectSnapshot({
+          fileName: file.name,
+          parsedProject,
+          requests: vendorRequests,
+          priceSnapshot: vendorPricing.priceSnapshot,
+          objectData,
+          vendorName: resolvedVendor,
+        });
+      }
+
+      setApsProjectSnapshots((prev) => ({ ...prev, [systemId]: resolvedSnapshot }));
       setSystems((prev) =>
         prev.map((item) =>
           item.id === systemId
             ? {
                 ...item,
-                vendor: snapshot.detectedVendor || snapshot.vendorName || item.vendor,
-                baseVendor: snapshot.detectedVendor || snapshot.vendorName || item.baseVendor || item.vendor,
+                vendor: resolvedSnapshot.detectedVendor || resolvedSnapshot.vendorName || item.vendor,
+                baseVendor: resolvedSnapshot.detectedVendor || resolvedSnapshot.vendorName || item.baseVendor || item.vendor,
               }
             : item
         )
@@ -684,13 +767,13 @@ export default function useEstimate() {
       setApsImportStatuses((prev) => ({
         ...prev,
         [systemId]: buildApsImportStatus(
-          fallbackNotice ? "warning" : "success",
-          fallbackNotice
-            ? `PDF распознан, но сбор цен завершился в fallback-режиме. ${fallbackNotice}`
-            : `Позиции в спецификации: ${snapshot.items.length}. С ценой от поставщиков: ${snapshot.sourceStats.itemsWithSupplierPrice}. Без цены: ${snapshot.sourceStats.itemsWithoutPrice}.`,
+          resolvedFallbackNotice ? "warning" : "success",
+          resolvedFallbackNotice
+            ? `PDF ??????????????????, ???? ???????? ?????? ???????????????????? ?? fallback-????????????. ${resolvedFallbackNotice}`
+            : `?????????????? ?? ????????????????????????: ${resolvedSnapshot.items.length}. ?? ?????????? ???? ??????????????????????: ${resolvedSnapshot.sourceStats.itemsWithSupplierPrice}. ?????? ????????: ${resolvedSnapshot.sourceStats.itemsWithoutPrice}.`,
           {
             stage: "done",
-            parsedItems: snapshot.items.length,
+            parsedItems: resolvedSnapshot.items.length,
           }
         ),
         }));

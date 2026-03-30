@@ -428,9 +428,28 @@ function buildSearchQueries(item, defaultVendor) {
 
 function buildSourceUrls(source, queries, item) {
   const base = trimSlash(source?.website || "");
+  const manufacturerTargets = [];
   const urlTargets = [];
   const apiRequests = [];
   const queryPool = dedupe(queries).slice(0, 3);
+
+  if (base) {
+    for (const query of queryPool.slice(0, 1)) {
+      if (source?.searchPathTemplate) {
+        manufacturerTargets.push(`${base}${source.searchPathTemplate.replace("{query}", encodeURIComponent(query))}`);
+      } else {
+        manufacturerTargets.push(`${base}/search/?q=${encodeURIComponent(query)}`);
+        manufacturerTargets.push(`${base}/search?q=${encodeURIComponent(query)}`);
+        manufacturerTargets.push(`${base}/?s=${encodeURIComponent(query)}`);
+      }
+    }
+
+    if (item?.sourcePath) {
+      manufacturerTargets.push(`${base}${item.sourcePath}`);
+    }
+
+    manufacturerTargets.push(base);
+  }
 
   for (const [index, query] of queryPool.entries()) {
     urlTargets.push(buildTinkoSearchUrl(query));
@@ -444,18 +463,6 @@ function buildSourceUrls(source, queries, item) {
     }
   }
 
-  if (base) {
-    for (const query of queryPool.slice(0, 1)) {
-      if (source?.searchPathTemplate) {
-        urlTargets.push(`${base}${source.searchPathTemplate.replace("{query}", encodeURIComponent(query))}`);
-      } else {
-        urlTargets.push(`${base}/search/?q=${encodeURIComponent(query)}`);
-        urlTargets.push(`${base}/search?q=${encodeURIComponent(query)}`);
-        urlTargets.push(`${base}/?s=${encodeURIComponent(query)}`);
-      }
-    }
-  }
-
   if (item?.model) {
     const modelOnly = shortenSearchText(item.model, 72);
     if (modelOnly) {
@@ -463,7 +470,7 @@ function buildSourceUrls(source, queries, item) {
     }
   }
 
-  return dedupeSourceRequests([...apiRequests, ...urlTargets]).slice(0, 10);
+  return dedupeSourceRequests([...manufacturerTargets, ...apiRequests, ...urlTargets]).slice(0, 10);
 }
 
 function buildRequestKey(index, item) {
