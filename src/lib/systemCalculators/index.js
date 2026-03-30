@@ -486,7 +486,7 @@ export function calculateSystemWithBreakdown(
   const laborBase = laborModel.workAfterConditions * regionalCoef;
   const routingWorkCost = surveyRoutingAdjustment.workCost;
   const workTotal = laborModel.workTotal + routingWorkCost;
-  const workCharges = Math.max(workTotal - laborBase, 0);
+  const workCharges = Math.max(laborModel.workTotal - laborBase, 0);
   const designBase = projectInPlace ? 0 : laborModel.designAfterConditions * regionalCoef;
   const designTotal = projectInPlace ? 0 : laborModel.designTotal;
   const designCharges = projectInPlace ? 0 : Math.max(designTotal - designBase, 0);
@@ -497,16 +497,23 @@ export function calculateSystemWithBreakdown(
   const vat = normalizedInput.budget.taxMode === "osno" ? subtotal * (toNumber(normalizedInput.budget.vatPercent, 0) / 100) : 0;
   const total = subtotal + vat;
 
-  const rules = getSystemRules(system.type);
-  const smrWeight = toNumber(rules?.laborSplit?.smr, 0.6);
-  const pnrWeight = toNumber(rules?.laborSplit?.pnr, 0.25);
-  const splitTotal = Math.max(smrWeight + pnrWeight, 0.001);
+  const laborBreakdown = laborModel.workBreakdown || {};
+  const effectiveMarkerCostPerUnit = workTotal / Math.max(toNumber(quantities.markerUnits, 0), 1);
+  const componentBaseTotal = Math.max(
+    toNumber(laborBreakdown.smrBase, 0) +
+      toNumber(laborBreakdown.pnrBase, 0) +
+      toNumber(laborBreakdown.integrationBase, 0) +
+      toNumber(laborBreakdown.knsBase, 0),
+    0.001
+  );
+  const allocateWorkComponent = (baseValue) => (laborModel.workTotal * Math.max(toNumber(baseValue, 0), 0)) / componentBaseTotal;
   const works = {
-    smr: laborBase * (smrWeight / splitTotal) + routingWorkCost,
-    pnr: laborBase * (pnrWeight / splitTotal),
+    smr: allocateWorkComponent(laborBreakdown.smrBase) + routingWorkCost,
+    pnr: allocateWorkComponent(laborBreakdown.pnrBase),
     design: designBase,
-    integration: quantities.integrationPoints * 0.45 * laborModel.markerCostPerUnit,
-    kns: knsModel.knsWorkUnits * 0.12 * laborModel.markerCostPerUnit,
+    integration: allocateWorkComponent(laborBreakdown.integrationBase),
+    kns: allocateWorkComponent(laborBreakdown.knsBase),
+    routingSurvey: routingWorkCost,
   };
 
   const equipmentBreakdown = buildEquipmentBreakdown(system.type, equipmentCost);
@@ -598,6 +605,7 @@ export function calculateSystemWithBreakdown(
       workTotalBeforeRegion: laborModel.workTotalBeforeRegion,
       marketGuard: laborModel.marketGuard,
       neuralCheck: laborModel.neuralCheck,
+      routingWorkCost,
     },
     designBase,
     designCharges,
@@ -608,7 +616,7 @@ export function calculateSystemWithBreakdown(
       key: quantities.primaryUnitKey,
       label: quantities.markerLabel || "Стоимость 1 единицы",
       qty: quantities.markerUnits,
-      costPerUnit: laborModel.markerCostPerUnit,
+      costPerUnit: effectiveMarkerCostPerUnit,
     },
     overhead: laborModel.workChargesBeforeRegion.overhead * regionalCoef,
     ppe: laborModel.workChargesBeforeRegion.ppe * regionalCoef,
