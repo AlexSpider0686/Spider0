@@ -56,6 +56,20 @@ function buildFallbackPriceSnapshot() {
   };
 }
 
+function buildApsImportStatus(state, message, extra = {}) {
+  return {
+    state,
+    message,
+    startedAt: extra.startedAt || new Date().toISOString(),
+    stage: extra.stage || "",
+    ...extra,
+  };
+}
+
+function isAbortLikeError(error) {
+  return error?.name === "AbortError" || error?.code === 20;
+}
+
 function deriveSurveyAreaRefinement(photoAnalyses = {}, fallbackTotalArea = 0) {
   const byZone = new Map();
 
@@ -100,6 +114,7 @@ function deriveSurveyAreaRefinement(photoAnalyses = {}, fallbackTotalArea = 0) {
 
 export default function useEstimate() {
   const initialIdentityRef = useRef(createProjectIdentity());
+  const apsImportTasksRef = useRef(new Map());
   const [step, setStep] = useState(0);
   const [objectData, setObjectData] = useState({
     ...initialIdentityRef.current,
@@ -352,6 +367,11 @@ export default function useEstimate() {
   const updateSystem = (id, key, value) => {
     setVendorComparisonsBySystem((prev) => removeById(prev, id));
     if (key === "type" && value !== "aps") {
+      const task = apsImportTasksRef.current.get(id);
+      if (task?.controller) {
+        task.controller.abort();
+      }
+      apsImportTasksRef.current.delete(id);
       setApsProjectSnapshots((prev) => removeById(prev, id));
       setApsImportStatuses((prev) => removeById(prev, id));
     }
@@ -406,6 +426,11 @@ export default function useEstimate() {
   };
 
   const removeSystem = (id) => {
+    const task = apsImportTasksRef.current.get(id);
+    if (task?.controller) {
+      task.controller.abort();
+    }
+    apsImportTasksRef.current.delete(id);
     setSystems((prev) => (prev.length <= 1 ? prev : prev.filter((system) => system.id !== id)));
     setVendorComparisonsBySystem((prev) => removeById(prev, id));
     setApsProjectSnapshots((prev) => removeById(prev, id));
@@ -423,14 +448,17 @@ export default function useEstimate() {
 
   const updateBudget = (key, value) => setBudget((prev) => ({ ...prev, [key]: value }));
 
-  const loadApsProjectPrices = async (requests) => {
+  const loadApsProjectPrices = async (requests, options = {}) => {
     try {
-      const priceSnapshot = await fetchPricesByRequests(requests);
+      const priceSnapshot = await fetchPricesByRequests(requests, options);
       return {
         priceSnapshot,
         fallbackNotice: "",
       };
     } catch (error) {
+      if (options?.signal?.aborted || isAbortLikeError(error)) {
+        throw error;
+      }
       return {
         priceSnapshot: buildFallbackPriceSnapshot(),
         fallbackNotice: error?.message || "Сервис сбора цен временно недоступен, использованы fallback-цены.",
@@ -438,17 +466,55 @@ export default function useEstimate() {
     }
   };
 
+  const startApsImportTask = (systemId) => {
+    const token = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const controller = new AbortController();
+    apsImportTasksRef.current.set(systemId, { token, cancelled: false, controller });
+    return token;
+  };
+
+  const isApsImportTaskCancelled = (systemId, token) => {
+    const task = apsImportTasksRef.current.get(systemId);
+    if (!task) return true;
+    return task.cancelled || task.token !== token;
+  };
+
+  const finishApsImportTask = (systemId, token) => {
+    const task = apsImportTasksRef.current.get(systemId);
+    if (task?.token === token) {
+      apsImportTasksRef.current.delete(systemId);
+    }
+  };
+
+  const cancelApsProjectPdfImport = (systemId) => {
+    const task = apsImportTasksRef.current.get(systemId);
+    if (!task) return false;
+    task.cancelled = true;
+    if (task.controller) {
+      task.controller.abort();
+    }
+    apsImportTasksRef.current.set(systemId, task);
+    setApsImportStatuses((prev) => ({
+      ...prev,
+      [systemId]: buildApsImportStatus("warning", "Обработка PDF отменена пользователем.", {
+        stage: prev?.[systemId]?.stage || "parsing",
+        startedAt: prev?.[systemId]?.startedAt || new Date().toISOString(),
+        cancelled: true,
+      }),
+    }));
+    return true;
+  };
+
   const refreshVendorPricing = async (system) => {
     const apsSnapshot = apsProjectSnapshots?.[system?.id];
     setVendorComparisonsBySystem((prev) => removeById(prev, system?.id));
-    if (system?.type === "aps" && apsSnapshot?.active) {
-      setApsImportStatuses((prev) => ({
-        ...prev,
-        [system.id]: {
-          state: "loading",
-          message: "Идет повторный опрос источников цен по позициям проекта...",
-        },
-      }));
+      if (system?.type === "aps" && apsSnapshot?.active) {
+        setApsImportStatuses((prev) => ({
+          ...prev,
+          [system.id]: buildApsImportStatus("loading", "Идет повторный опрос источников цен по позициям проекта...", {
+            stage: "pricing",
+          }),
+        }));
 
       try {
         const { buildApsProjectPriceRequests, buildApsProjectSnapshot } = await import("../lib/apsProjectEstimate");
@@ -496,20 +562,22 @@ export default function useEstimate() {
         setVendorPriceSnapshots((prev) => ({ ...prev, [system.id]: priceSnapshot }));
         setApsImportStatuses((prev) => ({
           ...prev,
-          [system.id]: {
-            state: fallbackNotice ? "error" : "success",
-            message: fallbackNotice
+          [system.id]: buildApsImportStatus(
+            fallbackNotice ? "warning" : "success",
+            fallbackNotice
               ? `PDF обновлен, но сбор цен завершился в fallback-режиме. ${fallbackNotice}`
               : `Обновлено: позиций с ценой поставщика ${refreshedSnapshot.sourceStats.itemsWithSupplierPrice}, без цены ${refreshedSnapshot.sourceStats.itemsWithoutPrice}.`,
-          },
+            {
+              stage: "done",
+            }
+          ),
         }));
       } catch (error) {
         setApsImportStatuses((prev) => ({
           ...prev,
-          [system.id]: {
-            state: "error",
-            message: error?.message || "Не удалось обновить цены по позициям проекта.",
-          },
+          [system.id]: buildApsImportStatus("error", error?.message || "Не удалось обновить цены по позициям проекта.", {
+            stage: "pricing",
+          }),
         }));
       }
       return;
@@ -536,13 +604,15 @@ export default function useEstimate() {
       throw new Error("Импорт PDF доступен только для системы АПС.");
     }
     if (!file) return;
+    const taskToken = startApsImportTask(systemId);
+    const activeTask = apsImportTasksRef.current.get(systemId);
+    const taskSignal = activeTask?.controller?.signal;
 
     setApsImportStatuses((prev) => ({
       ...prev,
-      [systemId]: {
-        state: "loading",
-        message: "Идет анализ PDF и сбор цен...",
-      },
+      [systemId]: buildApsImportStatus("loading", "Идет анализ PDF...", {
+        stage: "parsing",
+      }),
     }));
 
     try {
@@ -552,8 +622,18 @@ export default function useEstimate() {
       ]);
 
       const parsedProject = await parseApsProjectPdf(file);
+      if (isApsImportTaskCancelled(systemId, taskToken)) return;
+      setApsImportStatuses((prev) => ({
+        ...prev,
+        [systemId]: buildApsImportStatus("loading", "PDF распознан. Идет сбор цен по позициям...", {
+          stage: "pricing",
+          parsedItems: parsedProject.items?.length || 0,
+          startedAt: prev?.[systemId]?.startedAt || new Date().toISOString(),
+        }),
+      }));
       const requests = buildApsProjectPriceRequests(parsedProject.items, system.vendor);
-      const { priceSnapshot, fallbackNotice } = await loadApsProjectPrices(requests);
+      const { priceSnapshot, fallbackNotice } = await loadApsProjectPrices(requests, { signal: taskSignal });
+      if (isApsImportTaskCancelled(systemId, taskToken)) return;
       const snapshot = buildApsProjectSnapshot({
         fileName: file.name,
         parsedProject,
@@ -575,28 +655,41 @@ export default function useEstimate() {
             : item
         )
       );
+      if (isApsImportTaskCancelled(systemId, taskToken)) return;
       setApsImportStatuses((prev) => ({
         ...prev,
-        [systemId]: {
-          state: fallbackNotice ? "error" : "success",
-          message: fallbackNotice
+        [systemId]: buildApsImportStatus(
+          fallbackNotice ? "warning" : "success",
+          fallbackNotice
             ? `PDF распознан, но сбор цен завершился в fallback-режиме. ${fallbackNotice}`
             : `Позиции в спецификации: ${snapshot.items.length}. С ценой от поставщиков: ${snapshot.sourceStats.itemsWithSupplierPrice}. Без цены: ${snapshot.sourceStats.itemsWithoutPrice}.`,
-        },
-      }));
-    } catch (error) {
-      setApsImportStatuses((prev) => ({
-        ...prev,
-        [systemId]: {
-          state: "error",
-          message: error?.message || "Не удалось обработать PDF-проект.",
-        },
-      }));
-      throw error;
-    }
-  };
+          {
+            stage: "done",
+            parsedItems: snapshot.items.length,
+          }
+        ),
+        }));
+      } catch (error) {
+      if (isApsImportTaskCancelled(systemId, taskToken) || isAbortLikeError(error)) return;
+        setApsImportStatuses((prev) => ({
+          ...prev,
+          [systemId]: buildApsImportStatus("error", error?.message || "Не удалось обработать PDF-проект.", {
+          stage: prev?.[systemId]?.stage || "parsing",
+          startedAt: prev?.[systemId]?.startedAt || new Date().toISOString(),
+        }),
+        }));
+        throw error;
+      } finally {
+        finishApsImportTask(systemId, taskToken);
+      }
+    };
 
   const clearApsProjectPdf = (systemId) => {
+    const task = apsImportTasksRef.current.get(systemId);
+    if (task?.controller) {
+      task.controller.abort();
+    }
+    apsImportTasksRef.current.delete(systemId);
     setVendorComparisonsBySystem((prev) => removeById(prev, systemId));
     setApsProjectSnapshots((prev) => removeById(prev, systemId));
     setApsImportStatuses((prev) => removeById(prev, systemId));
@@ -1336,10 +1429,11 @@ export default function useEstimate() {
     updateSystemEquipmentProfile,
     updateBudget,
     refreshVendorPricing,
-    compareVendorPrices,
-    clearVendorComparison,
-    importApsProjectPdf,
-    clearApsProjectPdf,
+      compareVendorPrices,
+      clearVendorComparison,
+      importApsProjectPdf,
+      cancelApsProjectPdfImport,
+      clearApsProjectPdf,
     updateApsProjectItem,
     addApsProjectItem,
     removeApsProjectItemById,

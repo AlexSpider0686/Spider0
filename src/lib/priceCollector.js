@@ -233,16 +233,65 @@ function buildApiEndpoints() {
   return [...new Set(endpoints.filter(Boolean))];
 }
 
-async function requestPriceApi(payload) {
+function createTimeoutError(timeoutMs) {
+  const error = new Error(`Price API timeout after ${timeoutMs}ms`);
+  error.name = "TimeoutError";
+  return error;
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 25000) {
+  const controller = new AbortController();
+  const externalSignal = options?.signal;
+  let timeoutError = null;
+  const abortFromExternalSignal = () => {
+    try {
+      controller.abort(externalSignal?.reason);
+    } catch {
+      controller.abort();
+    }
+  };
+  const timeoutId = setTimeout(() => {
+    timeoutError = createTimeoutError(timeoutMs);
+    controller.abort(timeoutError);
+  }, timeoutMs);
+
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      abortFromExternalSignal();
+    } else {
+      externalSignal.addEventListener("abort", abortFromExternalSignal, { once: true });
+    }
+  }
+
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (timeoutError && error?.name === "AbortError") {
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+    if (externalSignal) {
+      externalSignal.removeEventListener("abort", abortFromExternalSignal);
+    }
+  }
+}
+
+async function requestPriceApi(payload, options = {}) {
   const endpoints = buildApiEndpoints();
   let lastError = null;
 
   for (const endpoint of endpoints) {
     try {
-      const response = await fetch(endpoint, {
+      const response = await fetchWithTimeout(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
+        signal: options.signal,
       });
 
       if (response.ok) {
@@ -316,8 +365,8 @@ function extractModelToken(request) {
   return matches.sort((left, right) => right.length - left.length)[0];
 }
 
-export async function fetchPricesByRequests(requests = []) {
-  const payload = await requestPriceApi({ requests });
+export async function fetchPricesByRequests(requests = [], options = {}) {
+  const payload = await requestPriceApi({ requests }, options);
   const resultsByKey = new Map((payload.results || []).map((entry) => [entry.key, entry]));
 
   const sanitizePrice = (request, result) => {
@@ -430,9 +479,9 @@ export async function fetchPricesByRequests(requests = []) {
   };
 }
 
-export async function fetchVendorPrices(systemType, vendorName) {
+export async function fetchVendorPrices(systemType, vendorName, options = {}) {
   const requests = buildPriceRequests(systemType, vendorName);
-  const snapshot = await fetchPricesByRequests(requests);
+  const snapshot = await fetchPricesByRequests(requests, options);
   return {
     ...snapshot,
     systemType,

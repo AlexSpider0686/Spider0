@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Plus, Trash2, Shield, FileUp, RefreshCcw, Eye, EyeOff, CheckCircle2, Download, BarChart3 } from "lucide-react";
 import { SYSTEM_TYPES, VENDORS } from "../config/estimateConfig";
 import { getManufacturerSource, getVendorByName } from "../config/vendorsConfig";
@@ -9,8 +9,71 @@ import VendorConfigurator from "./VendorConfigurator";
 function renderApsImportStatus(status) {
   if (!status) return null;
   if (status.state === "loading") return <p className="hint-inline">Статус: {status.message}</p>;
+  if (status.state === "warning") return <p className="warn-inline">Статус: {status.message}</p>;
   if (status.state === "error") return <p className="warn-inline">Статус: {status.message}</p>;
   return <p className="hint-inline">Статус: {status.message}</p>;
+}
+
+function renderApsImportProgress(status, elapsedSeconds = 0) {
+  if (!status) return null;
+  const stages = [
+    { key: "parsing", label: "1. Анализ PDF" },
+    { key: "pricing", label: "2. Сбор цен" },
+    { key: "done", label: "3. Финализация" },
+  ];
+  const currentIndex = Math.max(
+    stages.findIndex((item) => item.key === status.stage),
+    status.state === "success" || status.state === "warning" ? 2 : 0
+  );
+
+  const progressPercent =
+    status.state === "success" || status.state === "warning"
+      ? 100
+      : status.stage === "pricing"
+        ? 72
+        : status.stage === "parsing"
+          ? 34
+          : 12;
+
+  return (
+    <>
+      <div className="pricing-source-row comparison-summary-row" style={{ marginTop: 8, marginBottom: 8 }}>
+      {stages.map((stage, index) => {
+        const isCompleted = index < currentIndex || ((status.state === "success" || status.state === "warning") && index === currentIndex);
+        const isActive = status.state === "loading" && index === currentIndex;
+        const tone = status.state === "error" && index === currentIndex ? "warn" : isCompleted ? "ok" : isActive ? "muted" : "muted";
+        return (
+          <span className={`pricing-source-chip ${tone}`} key={`${status.stage || status.state}-${stage.key}`}>
+            <strong>{stage.label}</strong>
+            {isActive ? "..." : ""}
+          </span>
+        );
+      })}
+      {status.state === "loading" ? (
+        <span className="pricing-source-chip muted">
+          <strong>Время:</strong> {elapsedSeconds} сек.
+        </span>
+      ) : null}
+      {status.parsedItems ? (
+        <span className="pricing-source-chip ok">
+          <strong>Позиции:</strong> {status.parsedItems}
+        </span>
+      ) : null}
+      </div>
+      <div style={{ marginTop: 6, marginBottom: 10 }}>
+        <div style={{ height: 6, background: "#E6ECE8", borderRadius: 999, overflow: "hidden" }}>
+          <div
+            style={{
+              width: `${progressPercent}%`,
+              height: "100%",
+              background: status.state === "error" ? "#E07A5F" : status.state === "warning" ? "#E0A458" : "#219653",
+              transition: "width 0.3s ease",
+            }}
+          />
+        </div>
+      </div>
+    </>
+  );
 }
 
 function toHost(url) {
@@ -235,6 +298,7 @@ export default function SystemsStep({
   vendorComparisonsBySystem,
   canAddMoreSystems,
   importApsProjectPdf,
+  cancelApsProjectPdfImport,
   clearApsProjectPdf,
   updateApsProjectItem,
   addApsProjectItem,
@@ -251,6 +315,14 @@ export default function SystemsStep({
   const [showRecheckBySystem, setShowRecheckBySystem] = useState({});
   const [refreshingBySystem, setRefreshingBySystem] = useState({});
   const [comparingBySystem, setComparingBySystem] = useState({});
+  const [statusNow, setStatusNow] = useState(Date.now());
+
+  useEffect(() => {
+    const hasLoading = Object.values(apsImportStatuses || {}).some((status) => status?.state === "loading");
+    if (!hasLoading) return undefined;
+    const timer = setInterval(() => setStatusNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [apsImportStatuses]);
 
   const getManualDraft = (systemId) => manualDraftBySystem[systemId] || defaultManualDraft();
 
@@ -322,11 +394,16 @@ export default function SystemsStep({
           const technicalRecommendation = (technicalRecommendations || []).find((item) => item.systemId === system.id);
           const projectBasedMode = Boolean(apsSnapshot?.active || result?.projectInPlace);
           const unitAuditRows = (apsSnapshot?.items || []).filter((item) => (item?.unitAudit?.status || "unknown") !== "match");
-          const manufacturerSource = getManufacturerSource(system.type, system.vendor);
-          const manufacturerWebsite = manufacturerSource?.website || "";
-          const manufacturerHost = toHost(manufacturerWebsite);
-          const isRefreshing = Boolean(refreshingBySystem[system.id]);
-          const isComparing = Boolean(comparingBySystem[system.id]);
+            const manufacturerSource = getManufacturerSource(system.type, system.vendor);
+            const manufacturerWebsite = manufacturerSource?.website || "";
+            const manufacturerHost = toHost(manufacturerWebsite);
+            const isRefreshing = Boolean(refreshingBySystem[system.id]);
+            const isComparing = Boolean(comparingBySystem[system.id]);
+            const isApsImportLoading = apsStatus?.state === "loading";
+            const importElapsedSeconds =
+              apsStatus?.startedAt && isApsImportLoading
+                ? Math.max(Math.floor((statusNow - new Date(apsStatus.startedAt).getTime()) / 1000), 0)
+                : 0;
           const showUnitAudit = Boolean(showUnitAuditBySystem[system.id]);
           const showRecheck = Boolean(showRecheckBySystem[system.id]);
           const comparison = vendorComparisonsBySystem?.[system.id];
@@ -676,7 +753,12 @@ export default function SystemsStep({
                   <p className="hint-inline">Норматив: СПДС, ГОСТ Р 21.101-2020 и ГОСТ 21.110-2013. Итог по СМР+ПНР дополнительно защищается рыночным полом и AI-проверкой.</p>
 
                   <div className="aps-import-actions">
-                    <label className="ghost-btn file-upload-btn" htmlFor={`aps-pdf-${system.id}`}>
+                    <label
+                      className="ghost-btn file-upload-btn"
+                      htmlFor={isApsImportLoading ? undefined : `aps-pdf-${system.id}`}
+                      style={isApsImportLoading ? { opacity: 0.55, cursor: "not-allowed" } : undefined}
+                      aria-disabled={isApsImportLoading}
+                    >
                       <FileUp size={14} /> Загрузить PDF
                     </label>
                     <input
@@ -684,7 +766,12 @@ export default function SystemsStep({
                       className="file-upload-input"
                       type="file"
                       accept=".pdf,application/pdf"
+                      disabled={isApsImportLoading}
                       onChange={async (event) => {
+                        if (isApsImportLoading) {
+                          event.target.value = "";
+                          return;
+                        }
                         const file = event.target.files?.[0];
                         if (!file) return;
                         try {
@@ -697,13 +784,24 @@ export default function SystemsStep({
                       }}
                     />
                     {apsSnapshot ? (
-                      <button className="danger-btn" type="button" onClick={() => clearApsProjectPdf(system.id)}>
+                      <button className="danger-btn" type="button" onClick={() => clearApsProjectPdf(system.id)} disabled={isApsImportLoading}>
                         Очистить проект
+                      </button>
+                    ) : null}
+                    {isApsImportLoading ? (
+                      <button className="ghost-btn" type="button" onClick={() => cancelApsProjectPdfImport(system.id)}>
+                        Отменить обработку
                       </button>
                     ) : null}
                   </div>
 
+                  {renderApsImportProgress(apsStatus, importElapsedSeconds)}
                   {renderApsImportStatus(apsStatus)}
+                  {apsStatus?.state === "warning" && !apsStatus?.cancelled ? (
+                    <p className="hint-inline">
+                      Обработка завершена в резервном режиме: PDF распознан, но часть или все цены подставлены из fallback-логики.
+                    </p>
+                  ) : null}
                   {apsSnapshot?.gostStandard ? <p className="hint-inline">Стандарт PDF: {apsSnapshot.gostStandard}</p> : null}
 
                   {apsSnapshot ? (
