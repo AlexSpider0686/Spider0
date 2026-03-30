@@ -382,6 +382,36 @@ export const MANUFACTURER_SOURCES = {
   },
 };
 
+MANUFACTURER_SOURCES.skud["\u0411\u0430\u0437\u043e\u0432\u044b\u0439"] = {
+  website: "https://sigur.com",
+  searchPathTemplate: "/search/?q={query}",
+  preferSearch: true,
+};
+
+MANUFACTURER_SOURCES.skud.Sigur = {
+  website: "https://sigur.com",
+  searchPathTemplate: "/search/?q={query}",
+  preferSearch: true,
+};
+
+MANUFACTURER_SOURCES.skud.Parsec = {
+  website: "https://www.parsec.ru",
+  searchPathTemplate: "/search/?q={query}",
+  preferSearch: true,
+};
+
+MANUFACTURER_SOURCES.soue["\u0411\u0430\u0437\u043e\u0432\u044b\u0439"] = {
+  website: "https://roxton.pro",
+  searchPathTemplate: "/?s={query}",
+  preferSearch: true,
+};
+
+MANUFACTURER_SOURCES.soue.Roxton = {
+  website: "https://roxton.pro",
+  searchPathTemplate: "/?s={query}",
+  preferSearch: true,
+};
+
 export function getManufacturerSource(systemType, vendorName) {
   return MANUFACTURER_SOURCES[systemType]?.[vendorName] || { website: "" };
 }

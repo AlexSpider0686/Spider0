@@ -92,27 +92,49 @@ function trimSlash(url) {
   return String(url || "").replace(/\/+$/, "");
 }
 
+function applySearchTemplate(baseUrl, template, query) {
+  if (!baseUrl || !template) return "";
+  return `${trimSlash(baseUrl)}${String(template).replace("{query}", encodeURIComponent(query))}`;
+}
+
 function buildManufacturerSearchTargets(source, item, searchQuery) {
   const website = trimSlash(source?.website);
-  if (!website) return [];
+  const searchWebsite = trimSlash(source?.searchWebsite || source?.website);
+  if (!website && !searchWebsite) return [];
 
-  if (source?.preferSearch && source?.searchPathTemplate) {
-    return [`${website}${source.searchPathTemplate.replace("{query}", encodeURIComponent(searchQuery))}`];
-  }
+  const searchTemplates = dedupeStrings([
+    ...(Array.isArray(source?.searchPathTemplates) ? source.searchPathTemplates : []),
+    source?.searchPathTemplate || "",
+  ]);
 
-  if (item.sourcePath) {
-    return [`${website}${item.sourcePath}`];
-  }
+  const directPageUrls = dedupeStrings([
+    item?.sourcePath ? `${website}${item.sourcePath}` : "",
+    item?.sourcePath && searchWebsite && searchWebsite !== website ? `${searchWebsite}${item.sourcePath}` : "",
+  ]);
 
-  if (source?.searchPathTemplate) {
-    return [`${website}${source.searchPathTemplate.replace("{query}", encodeURIComponent(searchQuery))}`];
+  const searchUrls = [];
+  if (searchWebsite) {
+    for (const template of searchTemplates) {
+      const candidate = applySearchTemplate(searchWebsite, template, searchQuery);
+      if (candidate) searchUrls.push(candidate);
+    }
   }
 
   const encoded = encodeURIComponent(searchQuery);
+  const genericSearchUrls = searchWebsite
+    ? [
+        `${searchWebsite}/search/?q=${encoded}`,
+        `${searchWebsite}/search?q=${encoded}`,
+        `${searchWebsite}/?s=${encoded}`,
+      ]
+    : [];
+
   return dedupeStrings([
-    `${website}/search/?q=${encoded}`,
-    `${website}/search?q=${encoded}`,
-    `${website}/?s=${encoded}`,
+    ...(source?.preferSearch ? searchUrls : []),
+    ...directPageUrls,
+    ...searchUrls,
+    ...genericSearchUrls,
+    website || "",
   ]);
 }
 
@@ -224,13 +246,13 @@ function buildApiEndpoints() {
   const fromEnv =
     typeof import.meta !== "undefined" && import.meta?.env ? import.meta.env.VITE_PRICE_API_URL : undefined;
   const isBrowser = typeof window !== "undefined";
-  const endpoints = [fromEnv, isBrowser ? "/api/vendor-prices" : "", isBrowser ? "/vendor-prices" : ""];
+  const endpoints = [fromEnv, isBrowser ? "/api/vendor-prices" : ""];
 
   if (isBrowser && /localhost|127\.0\.0\.1/i.test(window.location.hostname)) {
     endpoints.push("https://spider0.vercel.app/api/vendor-prices");
   }
 
-  return [...new Set(endpoints.filter(Boolean))];
+  return [...new Set(endpoints.map((item) => String(item || "").trim()).filter(Boolean))];
 }
 
 function createTimeoutError(timeoutMs) {
@@ -283,7 +305,7 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 25000) {
 
 async function requestPriceApi(payload, options = {}) {
   const endpoints = buildApiEndpoints();
-  let lastError = null;
+  const errors = [];
 
   for (const endpoint of endpoints) {
     try {
@@ -298,13 +320,13 @@ async function requestPriceApi(payload, options = {}) {
         return await response.json();
       }
 
-      lastError = new Error(`Price API error: ${response.status} (${endpoint})`);
+      errors.push(`HTTP ${response.status} @ ${endpoint}`);
     } catch (error) {
-      lastError = error;
+      errors.push(`${endpoint}: ${error?.message || "unknown error"}`);
     }
   }
 
-  throw lastError || new Error("Price API error: all endpoints failed");
+  throw new Error(`Price API error: all endpoints failed. ${errors.join("; ")}`);
 }
 
 function normalizeFetchedByUnit(request, fetched, fallback) {
