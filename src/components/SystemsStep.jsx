@@ -400,6 +400,7 @@ export default function SystemsStep({
             const isRefreshing = Boolean(refreshingBySystem[system.id]);
             const isComparing = Boolean(comparingBySystem[system.id]);
             const isApsImportLoading = apsStatus?.state === "loading";
+            const displaySnapshot = isApsImportLoading && !projectBasedMode ? null : snapshot;
             const importElapsedSeconds =
               apsStatus?.startedAt && isApsImportLoading
                 ? Math.max(Math.floor((statusNow - new Date(apsStatus.startedAt).getTime()) / 1000), 0)
@@ -408,28 +409,28 @@ export default function SystemsStep({
           const showRecheck = Boolean(showRecheckBySystem[system.id]);
           const comparison = vendorComparisonsBySystem?.[system.id];
 
-          const marketMetrics = summarizePriceSnapshot(snapshot);
+          const marketMetrics = summarizePriceSnapshot(displaySnapshot);
           const pricedSourceCount = marketMetrics.pricedSourceCount;
           const checkedSourceCount = marketMetrics.checkedSourceCount;
           const checkedSourceHosts = marketMetrics.checkedSourceHosts.slice(0, 10);
           const recheckRequiredCount = marketMetrics.recheckRequiredCount;
           const avgConfidence = marketMetrics.confidencePercent;
           const strategy =
-            snapshot?.entries && snapshot.entries.length
-              ? snapshot.entries.map((item) => item.selectionStrategy).filter(Boolean).slice(0, 1)[0] || "average_all_sources"
+            displaySnapshot?.entries && displaySnapshot.entries.length
+              ? displaySnapshot.entries.map((item) => item.selectionStrategy).filter(Boolean).slice(0, 1)[0] || "average_all_sources"
               : "average_all_sources";
           const manufacturerChecked = manufacturerHost ? checkedSourceHosts.includes(manufacturerHost) : false;
           const manufacturerMatchedUrls = manufacturerHost
             ? [
                 ...new Set(
-                  (snapshot?.entries || [])
+                  (displaySnapshot?.entries || [])
                     .flatMap((item) => item.matchedSources || item.usedSources || [])
                     .filter((url) => toHost(url) === manufacturerHost)
                 ),
               ]
             : [];
           const manufacturerSuccess = manufacturerMatchedUrls.length > 0;
-          const recheckRows = (snapshot?.entries || []).filter((item) => item.recheckRequired);
+          const recheckRows = (displaySnapshot?.entries || []).filter((item) => item.recheckRequired);
           const detectedVendor = apsSnapshot?.detectedVendor || apsSnapshot?.vendorName || system.vendor;
           const vendorLockedByProject = Boolean(projectBasedMode && detectedVendor);
 
@@ -636,7 +637,7 @@ export default function SystemsStep({
                 </div>
               ) : null}
 
-              {snapshot ? (
+              {displaySnapshot ? (
                 <div className="pricing-caption">
                   <div className="pricing-source-row">
                     <span className="pricing-chip-tooltip">

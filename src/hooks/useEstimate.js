@@ -687,7 +687,7 @@ export default function useEstimate() {
             ...prev,
             [systemId]: buildApsImportStatus(
               "loading",
-              `PDF ??????????????????. ???????? ???????? ?????? ???? ????????????????... ???????? ${progress.completedBatches}/${progress.totalBatches}, ?????????????? ${progress.completedRequests}/${progress.totalRequests}.`,
+              `PDF \u0440\u0430\u0441\u043f\u043e\u0437\u043d\u0430\u043d. \u0418\u0434\u0435\u0442 \u0441\u0431\u043e\u0440 \u0446\u0435\u043d \u043f\u043e \u043f\u043e\u0437\u0438\u0446\u0438\u044f\u043c... \u0411\u0430\u0442\u0447 ${progress.completedBatches}/${progress.totalBatches}, \u043f\u043e\u0437\u0438\u0446\u0438\u0439 ${progress.completedRequests}/${progress.totalRequests}.`,
               {
                 stage: "pricing",
                 parsedItems: parsedProject.items?.length || 0,
@@ -725,7 +725,7 @@ export default function useEstimate() {
               ...prev,
               [systemId]: buildApsImportStatus(
                 "loading",
-                `??????? ??????: ${resolvedVendor}. ???? ???? ??? ?? ????????... ???? ${progress.completedBatches}/${progress.totalBatches}, ??????? ${progress.completedRequests}/${progress.totalRequests}.`,
+                `\u0423\u0442\u043e\u0447\u043d\u0435\u043d \u0432\u0435\u043d\u0434\u043e\u0440: ${resolvedVendor}. \u0418\u0434\u0435\u0442 \u0441\u0431\u043e\u0440 \u0446\u0435\u043d \u043f\u043e \u043f\u043e\u0437\u0438\u0446\u0438\u044f\u043c... \u0411\u0430\u0442\u0447 ${progress.completedBatches}/${progress.totalBatches}, \u043f\u043e\u0437\u0438\u0446\u0438\u0439 ${progress.completedRequests}/${progress.totalRequests}.`,
                 {
                   stage: "pricing",
                   parsedItems: parsedProject.items?.length || 0,
@@ -769,8 +769,8 @@ export default function useEstimate() {
         [systemId]: buildApsImportStatus(
           resolvedFallbackNotice ? "warning" : "success",
           resolvedFallbackNotice
-            ? `PDF ??????????????????, ???? ???????? ?????? ???????????????????? ?? fallback-????????????. ${resolvedFallbackNotice}`
-            : `?????????????? ?? ????????????????????????: ${resolvedSnapshot.items.length}. ?? ?????????? ???? ??????????????????????: ${resolvedSnapshot.sourceStats.itemsWithSupplierPrice}. ?????? ????????: ${resolvedSnapshot.sourceStats.itemsWithoutPrice}.`,
+            ? `PDF \u0440\u0430\u0441\u043f\u043e\u0437\u043d\u0430\u043d, \u043d\u043e \u0441\u0431\u043e\u0440 \u0446\u0435\u043d \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u043b\u0441\u044f \u0432 fallback-\u0440\u0435\u0436\u0438\u043c\u0435. ${resolvedFallbackNotice}`
+            : `\u041f\u043e\u0437\u0438\u0446\u0438\u0439 \u0432 \u0441\u043f\u0435\u0446\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u0438: ${resolvedSnapshot.items.length}. \u0421 \u0446\u0435\u043d\u043e\u0439 \u043e\u0442 \u043f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a\u043e\u0432: ${resolvedSnapshot.sourceStats.itemsWithSupplierPrice}. \u0411\u0435\u0437 \u0446\u0435\u043d\u044b: ${resolvedSnapshot.sourceStats.itemsWithoutPrice}.`,
           {
             stage: "done",
             parsedItems: resolvedSnapshot.items.length,
