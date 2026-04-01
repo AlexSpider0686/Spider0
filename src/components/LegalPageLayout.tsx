@@ -1,10 +1,18 @@
-import { ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { ReactNode } from "react";
+import { Link } from "react-router-dom";
 
-export function LegalPageLayout({ title, children }: { title: string; children: ReactNode }) {
+export function LegalPageLayout({
+  title,
+  children,
+  containerClassName = "",
+}: {
+  title: string;
+  children: ReactNode;
+  containerClassName?: string;
+}) {
   return (
     <main className="legal-page">
-      <div className="container legal-page__container">
+      <div className={`container legal-page__container ${containerClassName}`.trim()}>
         <Link className="legal-page__back" to="/">
           ← На главную
         </Link>

@@ -1409,6 +1409,10 @@ html {
   max-width: 920px;
 }
 
+.app-shell .legal-page__container--wide {
+  max-width: 1280px;
+}
+
 .app-shell .legal-page__back {
   display: inline-block;
   margin-bottom: 16px;
@@ -1435,6 +1439,118 @@ html {
 .app-shell .legal-page__content li {
   color: #d0e1f1;
   line-height: 1.7;
+}
+
+.app-shell .infosec-hero {
+  position: relative;
+  min-height: 320px;
+  overflow: hidden;
+  border-radius: 26px;
+  margin-bottom: 28px;
+  background:
+    linear-gradient(135deg, rgba(6, 17, 30, 0.18), rgba(6, 17, 30, 0.74)),
+    url("https://images.unsplash.com/photo-1510511459019-5dda7724fd87?auto=format&fit=crop&w=2200&q=80")
+      center/cover no-repeat;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.24);
+}
+
+.app-shell .infosec-hero__overlay {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at top right, rgba(65, 190, 255, 0.22), transparent 42%);
+}
+
+.app-shell .infosec-hero__content {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  align-content: end;
+  min-height: 320px;
+  padding: 28px;
+}
+
+.app-shell .infosec-hero__eyebrow {
+  display: inline-flex;
+  width: fit-content;
+  margin-bottom: 12px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #e5f5ff;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.app-shell .infosec-hero h2 {
+  margin: 0 0 12px;
+  font-size: 34px;
+  color: #ffffff;
+}
+
+.app-shell .infosec-hero p {
+  margin: 0;
+  max-width: 820px;
+  color: #e8f2fb;
+}
+
+.app-shell .infosec-table-wrap {
+  overflow-x: auto;
+  margin-top: 16px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(8, 19, 31, 0.72);
+}
+
+.app-shell .infosec-table {
+  width: 100%;
+  min-width: 1100px;
+  border-collapse: collapse;
+}
+
+.app-shell .infosec-table th,
+.app-shell .infosec-table td {
+  padding: 16px 18px;
+  vertical-align: top;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.app-shell .infosec-table th {
+  position: sticky;
+  top: 0;
+  background: rgba(10, 23, 37, 0.96);
+  color: #f4fbff;
+  font-size: 13px;
+  letter-spacing: 0.03em;
+}
+
+.app-shell .infosec-table td {
+  color: #d4e5f4;
+  line-height: 1.6;
+}
+
+.app-shell .infosec-table tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.app-shell .infosec-csv-block {
+  margin-top: 16px;
+  padding: 18px;
+  border-radius: 22px;
+  background: rgba(4, 13, 22, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.app-shell .infosec-csv-block pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #dbedf9;
+  font-size: 13px;
+  line-height: 1.65;
 }
 
 .app-shell .about-system-page {

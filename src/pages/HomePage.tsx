@@ -480,6 +480,7 @@ export function HomePage() {
             <Link to="/legal/privacy">Политика конфиденциальности</Link>
             <Link to="/legal/personal-data">Политика обработки ПДн</Link>
             <Link to="/legal/user-agreement">Пользовательское соглашение</Link>
+            <Link to="/legal/information-security">Информационная безопасность</Link>
             <Link to="/legal/cookies">Cookies</Link>
             <Link to="/legal/disclaimer">Отказ от ответственности</Link>
           </div>
