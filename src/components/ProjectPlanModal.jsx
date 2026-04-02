@@ -36,7 +36,7 @@ export default function ProjectPlanModal({ open, onClose, onSelectFormat }) {
               <FileSpreadsheet size={20} />
             </span>
             <strong>MS Project (.mpp)</strong>
-            <span>Настоящий файл Microsoft Project для календарного планирования, а не XML для ручного импорта.</span>
+            <span>Файл Microsoft Project для календарного планирования и ведения графика проекта.</span>
           </button>
         </div>
 

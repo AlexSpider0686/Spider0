@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { execFile } from "node:child_process";
-import { buildMsProjectXml, buildProjectPlan } from "../src/lib/projectPlanExport.js";
+import { buildMsProjectXml, buildProjectPlan } from "../src/lib/projectPlanModel.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -13,7 +13,7 @@ function filePart(value, fallback) {
 
 async function convertXmlToMpp(xmlPath, mppPath) {
   if (process.platform !== "win32") {
-    throw new Error("Экспорт в MPP поддерживается только в Windows-контуре с установленным Microsoft Project.");
+    throw new Error("Экспорт в .mpp доступен только в Windows-контуре с установленным Microsoft Project. В web-деплое без Windows/Project этот формат недоступен.");
   }
 
   const script = `
