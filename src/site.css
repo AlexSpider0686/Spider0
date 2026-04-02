@@ -235,6 +235,24 @@ html {
   animation: fade-up 0.7s ease forwards;
 }
 
+.app-shell .hero__brand-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.app-shell .hero__brand-mark {
+  width: clamp(48px, 5vw, 74px);
+  height: clamp(48px, 5vw, 74px);
+  flex: 0 0 auto;
+  margin-top: 8px;
+  opacity: 0.98;
+}
+
+.app-shell .hero__brand-title span {
+  display: block;
+}
+
 .app-shell .hero__lead {
   max-width: 780px;
   font-size: clamp(18px, 2vw, 22px);
@@ -1912,6 +1930,16 @@ html {
 
   .app-shell .hero h1 {
     font-size: 42px;
+  }
+
+  .app-shell .hero__brand-title {
+    gap: 12px;
+  }
+
+  .app-shell .hero__brand-mark {
+    width: 42px;
+    height: 42px;
+    margin-top: 6px;
   }
 
   .app-shell .section {

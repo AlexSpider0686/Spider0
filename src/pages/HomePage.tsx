@@ -6,6 +6,7 @@ import { HeroVideo } from "../components/HeroVideo";
 import { MetricSpotlightModal } from "../components/MetricSpotlightModal";
 import { PromoReelPlayer } from "../components/PromoReelPlayer";
 import { SectionHeader } from "../components/SectionHeader";
+import projectCoreMarkUrl from "../assets/project-core-mark.svg";
 import { comparisonCards, growthPoints, metrics, siteConfig } from "../data/siteContent";
 
 const sequenceSteps = [
@@ -195,7 +196,10 @@ export function HomePage() {
         <HeroVideo variant="legacy" />
         <div className="container hero__content">
           <div className="hero__badge">Presale / Budget Intelligence / Security Systems</div>
-          <h1>{siteConfig.brand} — предварительная бюджетная оценка систем безопасности без Excel-хаоса</h1>
+          <h1 className="hero__brand-title">
+            <img className="hero__brand-mark" src={projectCoreMarkUrl} alt="" aria-hidden="true" />
+            <span>{siteConfig.brand} — предварительная бюджетная оценка систем безопасности без Excel-хаоса</span>
+          </h1>
           <p className="hero__lead">
             Платформа собирает бюджет по АПС, СОУЭ, СОТС, СОТ, СКУД и ССОИ, учитывает зонирование, тип объекта, регион, а затем запускает собственный
             AI-аудит цен и трудозатрат, который снимает риск недооцененности бюджета.
