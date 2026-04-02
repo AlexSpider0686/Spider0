@@ -1041,6 +1041,19 @@ body.ai-survey-open .object-photo-card {
   border-color: rgba(47, 127, 241, 0.4);
 }
 
+.project-plan-option--disabled,
+.project-plan-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.project-plan-option--disabled:hover,
+.project-plan-option:disabled:hover {
+  border-color: rgba(155, 176, 208, 0.34);
+}
+
 .project-plan-option strong {
   font-size: 15px;
 }
@@ -1058,6 +1071,18 @@ body.ai-survey-open .object-photo-card {
   justify-content: center;
   color: #ffffff;
   background: linear-gradient(135deg, var(--accent), var(--accent2));
+}
+
+.project-plan-option__warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  color: #8b3d1f;
+  background: rgba(255, 235, 220, 0.95);
+  border: 1px solid rgba(231, 171, 134, 0.55);
+  line-height: 1.45;
 }
 
 .project-plan-modal__note {

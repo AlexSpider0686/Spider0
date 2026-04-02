@@ -193,14 +193,33 @@ async function exportPptx(plan) {
 }
 
 async function exportMpp(payload) {
-  const res = await fetch("/api/project-plan-export", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ format: "mpp", payload }) });
+  const res = await fetch("/api/project-plan-export", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ format: "mpp", payload }),
+  });
   if (!res.ok) {
     let message = "Не удалось сформировать MPP-файл.";
-    try { message = (await res.json())?.error || message; } catch {}
+    try {
+      const raw = await res.text();
+      if (raw) {
+        try {
+          message = JSON.parse(raw)?.error || message;
+        } catch {
+          message = raw.includes("FUNCTION_INVOCATION_FAILED")
+            ? "Экспорт в .mpp сейчас недоступен в web-деплое. Для этого формата нужен Windows-контур с установленным Microsoft Project."
+            : raw;
+        }
+      }
+    } catch {
+      // Keep the default message when response parsing fails.
+    }
     throw new Error(message);
   }
   const blob = await res.blob();
-  const name = parseDisposition(res.headers.get("content-disposition")) || `${filePart(payload?.objectData?.projectName, "project")}_project_plan.mpp`;
+  const name =
+    parseDisposition(res.headers.get("content-disposition")) ||
+    `${filePart(payload?.objectData?.projectName, "project")}_project_plan.mpp`;
   downloadBlob(name, blob);
 }
 
