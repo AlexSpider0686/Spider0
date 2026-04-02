@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ProjectCore Agent Shell</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand__badge">LOCAL AGENT</div>
+          <h1>ProjectCore Agent Shell</h1>
+          <p>Codex-style среда на GigaChat с GitHub / GitVerse и локальной рабочей папкой.</p>
+        </div>
+
+        <section class="panel">
+          <h2>Модель</h2>
+          <label class="field">
+            <span>Модель GigaChat</span>
+            <input id="gigachatModel" placeholder="GigaChat-2-Max" />
+          </label>
+        </section>
+
+        <section class="panel">
+          <h2>Рабочая папка</h2>
+          <label class="field">
+            <span>Workspace</span>
+            <div class="inline-row">
+              <input id="workspacePath" placeholder="C:\\Projects\\MyApp" />
+              <button id="pickWorkspaceButton" class="ghost-button">Выбрать</button>
+            </div>
+          </label>
+        </section>
+
+        <section class="panel">
+          <h2>Git</h2>
+          <label class="field">
+            <span>Провайдер git</span>
+            <select id="gitProvider">
+              <option value="github">GitHub</option>
+              <option value="gitverse">GitVerse</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>GitHub remote</span>
+            <input id="githubRemote" placeholder="https://github.com/user/repo.git" />
+          </label>
+          <label class="field">
+            <span>GitVerse remote</span>
+            <input id="gitverseRemote" placeholder="https://gitverse.ru/user/repo.git" />
+          </label>
+          <button id="switchRemoteButton" class="ghost-button full-width">Переключить remote</button>
+        </section>
+
+        <section class="panel">
+          <h2>Доступы</h2>
+          <label class="field">
+            <span>GigaChat Authorization Key</span>
+            <input id="gigachatAuthorizationKey" type="password" placeholder="Вставь ключ целиком из Studio, можно даже если он начинается с Basic" />
+          </label>
+          <label class="field">
+            <span>GigaChat Client ID</span>
+            <input id="gigachatClientId" type="password" />
+          </label>
+          <label class="field">
+            <span>GigaChat Client Secret</span>
+            <input id="gigachatClientSecret" type="password" />
+          </label>
+          <label class="field">
+            <span>GigaChat Scope</span>
+            <input id="gigachatScope" placeholder="GIGACHAT_API_PERS" />
+          </label>
+          <label class="checkbox-field">
+            <input id="gigachatAllowInsecureTls" type="checkbox" />
+            <span>Небезопасный TLS для GigaChat, только для локальной диагностики</span>
+          </label>
+          <button id="testGigaChatButton" class="ghost-button full-width">Проверить подключение GigaChat</button>
+          <button id="saveSettingsButton" class="primary-button full-width">Сохранить настройки</button>
+        </section>
+      </aside>
+
+      <main class="workspace">
+        <header class="workspace__header">
+          <div>
+            <div class="workspace__eyebrow">AGENT CONSOLE</div>
+            <h2>Codex-style интерфейс для GigaChat</h2>
+          </div>
+          <div class="workspace__status" id="statusPill">Готов к работе</div>
+        </header>
+
+        <section class="transcript" id="transcript"></section>
+
+        <section class="composer">
+          <div class="composer__input-row">
+            <button id="pickAttachmentsButton" class="ghost-button composer__attach-button" title="Добавить файлы">
+              +
+            </button>
+            <textarea id="promptInput" placeholder="Опиши задачу простыми словами: что дорисовать, что изменить в проекте, какой алгоритм добавить, что проанализировать. Можно вставить скриншот через Ctrl+V."></textarea>
+          </div>
+
+          <div id="attachmentsPanel" class="attachments-panel" hidden>
+            <div class="attachments-panel__title">Вложения для анализа</div>
+            <div id="attachmentsList" class="attachments-list"></div>
+          </div>
+
+          <div class="composer__hint">
+            `+` загружает любые файлы, `Ctrl+V` вставляет скриншот из буфера обмена.
+          </div>
+
+          <div class="composer__actions">
+            <button id="listWorkspaceButton" class="ghost-button">Показать файлы</button>
+            <button id="runAgentButton" class="primary-button">Выполнить задачу</button>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <template id="messageTemplate">
+      <article class="message">
+        <div class="message__role"></div>
+        <div class="message__body"></div>
+      </article>
+    </template>
+
+    <script src="./app.js"></script>
+  </body>
+  </html>

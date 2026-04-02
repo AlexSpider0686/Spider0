@@ -1,7 +1,15 @@
-import React from "react";
-import { CalendarRange, FileSpreadsheet, Presentation, X } from "lucide-react";
+import React, { useMemo } from "react";
+import { AlertCircle, CalendarRange, FileSpreadsheet, Presentation, X } from "lucide-react";
+
+function isHostedWebContour() {
+  if (typeof window === "undefined") return false;
+  const host = String(window.location.hostname || "").toLowerCase();
+  return host.endsWith(".vercel.app");
+}
 
 export default function ProjectPlanModal({ open, onClose, onSelectFormat }) {
+  const mppDisabled = useMemo(() => isHostedWebContour(), []);
+
   if (!open) return null;
 
   return (
@@ -31,12 +39,28 @@ export default function ProjectPlanModal({ open, onClose, onSelectFormat }) {
             <span>Оформленная презентация с титульным листом, дорожной картой, графиками, диаграммами и инфослайдами.</span>
           </button>
 
-          <button className="project-plan-option" type="button" onClick={() => onSelectFormat("mpp")}>
+          <button
+            className={`project-plan-option${mppDisabled ? " project-plan-option--disabled" : ""}`}
+            type="button"
+            onClick={() => !mppDisabled && onSelectFormat("mpp")}
+            disabled={mppDisabled}
+            title={
+              mppDisabled
+                ? "В web-версии без Windows и Microsoft Project формат .mpp недоступен."
+                : "Сформировать план проекта в формате Microsoft Project"
+            }
+          >
             <span className="project-plan-option__icon">
               <FileSpreadsheet size={20} />
             </span>
             <strong>MS Project (.mpp)</strong>
             <span>Файл Microsoft Project для календарного планирования и ведения графика проекта.</span>
+            {mppDisabled ? (
+              <span className="project-plan-option__warning">
+                <AlertCircle size={14} />
+                В web-версии этот формат недоступен. Экспорт работает в локальном Windows-контуре с установленным Microsoft Project.
+              </span>
+            ) : null}
           </button>
         </div>
 

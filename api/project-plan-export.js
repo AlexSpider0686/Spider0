@@ -13,7 +13,11 @@ function filePart(value, fallback) {
 
 async function convertXmlToMpp(xmlPath, mppPath) {
   if (process.platform !== "win32") {
-    throw new Error("Экспорт в .mpp доступен только в Windows-контуре с установленным Microsoft Project. В web-деплое без Windows/Project этот формат недоступен.");
+    const error = new Error(
+      "Экспорт в .mpp доступен только в Windows-контуре с установленным Microsoft Project. В web-деплое без Windows/Project этот формат недоступен."
+    );
+    error.statusCode = 501;
+    throw error;
   }
 
   const script = `
@@ -39,17 +43,23 @@ try {
 if (-not (Test-Path -LiteralPath $mppPath)) { throw 'MPP file was not created.' }
 `;
 
-  await execFileAsync("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script], {
-    windowsHide: true,
-    timeout: 120000,
-    maxBuffer: 1024 * 1024,
-  });
+  await execFileAsync(
+    "powershell.exe",
+    ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+    {
+      windowsHide: true,
+      timeout: 120000,
+      maxBuffer: 1024 * 1024,
+    }
+  );
 }
 
 export async function buildProjectPlanArtifact({ format, payload }) {
   const normalizedFormat = format === "msproject" ? "mpp" : format;
   if (normalizedFormat !== "mpp") {
-    throw new Error("Поддерживается только экспорт проекта в MPP.");
+    const error = new Error("Поддерживается только экспорт проекта в MPP.");
+    error.statusCode = 400;
+    throw error;
   }
 
   const plan = buildProjectPlan(payload || {});
@@ -69,5 +79,59 @@ export async function buildProjectPlanArtifact({ format, payload }) {
     };
   } finally {
     await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+}
+
+function setCorsHeaders(res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+}
+
+function normalizeBody(req) {
+  if (!req || req.body === undefined || req.body === null) return {};
+  if (typeof req.body === "string") {
+    try {
+      return JSON.parse(req.body);
+    } catch {
+      const error = new Error("Некорректное тело запроса JSON.");
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+  return typeof req.body === "object" ? req.body : {};
+}
+
+export default async function handler(req, res) {
+  setCorsHeaders(res);
+
+  if (req.method === "OPTIONS") {
+    res.status(204).end();
+    return;
+  }
+
+  if (req.method !== "POST") {
+    res.status(405).json({ ok: false, error: "Method not allowed" });
+    return;
+  }
+
+  try {
+    const body = normalizeBody(req);
+    const artifact = await buildProjectPlanArtifact({
+      format: body?.format,
+      payload: body?.payload,
+    });
+
+    res.setHeader("Content-Type", artifact.contentType || "application/octet-stream");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename*=UTF-8''${encodeURIComponent(artifact.fileName || "project_plan.mpp")}`
+    );
+    res.status(200).send(artifact.buffer);
+  } catch (error) {
+    res.status(error?.statusCode || 500).json({
+      ok: false,
+      error: error?.message || "Не удалось сформировать MPP-файл.",
+    });
   }
 }
