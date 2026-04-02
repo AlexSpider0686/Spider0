@@ -1,50 +1,34 @@
 import PptxGenJS from "pptxgenjs";
-import { buildProjectTimeline } from "./projectTimeline";
+import { buildProjectTimeline } from "./projectTimeline.js";
 
-const COLORS = {
-  bg: "EEF4FC",
-  panel: "F7FAFF",
-  line: "B7C7DC",
-  title: "1E3553",
-  text: "2F4A69",
-  muted: "6E8098",
-  accent: "1E9FC5",
-  accentDark: "1F5A99",
-  success: "16A34A",
-  warning: "F59E0B",
-  purple: "7C3AED",
+const C = {
+  bg: "EEF4FA",
+  ink: "17324E",
+  text: "32506B",
+  muted: "6E8398",
+  line: "D6E3EF",
+  white: "FFFFFF",
+  panel: "F8FBFE",
+  sky: "EAF4FF",
+  blue: "1D88D2",
+  blueDark: "165A8E",
+  green: "189F6B",
+  violet: "785AF8",
+  gold: "D6A63D",
+  red: "D94A61",
 };
 
-const CURRENCY_FORMATTER = new Intl.NumberFormat("ru-RU", {
-  maximumFractionDigits: 0,
-});
+const RUB = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
 
-function safeNum(value, fallback = 0) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
+const n = (v, f = 0) => {
+  const p = Number(v);
+  return Number.isFinite(p) ? p : f;
+};
 
-function num(value, digits = 1) {
-  return new Intl.NumberFormat("ru-RU", {
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  }).format(safeNum(value));
-}
-
-function rub(value) {
-  return `${CURRENCY_FORMATTER.format(safeNum(value))} ₽`;
-}
-
-function sanitizeText(value) {
-  return String(value ?? "")
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
-    .trim();
-}
-
-function safeFilePart(value, fallback) {
-  const cleaned = sanitizeText(value || fallback).replace(/[<>:"/\\|?*]+/g, "_").slice(0, 80);
-  return cleaned || fallback;
-}
+const txt = (v) => String(v ?? "").replace(/[\u0000-\u001F\u007F]/g, "").trim();
+const filePart = (v, fallback) => txt(v || fallback).replace(/[<>:"/\\|?*]+/g, "_").slice(0, 80) || fallback;
+const rub = (v) => `${RUB.format(n(v))} ₽`;
+const dayRange = (s, d) => (d <= 1 ? `Д${s}` : `Д${s}-Д${s + d - 1}`);
 
 function downloadBlob(fileName, blob) {
   const url = URL.createObjectURL(blob);
@@ -57,360 +41,271 @@ function downloadBlob(fileName, blob) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 
-function monthRange(start, duration) {
-  const finish = start + duration - 1;
-  return duration <= 1 ? `M${start}` : `M${start}-M${finish}`;
+function parseDisposition(v) {
+  const raw = String(v || "");
+  const utf = raw.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf?.[1]) return decodeURIComponent(utf[1]);
+  return raw.match(/filename="?([^"]+)"?/i)?.[1] || null;
 }
 
-function phaseDuration(phase, minDuration = 1) {
-  return Math.max(minDuration, safeNum(phase?.duration, minDuration));
-}
-
-function splitDuration(total, parts) {
-  const safeTotal = Math.max(safeNum(total, 0), 1);
-  const safeParts = (Array.isArray(parts) ? parts : []).filter((item) => safeNum(item?.weight, 0) > 0);
-  const weightSum = safeParts.reduce((sum, item) => sum + safeNum(item.weight, 0), 0) || 1;
-  let remaining = safeTotal;
-
-  return safeParts.map((item, index) => {
-    if (index === safeParts.length - 1) {
-      return { ...item, duration: Math.max(1, remaining) };
-    }
-
-    const raw = Math.round((safeTotal * safeNum(item.weight, 0)) / weightSum);
-    const duration = Math.max(1, Math.min(raw, remaining - (safeParts.length - index - 1)));
-    remaining -= duration;
-    return { ...item, duration };
+function splitDuration(total, rows) {
+  const safeTotal = Math.max(n(total, 1), 1);
+  const parts = rows.filter((r) => n(r.weight) > 0);
+  const weight = parts.reduce((s, r) => s + n(r.weight), 0) || 1;
+  let left = safeTotal;
+  return parts.map((row, i) => {
+    if (i === parts.length - 1) return { ...row, duration: Math.max(left, 1) };
+    const raw = Math.round((safeTotal * n(row.weight)) / weight);
+    const duration = Math.max(1, Math.min(raw, left - (parts.length - i - 1)));
+    left -= duration;
+    return { ...row, duration };
   });
 }
 
-function buildSystemPlanningRows(systemResults = [], timeline) {
-  const phaseMap = timeline.phaseMap || {};
-  const smrPhase = phaseMap.smr;
-  const pnrPhase = phaseMap.pnr;
-
+function buildSystemRows(systemResults, timeline) {
+  const smr = timeline.phaseMap.smr;
+  const pnr = timeline.phaseMap.pnr;
   return (Array.isArray(systemResults) ? systemResults : []).map((item, index) => {
-    const executionDuration = Math.max(1, Math.min(safeNum(item?.executionDurationMonths, smrPhase?.duration || 1), smrPhase?.duration || 1));
-    const pnrDuration = Math.max(1, Math.min(Math.ceil(executionDuration * 0.35), pnrPhase?.duration || 1));
-    const smrStart = Math.max(safeNum(smrPhase?.start, 1), safeNum(smrPhase?.finish, 1) - executionDuration + 1);
-    const pnrStart = Math.max(safeNum(pnrPhase?.start, 1), safeNum(pnrPhase?.finish, 1) - pnrDuration + 1);
-
+    const smrDuration = Math.max(5, Math.min(Math.ceil(n(item?.executionDurationMonths, 1) * 22), smr.duration));
+    const pnrDuration = Math.max(3, Math.min(Math.ceil(smrDuration * 0.35), pnr.duration));
     return {
-      order: index + 1,
-      systemName: sanitizeText(item?.systemName || item?.systemType || `Система ${index + 1}`),
-      vendor: sanitizeText(item?.vendor || "Не определен"),
-      estimateMode: item?.estimateMode === "project_pdf" ? "по проектной спецификации" : "по расчетной модели",
-      smrStart,
-      smrDuration: executionDuration,
-      pnrStart,
+      name: txt(item?.systemName || item?.systemType || `Система ${index + 1}`),
+      vendor: txt(item?.vendor || "Не определен"),
+      mode: item?.estimateMode === "project_pdf" ? "По PDF-спецификации" : "По расчетной модели",
+      smrStart: Math.max(smr.start, smr.finish - smrDuration + 1),
+      smrDuration,
+      pnrStart: Math.max(pnr.start, pnr.finish - pnrDuration + 1),
       pnrDuration,
-      total: safeNum(item?.total, 0),
+      total: n(item?.total, 0),
     };
   });
 }
 
-function buildDetailedPlan({ objectData, systemResults, totals, projectRisks }) {
+export function buildProjectPlan(payload = {}) {
+  const { objectData = {}, systemResults = [], totals = {}, projectRisks = [], apsProjectExports = [] } = payload;
   const timeline = buildProjectTimeline(systemResults, objectData, totals);
   const phaseMap = timeline.phaseMap;
-  const designTasks = splitDuration(phaseDuration(phaseMap.design), [
-    { name: "Старт проекта и верификация исходных данных", weight: 1.1 },
-    { name: "AI-обследование, уточнение маршрутов и инженерных ограничений", weight: 1.3 },
-    { name: "Формирование технического решения и фиксация проектных допущений", weight: 1.2 },
-    { name: "Утверждение верхнеуровневого плана и координация смежных систем", weight: 0.9 },
-  ]);
-  const procurementTasks = splitDuration(phaseDuration(phaseMap.procurement), [
-    { name: "Подготовка закупочной спецификации и запросы поставщикам", weight: 1.15 },
-    { name: "Согласование бюджета, договорных условий и логистики", weight: 0.95 },
-  ]);
-  const deliveryTasks = splitDuration(phaseDuration(phaseMap.delivery), [
-    { name: "Производство и комплектование заказа", weight: 1.1 },
-    { name: "Поставка оборудования на объект и входной контроль", weight: 0.9 },
-  ]);
-  const smrTasks = splitDuration(phaseDuration(phaseMap.smr), [
-    { name: "Подготовка фронта работ и мобилизация", weight: 0.7 },
-    { name: "Прокладка кабельных трасс и монтаж инфраструктуры", weight: 1.4 },
-    { name: "Монтаж оборудования и шкафов", weight: 1.2 },
-    { name: "Локальная проверка готовности к ПНР", weight: 0.7 },
-  ]);
-  const pnrTasks = splitDuration(phaseDuration(phaseMap.pnr), [
-    { name: "Пусконаладка и адресация оборудования", weight: 1.1 },
-    { name: "Интеграция подсистем, сценарии и комплексные испытания", weight: 1.2 },
-    { name: "Сдача исполнительных материалов и выпуск итоговой презентации", weight: 0.7 },
-  ]);
-
   const tasks = [];
   let order = 1;
-
-  function pushSequential(phaseKey, rows) {
-    let currentStart = safeNum(phaseMap[phaseKey]?.start, 1);
+  const push = (phase, rows, owner) => {
+    let start = phaseMap[phase].start;
     rows.forEach((row) => {
-      tasks.push({
-        id: order,
-        order,
-        phase: phaseKey,
-        name: row.name,
-        start: currentStart,
-        duration: row.duration,
-        finish: currentStart + row.duration - 1,
-        owner: "Проектная команда",
-        comment: `Фаза ${phaseMap[phaseKey]?.label || phaseKey}.`,
-      });
-      currentStart += row.duration;
+      tasks.push({ order, phase, name: row.name, start, duration: row.duration, finish: start + row.duration - 1, owner, comment: phaseMap[phase].label });
+      start += row.duration;
       order += 1;
     });
-  }
+  };
 
-  pushSequential("design", designTasks);
-  pushSequential("procurement", procurementTasks);
-  pushSequential("delivery", deliveryTasks);
-  pushSequential("smr", smrTasks);
-  pushSequential("pnr", pnrTasks);
+  push("design", splitDuration(phaseMap.design.duration, [
+    { name: "Старт проекта и верификация исходных данных", weight: 1.1 },
+    { name: "AI-обследование и фиксация ограничений", weight: 1.2 },
+    { name: "Формирование технической концепции", weight: 1.15 },
+    { name: "Утверждение верхнеуровневого графика", weight: 0.95 },
+  ]), "PMO / проектный контур");
+  push("procurement", splitDuration(phaseMap.procurement.duration, [
+    { name: "Подготовка закупочной спецификации", weight: 1.15 },
+    { name: "Согласование бюджета и логистики", weight: 0.95 },
+  ]), "Закупка");
+  push("delivery", splitDuration(phaseMap.delivery.duration, [
+    { name: "Комплектация заказа", weight: 1.05 },
+    { name: "Поставка на объект и входной контроль", weight: 0.95 },
+  ]), "Логистика");
+  push("smr", splitDuration(phaseMap.smr.duration, [
+    { name: "Подготовка фронта работ", weight: 0.75 },
+    { name: "Прокладка трасс и монтаж инфраструктуры", weight: 1.45 },
+    { name: "Монтаж оборудования", weight: 1.2 },
+    { name: "Локальная проверка готовности", weight: 0.7 },
+  ]), "Монтаж");
+  push("pnr", splitDuration(phaseMap.pnr.duration, [
+    { name: "Пусконаладка и адресация", weight: 1.1 },
+    { name: "Интеграция и комплексные испытания", weight: 1.2 },
+    { name: "Сдача исполнительных материалов", weight: 0.7 },
+  ]), "ПНР / интеграция");
 
-  const systemRows = buildSystemPlanningRows(systemResults, timeline);
+  const systemRows = buildSystemRows(systemResults, timeline);
   systemRows.forEach((row) => {
-    tasks.push({
-      id: order,
-      order,
-      phase: "smr",
-      name: `${row.systemName}: монтаж и трассы`,
-      start: row.smrStart,
-      duration: row.smrDuration,
-      finish: row.smrStart + row.smrDuration - 1,
-      owner: `Подсистема / ${row.vendor}`,
-      comment: `Режим расчета ${row.estimateMode}. Бюджет по системе ${rub(row.total)}.`,
-    });
+    tasks.push({ order, phase: "smr", name: `${row.name}: монтаж и трассы`, start: row.smrStart, duration: row.smrDuration, finish: row.smrStart + row.smrDuration - 1, owner: `${row.vendor} / монтаж`, comment: row.mode });
     order += 1;
-    tasks.push({
-      id: order,
-      order,
-      phase: "pnr",
-      name: `${row.systemName}: ПНР и интеграция`,
-      start: row.pnrStart,
-      duration: row.pnrDuration,
-      finish: row.pnrStart + row.pnrDuration - 1,
-      owner: `Подсистема / ${row.vendor}`,
-      comment: `Финальная наладка и сдача по системе.`,
-    });
+    tasks.push({ order, phase: "pnr", name: `${row.name}: ПНР и интеграция`, start: row.pnrStart, duration: row.pnrDuration, finish: row.pnrStart + row.pnrDuration - 1, owner: `${row.vendor} / ПНР`, comment: "Финальная настройка и приемка" });
     order += 1;
   });
 
-  const risks = (Array.isArray(projectRisks) ? projectRisks : []).slice(0, 3).map((item) => ({
-    title: sanitizeText(item?.title || "Риск проекта"),
-    severity: sanitizeText(item?.severityLabel || item?.severity || "повышенный"),
-    summary: sanitizeText(item?.summary || item?.impact || ""),
-  }));
+  const cost = [
+    { label: "Оборудование", color: C.blue, value: n(totals?.totalEquipment, 0) },
+    { label: "Материалы", color: C.violet, value: n(totals?.totalMaterials, 0) },
+    { label: "СМР + ПНР", color: C.green, value: n(totals?.totalLabor, 0) },
+    { label: "Проектирование", color: C.gold, value: n(totals?.totalDesign, 0) },
+  ].filter((item) => item.value > 0);
 
   return {
     timeline,
     tasks,
     systemRows,
-    risks,
+    cost,
+    risks: (Array.isArray(projectRisks) ? projectRisks : []).slice(0, 5).map((item) => ({
+      title: txt(item?.title || "Проектный риск"),
+      severity: txt(item?.severityLabel || item?.severity || "Средний"),
+      summary: txt(item?.summary || item?.impact || "Требует контроля при календарном планировании."),
+    })),
+    notes: [
+      `Тип объекта: ${txt(objectData?.objectTypeLabel || objectData?.objectType || "Объект")}.`,
+      `Активных систем: ${timeline.systemsCount}.`,
+      apsProjectExports?.length ? `По ${apsProjectExports.length} системам использована проектная PDF-спецификация.` : "План собран по параметрической модели платформы.",
+      "Единица измерения сроков: рабочие дни.",
+    ],
     summary: {
-      projectName: sanitizeText(objectData?.projectName || "Объект 1"),
-      address: sanitizeText(objectData?.address || "Адрес не указан"),
-      totalMonths: timeline.totalMonths,
+      generatedAt: new Date().toLocaleDateString("ru-RU"),
+      projectName: txt(objectData?.projectName || "Объект 1"),
+      address: txt(objectData?.address || "Адрес не указан"),
+      objectType: txt(objectData?.objectTypeLabel || objectData?.objectType || "Объект"),
       systemsCount: timeline.systemsCount,
-      totalBudget: safeNum(totals?.total, 0),
+      totalDays: timeline.totalDays,
+      totalBudget: n(totals?.total, 0),
     },
     disclaimer:
-      "Сроки носят предварительный характер и предназначены для верхнеуровневого планирования. Окончательный график требует подтверждения РД, доступов, поставок, подрядных ресурсов и календарных ограничений объекта.",
+      "Сроки указаны в рабочих днях и носят предварительный характер. Финальный календарный график уточняется после подтверждения РД, поставок, доступа на объект и подрядного ресурса.",
   };
 }
 
-function addFrame(slide, title, subtitle, pageNumber) {
-  slide.background = { color: COLORS.bg };
-  slide.addShape("rect", {
-    x: 0.35,
-    y: 0.2,
-    w: 12.63,
-    h: 0.02,
-    fill: { color: COLORS.accent },
-    line: { color: COLORS.accent, pt: 0 },
-  });
-  slide.addText(title, {
-    x: 0.5,
-    y: 0.35,
-    w: 10.2,
-    h: 0.42,
-    fontFace: "Calibri",
-    fontSize: 21,
-    bold: true,
-    color: COLORS.title,
-  });
-  slide.addText(subtitle, {
-    x: 0.5,
-    y: 0.82,
-    w: 10.8,
-    h: 0.32,
-    fontFace: "Calibri",
-    fontSize: 11,
-    color: COLORS.muted,
-  });
-  slide.addText(String(pageNumber), {
-    x: 12.52,
-    y: 7.02,
-    w: 0.25,
-    h: 0.2,
-    align: "right",
-    fontFace: "Calibri",
-    fontSize: 10,
-    color: COLORS.muted,
-  });
+function bg(slide) {
+  slide.background = { color: C.bg };
+  slide.addShape("rect", { x: 0, y: 0, w: 13.333, h: 0.42, fill: { color: C.blueDark }, line: { color: C.blueDark, pt: 0 } });
+  slide.addShape("ellipse", { x: 10.7, y: -1.2, w: 3.7, h: 3.7, fill: { color: "DCEEFF", transparency: 16 }, line: { color: "DCEEFF", transparency: 100, pt: 0 } });
+  slide.addShape("ellipse", { x: -0.9, y: 5.7, w: 2.8, h: 2.8, fill: { color: "DFF7F0", transparency: 18 }, line: { color: "DFF7F0", transparency: 100, pt: 0 } });
 }
 
-function drawTaskTable(slide, rows) {
-  const headers = ["#", "Этап", "Период", "Длит.", "Ответственный", "Комментарий"];
-  const widths = [0.45, 3.35, 1.05, 0.7, 1.45, 4.2];
-  const startX = 0.55;
-  const startY = 1.45;
-  const rowH = 0.34;
-
-  headers.forEach((header, index) => {
-    const x = startX + widths.slice(0, index).reduce((sum, item) => sum + item, 0);
-    slide.addShape("rect", {
-      x,
-      y: startY,
-      w: widths[index],
-      h: rowH,
-      fill: { color: "DCE8F7" },
-      line: { color: COLORS.line, pt: 1 },
-    });
-    slide.addText(header, {
-      x: x + 0.04,
-      y: startY + 0.08,
-      w: widths[index] - 0.08,
-      h: 0.16,
-      fontFace: "Calibri",
-      fontSize: 10,
-      bold: true,
-      color: COLORS.title,
-      align: index === 0 ? "center" : "left",
-    });
-  });
-
-  rows.forEach((row, rowIndex) => {
-    const y = startY + rowH + rowIndex * rowH;
-    const fill = rowIndex % 2 === 0 ? "FFFFFF" : "F7FAFF";
-    const values = [
-      String(row.order),
-      row.name,
-      monthRange(row.start, row.duration),
-      `${row.duration} мес.`,
-      row.owner,
-      row.comment,
-    ];
-
-    values.forEach((value, index) => {
-      const x = startX + widths.slice(0, index).reduce((sum, item) => sum + item, 0);
-      slide.addShape("rect", {
-        x,
-        y,
-        w: widths[index],
-        h: rowH,
-        fill: { color: fill },
-        line: { color: COLORS.line, pt: 1 },
-      });
-      slide.addText(value, {
-        x: x + 0.04,
-        y: y + 0.08,
-        w: widths[index] - 0.08,
-        h: 0.16,
-        fontFace: "Calibri",
-        fontSize: 9,
-        color: COLORS.text,
-        bold: index === 1 || index === 3,
-        align: index === 0 ? "center" : "left",
-      });
-    });
-  });
+function frame(slide, title, subtitle, page) {
+  bg(slide);
+  slide.addText("PROJECT.CORE™ / AI-ПЛАНИРОВАНИЕ", { x: 0.66, y: 0.22, w: 4.5, h: 0.14, fontFace: "Calibri", fontSize: 8, bold: true, color: C.white, charSpace: 0.6 });
+  slide.addText(title, { x: 0.74, y: 0.72, w: 8.2, h: 0.4, fontFace: "Calibri", fontSize: 22, bold: true, color: C.ink });
+  slide.addText(subtitle, { x: 0.74, y: 1.13, w: 9.5, h: 0.24, fontFace: "Calibri", fontSize: 11, color: C.muted });
+  slide.addText(String(page), { x: 12.52, y: 7.02, w: 0.25, h: 0.16, fontFace: "Calibri", fontSize: 10, color: C.muted, align: "right" });
 }
 
-function addTimelineSlide(slide, plan) {
-  const { bars, totalMonths } = plan.timeline;
-  const chartX = 3.15;
-  const chartY = 1.7;
-  const chartW = 8.45;
-  const rowH = 0.72;
-  const monthW = chartW / Math.max(totalMonths, 1);
+function card(slide, x, y, w, title, value, note, accent = C.blue) {
+  slide.addShape("roundRect", { x, y, w, h: 1.08, rectRadius: 0.08, fill: { color: C.white }, line: { color: C.line, pt: 1 } });
+  slide.addShape("rect", { x, y, w: 0.08, h: 1.08, fill: { color: accent }, line: { color: accent, pt: 0 } });
+  slide.addText(title, { x: x + 0.18, y: y + 0.16, w: w - 0.3, h: 0.14, fontFace: "Calibri", fontSize: 9, bold: true, color: C.muted });
+  slide.addText(value, { x: x + 0.18, y: y + 0.4, w: w - 0.3, h: 0.22, fontFace: "Calibri", fontSize: 18, bold: true, color: C.ink });
+  slide.addText(note, { x: x + 0.18, y: y + 0.76, w: w - 0.3, h: 0.14, fontFace: "Calibri", fontSize: 8.4, color: C.muted });
+}
 
-  slide.addShape("roundRect", {
-    x: 0.5,
-    y: 1.45,
-    w: 11.9,
-    h: 5.55,
-    rectRadius: 0.08,
-    fill: { color: COLORS.panel },
-    line: { color: COLORS.line, pt: 1 },
+function cover(slide, plan) {
+  bg(slide);
+  slide.addShape("roundRect", { x: 0.68, y: 0.9, w: 7.7, h: 5.85, rectRadius: 0.12, fill: { color: C.white }, line: { color: C.line, pt: 1 } });
+  slide.addShape("roundRect", { x: 8.68, y: 0.9, w: 3.95, h: 5.85, rectRadius: 0.12, fill: { color: C.sky }, line: { color: C.line, pt: 1 } });
+  slide.addText("PROJECT.CORE™", { x: 0.96, y: 1.14, w: 2.5, h: 0.16, fontFace: "Calibri", fontSize: 9, bold: true, color: C.blue, charSpace: 0.8 });
+  slide.addText("План проекта по реализации систем безопасности", { x: 0.96, y: 1.48, w: 6.8, h: 0.98, fontFace: "Calibri", fontSize: 26, bold: true, color: C.ink, fit: "shrink" });
+  slide.addText(`Объект: ${plan.summary.projectName}`, { x: 0.96, y: 2.6, w: 6.1, h: 0.22, fontFace: "Calibri", fontSize: 14, bold: true, color: C.text });
+  slide.addText(plan.summary.address, { x: 0.96, y: 2.9, w: 6.2, h: 0.38, fontFace: "Calibri", fontSize: 11, color: C.muted });
+  slide.addText("Документ автоматически сформирован на основе данных объекта, состава систем, AI-аналитики, трудозатрат и бюджета проекта.", { x: 0.96, y: 3.38, w: 6.5, h: 0.48, fontFace: "Calibri", fontSize: 11, color: C.text });
+  card(slide, 0.96, 4.26, 1.95, "Систем в плане", String(plan.summary.systemsCount), "Подсистемы");
+  card(slide, 3.05, 4.26, 1.95, "Горизонт", `${plan.summary.totalDays} дн.`, "Рабочие дни", C.green);
+  card(slide, 5.14, 4.26, 2.22, "Бюджет", rub(plan.summary.totalBudget), "По текущей модели", C.violet);
+  slide.addText("Паспорт плана", { x: 8.98, y: 1.22, w: 2.1, h: 0.18, fontFace: "Calibri", fontSize: 14, bold: true, color: C.ink });
+  [["Тип объекта", plan.summary.objectType], ["Дата генерации", plan.summary.generatedAt], ["Формат сроков", "Рабочие дни"], ["Источник", "AI-планирование Project.Core™"]].forEach(([a, b], i) => {
+    slide.addText(a, { x: 8.98, y: 1.68 + i * 0.8, w: 2.6, h: 0.14, fontFace: "Calibri", fontSize: 9, bold: true, color: C.muted });
+    slide.addText(b, { x: 8.98, y: 1.92 + i * 0.8, w: 3.0, h: 0.22, fontFace: "Calibri", fontSize: 13, bold: true, color: C.ink });
   });
+  slide.addText(plan.disclaimer, { x: 0.96, y: 6.08, w: 11.2, h: 0.32, fontFace: "Calibri", fontSize: 8.8, color: C.muted });
+}
 
-  for (let month = 1; month <= totalMonths; month += 1) {
-    const x = chartX + (month - 1) * monthW;
-    slide.addShape("line", {
-      x,
-      y: chartY - 0.22,
-      w: 0,
-      h: bars.length * rowH + 0.22,
-      line: { color: "D9E5F3", pt: 1 },
-    });
-    slide.addText(`M${month}`, {
-      x: x + 0.02,
-      y: chartY - 0.43,
-      w: Math.max(monthW - 0.04, 0.2),
-      h: 0.18,
-      align: "center",
-      fontFace: "Calibri",
-      fontSize: 9,
-      bold: true,
-      color: COLORS.title,
-    });
+function dashboard(slide, plan) {
+  frame(slide, "Исполнительное резюме и ключевые параметры плана", "Сводка по охвату проекта, бюджету и предпосылкам календарного контура.", 2);
+  card(slide, 0.74, 1.62, 2.46, "Итоговый бюджет", rub(plan.summary.totalBudget), "Общий бюджет проекта");
+  card(slide, 3.34, 1.62, 2.0, "Системы", String(plan.summary.systemsCount), "Количество подсистем", C.green);
+  card(slide, 5.48, 1.62, 2.0, "Срок", `${plan.summary.totalDays} дн.`, "Рабочие дни", C.violet);
+  card(slide, 7.62, 1.62, 2.0, "Риски", String(plan.risks.length), "AI-контур", C.gold);
+  card(slide, 9.76, 1.62, 2.8, "Структура плана", `${plan.tasks.length} задач`, "WBS верхнего уровня", C.blueDark);
+  slide.addShape("roundRect", { x: 0.74, y: 3.02, w: 5.72, h: 3.35, rectRadius: 0.08, fill: { color: C.white }, line: { color: C.line, pt: 1 } });
+  slide.addShape("roundRect", { x: 6.66, y: 3.02, w: 5.86, h: 3.35, rectRadius: 0.08, fill: { color: C.white }, line: { color: C.line, pt: 1 } });
+  slide.addText("Что вошло в контур планирования", { x: 1.02, y: 3.24, w: 3.2, h: 0.16, fontFace: "Calibri", fontSize: 14, bold: true, color: C.ink });
+  plan.notes.forEach((item, i) => slide.addText(`• ${item}`, { x: 1.04, y: 3.62 + i * 0.48, w: 5.0, h: 0.26, fontFace: "Calibri", fontSize: 10.2, color: C.text }));
+  slide.addText("Принятые допущения", { x: 6.94, y: 3.24, w: 2.6, h: 0.16, fontFace: "Calibri", fontSize: 14, bold: true, color: C.ink });
+  plan.timeline.assumptions.slice(0, 3).forEach((item, i) => slide.addText(`• ${item}`, { x: 6.96, y: 3.62 + i * 0.62, w: 5.2, h: 0.42, fontFace: "Calibri", fontSize: 10, color: C.text }));
+}
+
+function roadmap(slide, plan) {
+  frame(slide, "Дорожная карта проекта и календарный контур", "Фазы синхронизированы по рабочим дням и готовы к переносу в MS Project.", 3);
+  slide.addShape("roundRect", { x: 0.74, y: 1.56, w: 11.94, h: 5.52, rectRadius: 0.08, fill: { color: C.white }, line: { color: C.line, pt: 1 } });
+  const x0 = 3.42, y0 = 2.02, w = 8.78, h = 0.72, total = Math.max(plan.timeline.totalDays, 1), step = total > 160 ? 20 : total > 90 ? 10 : 5, dayW = w / total;
+  for (let day = 1; day <= total; day += step) {
+    const x = x0 + (day - 1) * dayW;
+    slide.addShape("line", { x, y: y0 - 0.2, w: 0, h: plan.timeline.bars.length * h + 0.2, line: { color: "E6EEF7", pt: 1 } });
+    slide.addText(`Д${day}`, { x: x - 0.08, y: y0 - 0.44, w: 0.35, h: 0.14, fontFace: "Calibri", fontSize: 8, color: C.muted, align: "center" });
   }
-
-  bars.forEach((item, index) => {
-    const y = chartY + index * rowH;
-    slide.addText(item.label, {
-      x: 0.78,
-      y: y + 0.17,
-      w: 2.25,
-      h: 0.2,
-      fontFace: "Calibri",
-      fontSize: 11,
-      bold: true,
-      color: COLORS.title,
-    });
-    slide.addShape("roundRect", {
-      x: chartX + (item.start - 1) * monthW + 0.02,
-      y: y + 0.1,
-      w: Math.max(item.duration * monthW - 0.04, monthW * 0.45),
-      h: 0.34,
-      rectRadius: 0.06,
-      fill: { color: item.color },
-      line: { color: item.color, pt: 1 },
-    });
-    slide.addText(`${item.duration} мес.`, {
-      x: chartX + (item.start - 1) * monthW + 0.06,
-      y: y + 0.15,
-      w: Math.max(item.duration * monthW - 0.1, 0.35),
-      h: 0.14,
-      fontFace: "Calibri",
-      fontSize: 8,
-      bold: true,
-      color: "FFFFFF",
-      align: "center",
-    });
+  plan.timeline.bars.forEach((row, i) => {
+    const y = y0 + i * h;
+    slide.addText(row.label, { x: 1.0, y: y + 0.16, w: 2.15, h: 0.16, fontFace: "Calibri", fontSize: 11, bold: true, color: C.ink });
+    slide.addText(dayRange(row.start, row.duration), { x: 2.2, y: y + 0.16, w: 0.9, h: 0.16, fontFace: "Calibri", fontSize: 9, color: C.muted, align: "right" });
+    slide.addShape("roundRect", { x: x0 + (row.start - 1) * dayW, y: y + 0.08, w: Math.max(row.duration * dayW, 0.24), h: 0.34, rectRadius: 0.06, fill: { color: row.color }, line: { color: row.color, pt: 1 } });
+    slide.addText(`${row.duration} дн.`, { x: x0 + (row.start - 1) * dayW + 0.04, y: y + 0.15, w: Math.max(row.duration * dayW - 0.08, 0.4), h: 0.12, fontFace: "Calibri", fontSize: 8, bold: true, color: C.white, align: "center" });
   });
-
-  slide.addText(plan.disclaimer, {
-    x: 0.78,
-    y: 6.28,
-    w: 10.8,
-    h: 0.42,
-    fontFace: "Calibri",
-    fontSize: 9,
-    color: COLORS.muted,
+  slide.addText("Контрольные точки", { x: 1.0, y: 5.86, w: 2.0, h: 0.16, fontFace: "Calibri", fontSize: 13, bold: true, color: C.ink });
+  plan.timeline.bars.slice(0, 5).forEach((row, i) => {
+    const x = 3.25 + i * 1.82;
+    slide.addShape("roundRect", { x, y: 5.74, w: 1.58, h: 0.88, rectRadius: 0.06, fill: { color: C.panel }, line: { color: C.line, pt: 1 } });
+    slide.addText(row.label, { x: x + 0.1, y: 5.88, w: 1.38, h: 0.16, fontFace: "Calibri", fontSize: 8.4, bold: true, color: C.text, align: "center" });
+    slide.addText(`Финиш Д${row.finish}`, { x: x + 0.12, y: 6.2, w: 1.34, h: 0.12, fontFace: "Calibri", fontSize: 8.8, color: C.ink, align: "center" });
   });
 }
 
-async function exportPlanPptx(plan) {
+function budget(slide, plan) {
+  frame(slide, "Структура бюджета, графики и системный приоритет", "Стоимость раскладывается по бюджетным блокам и наиболее влияющим подсистемам.", 4);
+  slide.addShape("roundRect", { x: 0.74, y: 1.58, w: 5.72, h: 5.5, rectRadius: 0.08, fill: { color: C.white }, line: { color: C.line, pt: 1 } });
+  slide.addShape("roundRect", { x: 6.68, y: 1.58, w: 6.04, h: 5.5, rectRadius: 0.08, fill: { color: C.white }, line: { color: C.line, pt: 1 } });
+  slide.addText("Бюджетные блоки", { x: 1.02, y: 1.8, w: 2.1, h: 0.16, fontFace: "Calibri", fontSize: 14, bold: true, color: C.ink });
+  const total = Math.max(plan.summary.totalBudget, 1);
+  plan.cost.forEach((item, i) => {
+    const y = 2.28 + i * 0.88, ratio = item.value / total;
+    slide.addText(item.label, { x: 1.04, y, w: 1.6, h: 0.14, fontFace: "Calibri", fontSize: 10, bold: true, color: C.text });
+    slide.addText(`${rub(item.value)} / ${Math.round(ratio * 100)}%`, { x: 3.78, y, w: 1.95, h: 0.14, fontFace: "Calibri", fontSize: 9, color: C.muted, align: "right" });
+    slide.addShape("roundRect", { x: 1.04, y: y + 0.28, w: 4.7, h: 0.18, rectRadius: 0.04, fill: { color: "ECF2F8" }, line: { color: "ECF2F8", pt: 0 } });
+    slide.addShape("roundRect", { x: 1.04, y: y + 0.28, w: Math.max(4.7 * ratio, 0.08), h: 0.18, rectRadius: 0.04, fill: { color: item.color }, line: { color: item.color, pt: 0 } });
+  });
+  const top = [...plan.systemRows].sort((a, b) => b.total - a.total).slice(0, 6);
+  const maxSys = Math.max(...top.map((item) => item.total), 1);
+  slide.addText("Системы с наибольшим влиянием на бюджет", { x: 6.96, y: 1.8, w: 3.7, h: 0.16, fontFace: "Calibri", fontSize: 14, bold: true, color: C.ink });
+  top.forEach((row, i) => {
+    const y = 2.28 + i * 0.72, ratio = row.total / maxSys, color = i % 2 === 0 ? C.blue : C.green;
+    slide.addText(row.name, { x: 6.96, y, w: 2.55, h: 0.14, fontFace: "Calibri", fontSize: 9.4, bold: true, color: C.text });
+    slide.addText(rub(row.total), { x: 11.0, y, w: 1.25, h: 0.14, fontFace: "Calibri", fontSize: 9, color: C.muted, align: "right" });
+    slide.addShape("roundRect", { x: 6.96, y: y + 0.22, w: 5.32, h: 0.18, rectRadius: 0.04, fill: { color: "ECF2F8" }, line: { color: "ECF2F8", pt: 0 } });
+    slide.addShape("roundRect", { x: 6.96, y: y + 0.22, w: Math.max(5.32 * ratio, 0.1), h: 0.18, rectRadius: 0.04, fill: { color }, line: { color, pt: 0 } });
+    slide.addText(`${row.vendor} / ${row.mode}`, { x: 6.96, y: y + 0.44, w: 4.5, h: 0.12, fontFace: "Calibri", fontSize: 8.4, color: C.muted });
+  });
+}
+
+function governance(slide, plan) {
+  frame(slide, "Риски, зависимости и следующий управленческий шаг", "Финальный слайд предназначен для согласования дорожной карты и точек контроля.", 5);
+  slide.addShape("roundRect", { x: 0.74, y: 1.6, w: 4.06, h: 5.45, rectRadius: 0.08, fill: { color: C.white }, line: { color: C.line, pt: 1 } });
+  slide.addShape("roundRect", { x: 4.98, y: 1.6, w: 3.64, h: 5.45, rectRadius: 0.08, fill: { color: C.white }, line: { color: C.line, pt: 1 } });
+  slide.addShape("roundRect", { x: 8.82, y: 1.6, w: 3.9, h: 5.45, rectRadius: 0.08, fill: { color: C.white }, line: { color: C.line, pt: 1 } });
+  slide.addText("Ключевые риски", { x: 1.02, y: 1.84, w: 2.2, h: 0.16, fontFace: "Calibri", fontSize: 14, bold: true, color: C.ink });
+  const risks = plan.risks.length ? plan.risks : [{ title: "Критичных рисков не выявлено", severity: "Контрольный", summary: "План собран по стандартному сценарию без дополнительных ограничений." }];
+  risks.slice(0, 4).forEach((r, i) => {
+    slide.addShape("roundRect", { x: 1.02, y: 2.2 + i * 1.0, w: 3.48, h: 0.76, rectRadius: 0.06, fill: { color: i % 2 === 0 ? C.panel : C.white }, line: { color: C.line, pt: 1 } });
+    slide.addText(r.title, { x: 1.16, y: 2.32 + i * 1.0, w: 2.9, h: 0.12, fontFace: "Calibri", fontSize: 9.4, bold: true, color: C.ink });
+    slide.addText(`${r.severity} · ${r.summary}`, { x: 1.16, y: 2.54 + i * 1.0, w: 3.0, h: 0.24, fontFace: "Calibri", fontSize: 8.6, color: C.text });
+  });
+  slide.addText("Следующие шаги", { x: 5.26, y: 1.84, w: 2.1, h: 0.16, fontFace: "Calibri", fontSize: 14, bold: true, color: C.ink });
+  [
+    "Подтвердить исходные данные, ограничения и состав систем.",
+    "Утвердить закупочный контур, поставщиков и логистику.",
+    "Закрепить фронт монтажных работ и подрядный ресурс.",
+    "Подтвердить окно ПНР, приемки и исполнительной документации.",
+  ].forEach((item, i) => {
+    slide.addShape("roundRect", { x: 5.26, y: 2.2 + i * 0.9, w: 3.0, h: 0.58, rectRadius: 0.06, fill: { color: C.sky }, line: { color: C.line, pt: 1 } });
+    slide.addText(`${i + 1}. ${item}`, { x: 5.38, y: 2.35 + i * 0.9, w: 2.72, h: 0.24, fontFace: "Calibri", fontSize: 8.8, color: C.text });
+  });
+  slide.addText("Управленческая рамка", { x: 9.1, y: 1.84, w: 2.4, h: 0.16, fontFace: "Calibri", fontSize: 14, bold: true, color: C.ink });
+  ["Единица сроков — рабочие дни.", "План готов для переноса в MS Project.", "Таймлайн синхронизирован с бюджетной логикой Project.Core™.", "Перед выпуском в производство нужно подтвердить РД, поставки, доступы и подрядный контур."].forEach((item, i) => {
+    slide.addText(`• ${item}`, { x: 9.12, y: 2.26 + i * 0.56, w: 3.1, h: 0.24, fontFace: "Calibri", fontSize: 9, color: C.text });
+  });
+  slide.addText(plan.disclaimer, { x: 9.12, y: 5.56, w: 3.08, h: 0.82, fontFace: "Calibri", fontSize: 8.5, color: C.muted });
+}
+
+async function exportPptx(plan) {
   const pptx = new PptxGenJS();
   pptx.layout = "LAYOUT_WIDE";
   pptx.author = "Project.Core™";
@@ -418,178 +313,37 @@ async function exportPlanPptx(plan) {
   pptx.subject = "План проекта";
   pptx.title = `Project.Core™ — план проекта ${plan.summary.projectName}`;
   pptx.lang = "ru-RU";
-
-  const slide1 = pptx.addSlide();
-  addFrame(
-    slide1,
-    "План проекта по реализации систем безопасности",
-    "Автоматически сформирован по данным объекта, расчету систем и AI-модулям платформы.",
-    1
-  );
-  slide1.addShape("roundRect", {
-    x: 0.55,
-    y: 1.45,
-    w: 5.7,
-    h: 2.05,
-    rectRadius: 0.08,
-    fill: { color: COLORS.panel },
-    line: { color: COLORS.line, pt: 1 },
-  });
-  slide1.addText(
-    `Объект: ${plan.summary.projectName}\nАдрес: ${plan.summary.address}\nСистем в плане: ${plan.summary.systemsCount}\nГоризонт плана: ${plan.summary.totalMonths} мес.\nБюджет проекта: ${rub(plan.summary.totalBudget)}`,
-    {
-      x: 0.78,
-      y: 1.73,
-      w: 5.05,
-      h: 1.45,
-      fontFace: "Calibri",
-      fontSize: 13,
-      color: COLORS.text,
-      breakLine: false,
-    }
-  );
-  slide1.addShape("roundRect", {
-    x: 6.45,
-    y: 1.45,
-    w: 5.95,
-    h: 2.05,
-    rectRadius: 0.08,
-    fill: { color: "FFFFFF" },
-    line: { color: COLORS.line, pt: 1 },
-  });
-  slide1.addText("Принятые допущения и оговорка по срокам", {
-    x: 6.7,
-    y: 1.68,
-    w: 5.3,
-    h: 0.18,
-    fontFace: "Calibri",
-    fontSize: 13,
-    bold: true,
-    color: COLORS.title,
-  });
-  plan.timeline.assumptions.forEach((item, index) => {
-    slide1.addText(`• ${item}`, {
-      x: 6.72,
-      y: 1.98 + index * 0.34,
-      w: 5.12,
-      h: 0.24,
-      fontFace: "Calibri",
-      fontSize: 10,
-      color: COLORS.text,
-    });
-  });
-
-  slide1.addText("Основные риски, влияющие на последовательность работ", {
-    x: 0.58,
-    y: 3.8,
-    w: 5.2,
-    h: 0.2,
-    fontFace: "Calibri",
-    fontSize: 13,
-    bold: true,
-    color: COLORS.title,
-  });
-  const risks = plan.risks.length
-    ? plan.risks
-    : [{ title: "Критичных рисков не зафиксировано", severity: "контрольный", summary: "План собран по стандартному сценарию без дополнительных ограничений." }];
-  risks.forEach((risk, index) => {
-    slide1.addShape("roundRect", {
-      x: 0.62,
-      y: 4.18 + index * 0.76,
-      w: 11.72,
-      h: 0.58,
-      rectRadius: 0.06,
-      fill: { color: index % 2 === 0 ? "F7FAFF" : "FFFFFF" },
-      line: { color: COLORS.line, pt: 1 },
-    });
-    slide1.addText(`${risk.title} (${risk.severity})`, {
-      x: 0.84,
-      y: 4.32 + index * 0.76,
-      w: 3.95,
-      h: 0.16,
-      fontFace: "Calibri",
-      fontSize: 10,
-      bold: true,
-      color: COLORS.title,
-    });
-    slide1.addText(risk.summary, {
-      x: 4.6,
-      y: 4.3 + index * 0.76,
-      w: 7.25,
-      h: 0.18,
-      fontFace: "Calibri",
-      fontSize: 9,
-      color: COLORS.text,
-    });
-  });
-
-  const slide2 = pptx.addSlide();
-  addFrame(
-    slide2,
-    "Сводный график фаз проекта",
-    "Фазы плана калибруются по тем же данным, что и таймлайн в экспортируемом ТКП.",
-    2
-  );
-  addTimelineSlide(slide2, plan);
-
-  const slide3 = pptx.addSlide();
-  addFrame(
-    slide3,
-    "Детальный план проекта",
-    "План включает ключевые мероприятия, периоды выполнения и ответственные контуры.",
-    3
-  );
-  drawTaskTable(slide3, plan.tasks.slice(0, 16));
-
-  if (plan.tasks.length > 16) {
-    const slide4 = pptx.addSlide();
-    addFrame(
-      slide4,
-      "Детальный план проекта — продолжение",
-      "Продолжение списка этапов, синхронизированных с фазами проекта.",
-      4
-    );
-    drawTaskTable(slide4, plan.tasks.slice(16, 32));
-  }
-
-  const fileName = `${safeFilePart(plan.summary.projectName, "project")}_project_plan.pptx`;
-  await pptx.writeFile({ fileName });
+  cover(pptx.addSlide(), plan);
+  dashboard(pptx.addSlide(), plan);
+  roadmap(pptx.addSlide(), plan);
+  budget(pptx.addSlide(), plan);
+  governance(pptx.addSlide(), plan);
+  await pptx.writeFile({ fileName: `${filePart(plan.summary.projectName, "project")}_project_plan.pptx` });
 }
 
-function xmlEscape(value) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
+function xmlEscape(v) {
+  return String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
 }
 
-function toProjectDate(monthIndex) {
-  const baseDate = new Date(Date.UTC(2026, 0, 1, 8, 0, 0));
-  baseDate.setUTCDate(baseDate.getUTCDate() + Math.max(monthIndex - 1, 0) * 30);
-  return baseDate.toISOString().replace(".000Z", "");
+function toProjectDate(day) {
+  const base = new Date(Date.UTC(2026, 0, 1, 8, 0, 0));
+  base.setUTCDate(base.getUTCDate() + Math.max(day - 1, 0));
+  return base.toISOString().replace(".000Z", "");
 }
 
-function buildMsProjectXml(plan) {
-  const tasksXml = plan.tasks
-    .map((task, index) => {
-      const outlineLevel = task.phase === "smr" || task.phase === "pnr" ? 2 : 1;
-      const durationDays = Math.max(task.duration * 22, 1);
-      return `
+export function buildMsProjectXml(plan) {
+  const tasks = plan.tasks.map((task, i) => `
     <Task>
-      <UID>${index + 1}</UID>
-      <ID>${index + 1}</ID>
+      <UID>${i + 1}</UID>
+      <ID>${i + 1}</ID>
       <Name>${xmlEscape(task.name)}</Name>
-      <OutlineLevel>${outlineLevel}</OutlineLevel>
+      <OutlineLevel>${task.phase === "smr" || task.phase === "pnr" ? 2 : 1}</OutlineLevel>
       <Start>${toProjectDate(task.start)}</Start>
-      <Duration>PT${durationDays * 8}H0M0S</Duration>
+      <Finish>${toProjectDate(task.finish + 1)}</Finish>
+      <Duration>P${Math.max(Math.round(task.duration), 1)}D</Duration>
       <DurationFormat>7</DurationFormat>
-      <Notes>${xmlEscape(`${task.comment} ${plan.disclaimer}`)}</Notes>
-    </Task>`;
-    })
-    .join("");
-
+      <Notes>${xmlEscape(`${task.comment}. ${plan.disclaimer}`)}</Notes>
+    </Task>`).join("");
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Project xmlns="http://schemas.microsoft.com/project">
   <Name>${xmlEscape(`Project.Core план — ${plan.summary.projectName}`)}</Name>
@@ -606,23 +360,24 @@ function buildMsProjectXml(plan) {
   <DaysPerMonth>22</DaysPerMonth>
   <DefaultStartTime>08:00:00</DefaultStartTime>
   <DefaultFinishTime>17:00:00</DefaultFinishTime>
-  <Tasks>${tasksXml}
+  <Tasks>${tasks}
   </Tasks>
 </Project>`;
 }
 
-function exportPlanMsProject(plan) {
-  const xml = buildMsProjectXml(plan);
-  const blob = new Blob([`\uFEFF${xml}`], { type: "application/xml;charset=utf-8;" });
-  const fileName = `${safeFilePart(plan.summary.projectName, "project")}_project_plan.xml`;
-  downloadBlob(fileName, blob);
+async function exportMpp(payload) {
+  const res = await fetch("/api/project-plan-export", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ format: "mpp", payload }) });
+  if (!res.ok) {
+    let message = "Не удалось сформировать MPP-файл.";
+    try { message = (await res.json())?.error || message; } catch {}
+    throw new Error(message);
+  }
+  const blob = await res.blob();
+  const name = parseDisposition(res.headers.get("content-disposition")) || `${filePart(payload?.objectData?.projectName, "project")}_project_plan.mpp`;
+  downloadBlob(name, blob);
 }
 
 export async function exportProjectPlan(payload, format = "pptx") {
-  const plan = buildDetailedPlan(payload || {});
-  if (format === "msproject") {
-    exportPlanMsProject(plan);
-    return;
-  }
-  await exportPlanPptx(plan);
+  if (format === "mpp" || format === "msproject") return exportMpp(payload);
+  return exportPptx(buildProjectPlan(payload));
 }

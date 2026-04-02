@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveVendorPrices } from "./api/vendor-prices.js";
 import { issueOtpChallenge, verifyOtpChallenge } from "./api/auth-otp-core.js";
+import { buildProjectPlanArtifact } from "./api/project-plan-export.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -39,12 +40,19 @@ function sendJson(res, statusCode, payload) {
   res.end(JSON.stringify(payload));
 }
 
+function sendBinary(res, statusCode, { contentType, fileName, buffer }) {
+  res.statusCode = statusCode;
+  res.setHeader("Content-Type", contentType || "application/octet-stream");
+  res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(fileName || "download.bin")}`);
+  res.end(buffer);
+}
+
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
     let raw = "";
     req.on("data", (chunk) => {
       raw += chunk;
-      if (raw.length > 1_000_000) {
+      if (raw.length > 10_000_000) {
         reject(new Error("Payload too large"));
         req.destroy();
       }
@@ -107,6 +115,15 @@ async function handleApiRequest(req, res, pathname) {
         results,
         fetchedAt: new Date().toISOString(),
       });
+      return true;
+    }
+
+    if (pathname === "/api/project-plan-export") {
+      const artifact = await buildProjectPlanArtifact({
+        format: payload?.format,
+        payload: payload?.payload,
+      });
+      sendBinary(res, 200, artifact);
       return true;
     }
 

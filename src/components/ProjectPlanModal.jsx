@@ -13,8 +13,8 @@ export default function ProjectPlanModal({ open, onClose, onSelectFormat }) {
             <div className="project-plan-modal__eyebrow">AI-планирование</div>
             <h3 id="project-plan-modal-title">Сгенерировать план проекта</h3>
             <p>
-              Платформа построит детальный верхнеуровневый план реализации систем по данным объекта, составу систем,
-              AI-обследованию, рискам и расчетным срокам ТКП.
+              Платформа соберет верхнеуровневый план реализации систем по данным объекта, составу систем, AI-аналитике,
+              рискам и расчетным срокам ТКП.
             </p>
           </div>
           <button className="ghost-btn project-plan-modal__close" type="button" onClick={onClose}>
@@ -27,22 +27,22 @@ export default function ProjectPlanModal({ open, onClose, onSelectFormat }) {
             <span className="project-plan-option__icon">
               <Presentation size={20} />
             </span>
-            <strong>PowerPoint</strong>
-            <span>Презентация с фазами, графиком, мероприятиями, сроками и оговоркой по допущениям.</span>
+            <strong>PowerPoint (.pptx)</strong>
+            <span>Оформленная презентация с титульным листом, дорожной картой, графиками, диаграммами и инфослайдами.</span>
           </button>
 
-          <button className="project-plan-option" type="button" onClick={() => onSelectFormat("msproject")}>
+          <button className="project-plan-option" type="button" onClick={() => onSelectFormat("mpp")}>
             <span className="project-plan-option__icon">
               <FileSpreadsheet size={20} />
             </span>
-            <strong>MS Project XML</strong>
-            <span>Файл для импорта в MS Project с этапами, периодами и комментариями по ограничениям.</span>
+            <strong>MS Project (.mpp)</strong>
+            <span>Настоящий файл Microsoft Project для календарного планирования, а не XML для ручного импорта.</span>
           </button>
         </div>
 
         <div className="project-plan-modal__note">
           <CalendarRange size={16} />
-          <span>Сроки в плане синхронизированы с верхнеуровневым таймлайном, который выводится в экспортируемом ТКП.</span>
+          <span>Сроки в плане выводятся в рабочих днях и синхронизированы с верхнеуровневым таймлайном проекта.</span>
         </div>
       </div>
     </div>
