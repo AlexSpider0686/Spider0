@@ -131,6 +131,30 @@ function renderChecklistInput(question, value, onChange, options = {}) {
   return <input value={value ?? ""} disabled={disabled} onChange={(event) => onChange(event.target.value)} />;
 }
 
+function renderFieldLabelWithTooltip(label, title, body) {
+  return (
+    <div className="label-with-tooltip">
+      <label>{label}</label>
+      <span className="label-tooltip-help" tabIndex={0} role="button" title={title} aria-label={title}>
+        ?
+      </span>
+      <div className="label-tooltip-popover" role="tooltip">
+        <p>
+          <strong>{label}:</strong> {body}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+const ZONE_FIELD_HINTS = {
+  name: "Название зоны нужно для идентификации участка объекта в расчете, в AI-обследовании и в итоговой спецификации.",
+  type: "Тип зоны меняет нормативную плотность оборудования, длину трасс, трудоемкость монтажа и состав ключевого оборудования.",
+  area: "Площадь зоны определяет долю системы в этой части объекта и напрямую влияет на количество устройств, кабеля, материалов и работ.",
+  floors:
+    "Этажность зоны показывает, на сколько этажных уровней распространяется эта зона. Чем больше этажей, тем выше зональность, объем вертикальных трасс, число узлов, шкафов, ЗКСПС/зон и общий объем работ.",
+};
+
 export default function ObjectStep({
   objectData,
   addressVerification,
@@ -527,11 +551,11 @@ export default function ObjectStep({
                 />
                 <div className="zone-grid compact-zone-grid">
                   <div className="input-card">
-                    <label>Название зоны</label>
+                    {renderFieldLabelWithTooltip("Название зоны", "Зачем указывать название зоны", ZONE_FIELD_HINTS.name)}
                     <input value={zone.name} onChange={(event) => updateZone(zone.id, "name", event.target.value)} />
                   </div>
                   <div className="input-card">
-                    <label>Тип зоны</label>
+                    {renderFieldLabelWithTooltip("Тип зоны", "Как тип зоны влияет на расчет", ZONE_FIELD_HINTS.type)}
                     <select value={zone.type} onChange={(event) => updateZone(zone.id, "type", event.target.value)}>
                       {ZONE_TYPES.map((item) => (
                         <option key={item.value} value={item.value}>
@@ -541,11 +565,11 @@ export default function ObjectStep({
                     </select>
                   </div>
                   <div className="input-card">
-                    <label>Площадь, м²</label>
+                    {renderFieldLabelWithTooltip("Площадь, м²", "Как площадь зоны влияет на расчет", ZONE_FIELD_HINTS.area)}
                     <input type="number" value={zone.area} onChange={(event) => updateZone(zone.id, "area", toNumber(event.target.value))} />
                   </div>
                   <div className="input-card">
-                    <label>Этажей</label>
+                    {renderFieldLabelWithTooltip("Этажей", "Как этажность зоны влияет на расчет", ZONE_FIELD_HINTS.floors)}
                     <input type="number" value={zone.floors} onChange={(event) => updateZone(zone.id, "floors", toNumber(event.target.value))} />
                   </div>
                   <div className="action-cell">

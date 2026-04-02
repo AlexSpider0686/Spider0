@@ -9,7 +9,7 @@ function safeCeil(value, min = 0) {
   return Math.max(Math.ceil(toNumber(value, 0)), min);
 }
 
-function buildZoneDemand(zoneContexts, systemType, densityMap) {
+function buildZoneDemand(zoneContexts, densityMap) {
   const zonePrimaryUnits = {};
   const drivers = [];
   let total = 0;
@@ -55,27 +55,30 @@ function buildZoneDemand(zoneContexts, systemType, densityMap) {
   return { zonePrimaryUnits, total, drivers };
 }
 
+function sumMandatoryZoneFloors(zoneContexts = []) {
+  return zoneContexts.reduce((sum, zone) => {
+    if (!zone?.systemRule?.mandatory) return sum;
+    return sum + Math.max(toNumber(zone?.floors, 1), 1);
+  }, 0);
+}
+
 function estimateAps(context) {
   const { driver, zoneDemand } = context;
   const detectors = safeCeil(zoneDemand.total, 1);
-  const loops = Math.max(
-    safeCeil(detectors / Math.max(driver.detectorsPerLoop, 1), 1),
-    safeCeil(context.effectiveZoneCount / 16, 1)
-  );
-  const panels = safeCeil(loops / Math.max(driver.loopsPerPanel, 1), 1);
+  const zkspsCount = Math.max(context.effectiveZoneCount, context.floorDistributedZoneCount, 1);
+  const loops = Math.max(safeCeil(detectors / Math.max(driver.detectorsPerLoop, 1), 1), safeCeil(zkspsCount / 12, 1));
+  const panels = Math.max(safeCeil(loops / Math.max(driver.loopsPerPanel, 1), 1), safeCeil(zkspsCount / 24, 1));
   const notification = Math.max(
     safeCeil(detectors * toNumber(driver.notificationPerPrimary, 0.15), 1),
-    safeCeil(context.effectiveZoneCount * 0.6, 1)
+    safeCeil(zkspsCount * 0.75, 1)
   );
+  const servers = safeCeil(Math.max(panels / 2, zkspsCount / 18), 1);
   const powerUnits = safeCeil(detectors * toNumber(driver.powerPerPrimary, 0.005), 1);
-  const integrationPoints = safeCeil(
-    context.effectiveZoneCount * toNumber(driver.integrationPointsPerZone, 0.2),
-    1
-  );
+  const integrationPoints = safeCeil(zkspsCount * toNumber(driver.integrationPointsPerZone, 0.2), 1);
 
   const designHours =
     detectors * driver.designHours.primary +
-    (panels + powerUnits) * driver.designHours.controller +
+    (panels + powerUnits + servers) * driver.designHours.controller +
     integrationPoints * driver.designHours.integrationPoint;
 
   return {
@@ -83,20 +86,23 @@ function estimateAps(context) {
     markerUnits: detectors,
     primaryUnitKey: "detectors",
     primaryUnitLabel: "Извещатель",
-    controllerUnits: panels + powerUnits,
-    activeElements: detectors + notification + panels + powerUnits,
+    controllerUnits: panels + powerUnits + servers,
+    activeElements: detectors + notification + panels + powerUnits + servers,
     integrationPoints,
     designHoursBase: designHours,
     resourceRows: [
       { key: "detector", label: "Пожарные извещатели", qty: detectors, priceShare: 0.46 },
-      { key: "module", label: "ППКП и модули", qty: panels, priceShare: 0.28 },
+      { key: "module", label: "ППКП и модули", qty: panels, priceShare: 0.26 },
       { key: "notification", label: "Оповещатели и табло", qty: notification, priceShare: 0.16 },
-      { key: "power", label: "Питание и АКБ", qty: powerUnits, priceShare: 0.1 },
+      { key: "power", label: "Питание и АКБ", qty: powerUnits, priceShare: 0.08 },
+      { key: "server", label: "Сервер / АРМ АПС", qty: servers, priceShare: 0.04 },
     ],
     secondary: {
+      zksps: zkspsCount,
       loops,
       panels,
       notification,
+      servers,
       powerUnits,
     },
   };
@@ -106,14 +112,15 @@ function estimateSoue(context) {
   const { driver, zoneDemand, zoneContexts } = context;
   const peopleFactor = 1 + zoneContexts.reduce((sum, zone) => sum + zone.occupancyDensity, 0) / Math.max(zoneContexts.length, 1) * 1.8;
   const speakers = safeCeil(zoneDemand.total * peopleFactor, 1);
+  const alarmZones = Math.max(context.effectiveZoneCount, context.floorDistributedZoneCount, 1);
   const amplifiers = safeCeil(speakers * toNumber(driver.amplifiersPerPrimary, 1 / 36), 1);
-  const alarmZones = Math.max(context.effectiveZoneCount, 1);
   const controllers = safeCeil(amplifiers * toNumber(driver.controllersPerAmplifier, 0.25) + alarmZones / 6, 1);
+  const servers = safeCeil(Math.max(amplifiers / 3, alarmZones / 14), 1);
   const integrationPoints = safeCeil(alarmZones * toNumber(driver.integrationPointsPerZone, 0.2), 1);
 
   const designHours =
     speakers * driver.designHours.primary +
-    (amplifiers + controllers) * driver.designHours.controller +
+    (amplifiers + controllers + servers) * driver.designHours.controller +
     integrationPoints * driver.designHours.integrationPoint;
 
   return {
@@ -121,20 +128,22 @@ function estimateSoue(context) {
     markerUnits: speakers,
     primaryUnitKey: "speakers",
     primaryUnitLabel: "Оповещатель",
-    controllerUnits: amplifiers + controllers,
-    activeElements: speakers + amplifiers + controllers,
+    controllerUnits: amplifiers + controllers + servers,
+    activeElements: speakers + amplifiers + controllers + servers,
     integrationPoints,
     designHoursBase: designHours,
     resourceRows: [
-      { key: "speaker", label: "Оповещатели", qty: speakers, priceShare: 0.43 },
-      { key: "amp", label: "Усилители", qty: amplifiers, priceShare: 0.27 },
+      { key: "speaker", label: "Оповещатели", qty: speakers, priceShare: 0.41 },
+      { key: "amp", label: "Усилители", qty: amplifiers, priceShare: 0.25 },
       { key: "line", label: "Линейные модули", qty: alarmZones * 2, priceShare: 0.18 },
       { key: "cabinet", label: "Шкафы и БП", qty: safeCeil((amplifiers + controllers) / 3, 1), priceShare: 0.12 },
+      { key: "server", label: "Сервер / АРМ СОУЭ", qty: servers, priceShare: 0.04 },
     ],
     secondary: {
       alarmZones,
       amplifiers,
       controllers,
+      servers,
     },
   };
 }
@@ -144,15 +153,16 @@ function estimateSots(context) {
   const sensors = safeCeil(zoneDemand.total, 1);
   const boundaries = Math.max(
     safeCeil(sensors * toNumber(driver.boundariesPerPrimary, 1 / 20), 1),
-    safeCeil(context.effectiveZoneCount, 1)
+    safeCeil(Math.max(context.effectiveZoneCount, context.floorDistributedZoneCount), 1)
   );
   const controllers = safeCeil(boundaries * toNumber(driver.controllerPerBoundary, 0.1), 1);
   const cabinets = safeCeil(controllers * toNumber(driver.cabinetsPerController, 0.25), 1);
-  const integrationPoints = safeCeil(context.effectiveZoneCount * toNumber(driver.integrationPointsPerZone, 0.16), 1);
+  const servers = safeCeil(Math.max(boundaries / 24, controllers / 2), 1);
+  const integrationPoints = safeCeil(Math.max(context.effectiveZoneCount, context.floorDistributedZoneCount) * toNumber(driver.integrationPointsPerZone, 0.16), 1);
 
   const designHours =
     sensors * driver.designHours.primary +
-    (controllers + cabinets) * driver.designHours.controller +
+    (controllers + cabinets + servers) * driver.designHours.controller +
     integrationPoints * driver.designHours.integrationPoint;
 
   return {
@@ -160,20 +170,22 @@ function estimateSots(context) {
     markerUnits: sensors,
     primaryUnitKey: "sensors",
     primaryUnitLabel: "Охранный датчик",
-    controllerUnits: controllers + cabinets,
-    activeElements: sensors + controllers + cabinets,
+    controllerUnits: controllers + cabinets + servers,
+    activeElements: sensors + controllers + cabinets + servers,
     integrationPoints,
     designHoursBase: designHours,
     resourceRows: [
-      { key: "sensor", label: "Охранные датчики", qty: sensors, priceShare: 0.47 },
-      { key: "panel", label: "Контрольные панели", qty: controllers, priceShare: 0.24 },
+      { key: "sensor", label: "Охранные датчики", qty: sensors, priceShare: 0.45 },
+      { key: "panel", label: "Контрольные панели", qty: controllers, priceShare: 0.22 },
       { key: "module", label: "Модули расширения", qty: boundaries, priceShare: 0.16 },
       { key: "power", label: "Блоки питания и АКБ", qty: cabinets, priceShare: 0.13 },
+      { key: "server", label: "Сервер / АРМ СОТС", qty: servers, priceShare: 0.04 },
     ],
     secondary: {
       boundaries,
       controllers,
       cabinets,
+      servers,
     },
   };
 }
@@ -183,6 +195,7 @@ function estimateSot(context) {
   const outdoorZoneTypes = driver.outdoorZoneTypes || new Set();
   let camerasOutdoor = 0;
   let camerasIndoor = 0;
+
   for (const zone of zoneContexts) {
     const qty = toNumber(zoneDemand.zonePrimaryUnits[zone.id], 0);
     if (outdoorZoneTypes.has(zone.zoneType)) camerasOutdoor += qty;
@@ -194,10 +207,7 @@ function estimateSot(context) {
   const servers = safeCeil(cameras * toNumber(driver.serverPerCamera, 1 / 220), cameras > 120 ? 1 : 0);
   const arms = safeCeil(cameras * toNumber(driver.armPerCamera, 1 / 150), 1);
   const switches = safeCeil(cameras / Math.max(toNumber(driver.switchPorts, 24), 1), 1);
-  const integrationPoints = safeCeil(
-    context.mandatoryZoneCount * toNumber(driver.integrationPointsPerZone, 0.24) + cameras / 180,
-    1
-  );
+  const integrationPoints = safeCeil(context.mandatoryZoneCount * toNumber(driver.integrationPointsPerZone, 0.24) + cameras / 180, 1);
 
   const designHours =
     cameras * driver.designHours.primary +
@@ -233,20 +243,18 @@ function estimateSot(context) {
 function estimateSsoi(context) {
   const { driver, zoneDemand, objectClassification, activeSystemTypes } = context;
   const baseFromZones = zoneDemand.total;
-  const integratedSubsystems = Math.max(
-    1,
-    (activeSystemTypes || []).filter((item) => item && item !== "ssoi").length
-  );
+  const integratedSubsystems = Math.max(1, (activeSystemTypes || []).filter((item) => item && item !== "ssoi").length);
+  const distributedZoneLoad = Math.max(context.mandatoryZoneCount, context.floorDistributedZoneCount, 1);
   const integrationPoints = safeCeil(
     toNumber(driver.baseIntegrationPoints, 2) +
       baseFromZones +
       integratedSubsystems * 1.8 +
-      context.mandatoryZoneCount * 0.3 +
+      distributedZoneLoad * 0.45 +
       (objectClassification.distributedArchitecture ? 2 : 0),
     1
   );
 
-  const servers = safeCeil(integrationPoints * toNumber(driver.serverPerPoint, 1 / 22), 1);
+  const servers = safeCeil(Math.max(integrationPoints * toNumber(driver.serverPerPoint, 1 / 22), distributedZoneLoad / 16), 1);
   const arms = safeCeil(integrationPoints * toNumber(driver.armPerPoint, 1 / 26), 1);
   const switches = safeCeil(integrationPoints * toNumber(driver.switchPerPoint, 1 / 20), 1);
   const gateways = safeCeil(integrationPoints * toNumber(driver.gatewayPerPoint, 1 / 7), 1);
@@ -273,6 +281,7 @@ function estimateSsoi(context) {
     ],
     secondary: {
       integratedSubsystems,
+      distributedZoneLoad,
       servers,
       arms,
       switches,
@@ -283,12 +292,8 @@ function estimateSsoi(context) {
 
 function estimateSkud(context) {
   const { driver, zoneDemand, zoneContexts, objectClassification } = context;
-  const lobbyAreaM2 = zoneContexts
-    .filter((zone) => zone.zoneType === "lobby")
-    .reduce((sum, zone) => sum + zone.areaM2, 0);
-  const parkingAreaM2 = zoneContexts
-    .filter((zone) => zone.zoneType === "parking")
-    .reduce((sum, zone) => sum + zone.areaM2, 0);
+  const lobbyAreaM2 = zoneContexts.filter((zone) => zone.zoneType === "lobby").reduce((sum, zone) => sum + zone.areaM2, 0);
+  const parkingAreaM2 = zoneContexts.filter((zone) => zone.zoneType === "parking").reduce((sum, zone) => sum + zone.areaM2, 0);
 
   const floorBoost = objectClassification.aboveGroundFloors * 0.42 + objectClassification.undergroundFloors * 0.2;
   const lobbyBoost = lobbyAreaM2 / 1300;
@@ -300,14 +305,12 @@ function estimateSkud(context) {
   const controllers = safeCeil(accessPoints * toNumber(driver.controllerPerPoint, 0.5), 1);
   const turnstiles = safeCeil((lobbyAreaM2 / 1200) * toNumber(driver.turnstilePerLobbyPoint, 1 / 3), 0);
   const cabinets = safeCeil((controllers + turnstiles) / 4, 1);
-  const integrationPoints = safeCeil(
-    context.mandatoryZoneCount * toNumber(driver.integrationPointsPerZone, 0.2) + accessPoints / 16,
-    1
-  );
+  const servers = safeCeil(Math.max(controllers / 8, accessPoints / 28, context.floorDistributedZoneCount / 18), 1);
+  const integrationPoints = safeCeil(Math.max(context.mandatoryZoneCount, context.floorDistributedZoneCount) * toNumber(driver.integrationPointsPerZone, 0.2) + accessPoints / 16, 1);
 
   const designHours =
     accessPoints * driver.designHours.primary +
-    (controllers + turnstiles + cabinets) * driver.designHours.controller +
+    (controllers + turnstiles + cabinets + servers) * driver.designHours.controller +
     integrationPoints * driver.designHours.integrationPoint;
 
   return {
@@ -315,21 +318,23 @@ function estimateSkud(context) {
     markerUnits: accessPoints,
     primaryUnitKey: "accessPoints",
     primaryUnitLabel: "Точка прохода",
-    controllerUnits: controllers + turnstiles + cabinets,
-    activeElements: accessPoints + readers + controllers + turnstiles + cabinets,
+    controllerUnits: controllers + turnstiles + cabinets + servers,
+    activeElements: accessPoints + readers + controllers + turnstiles + cabinets + servers,
     integrationPoints,
     designHoursBase: designHours,
     resourceRows: [
-      { key: "reader", label: "Считыватели", qty: readers, priceShare: 0.4 },
-      { key: "controller", label: "Контроллеры доступа", qty: controllers, priceShare: 0.28 },
+      { key: "reader", label: "Считыватели", qty: readers, priceShare: 0.38 },
+      { key: "controller", label: "Контроллеры доступа", qty: controllers, priceShare: 0.26 },
       { key: "lock", label: "Замки/турникеты", qty: turnstiles || accessPoints, priceShare: 0.2 },
       { key: "cabinet", label: "Шкафы и БП", qty: cabinets, priceShare: 0.12 },
+      { key: "server", label: "Сервер / АРМ СКУД", qty: servers, priceShare: 0.04 },
     ],
     secondary: {
       readers,
       controllers,
       turnstiles,
       cabinets,
+      servers,
     },
   };
 }
@@ -351,9 +356,21 @@ export function estimateSystemQuantities({
   recognizedZoneCount = 0,
 }) {
   const driver = SYSTEM_DRIVER_CONFIG[systemType] || SYSTEM_DRIVER_CONFIG.sot;
-  const zoneDemand = buildZoneDemand(zoneContexts, systemType, driver.densityPer1000 || {});
+  const zoneDemand = buildZoneDemand(zoneContexts, driver.densityPer1000 || {});
   const mandatoryZoneCount = zoneContexts.filter((zone) => zone.systemRule?.mandatory).length;
-  const effectiveZoneCount = Math.max(mandatoryZoneCount, toNumber(recognizedZoneCount, 0), 0);
+  const floorDistributedZoneCount = Math.max(sumMandatoryZoneFloors(zoneContexts), mandatoryZoneCount, 0);
+  const weightedZoneCount = zoneContexts.reduce((sum, zone) => {
+    if (!zone?.systemRule?.mandatory) return sum;
+    const zoneFloors = Math.max(toNumber(zone?.floors, 1), 1);
+    return sum + 1 + Math.max(zoneFloors - 1, 0) * 0.65;
+  }, 0);
+  const effectiveZoneCount = Math.max(
+    mandatoryZoneCount,
+    floorDistributedZoneCount,
+    Math.round(weightedZoneCount),
+    toNumber(recognizedZoneCount, 0),
+    0
+  );
 
   const estimator = SYSTEM_ESTIMATORS[systemType] || SYSTEM_ESTIMATORS.sot;
   const raw = estimator({
@@ -363,6 +380,7 @@ export function estimateSystemQuantities({
     objectClassification,
     mandatoryZoneCount,
     effectiveZoneCount,
+    floorDistributedZoneCount,
     recognizedZoneCount: Math.max(toNumber(recognizedZoneCount, 0), 0),
     activeSystemTypes,
   });
@@ -386,6 +404,7 @@ export function estimateSystemQuantities({
     mandatoryZoneCount,
     recognizedZoneCount: Math.max(toNumber(recognizedZoneCount, 0), 0),
     effectiveZoneCount,
+    floorDistributedZoneCount,
     zonePrimaryUnits: zoneDemand.zonePrimaryUnits,
     zoneDrivers: zoneDemand.drivers,
     routeComplexityAverage: clamp(routeComplexityAverage, 0.7, 2.8),

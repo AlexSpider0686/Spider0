@@ -697,6 +697,7 @@ export function calculateSystemWithBreakdown(
         mandatoryZoneCount: quantities.mandatoryZoneCount,
         recognizedZoneCount: quantities.recognizedZoneCount,
         effectiveZoneCount: quantities.effectiveZoneCount,
+        floorDistributedZoneCount: quantities.floorDistributedZoneCount,
       },
       recognizedPlanZones,
       designAdjustment,

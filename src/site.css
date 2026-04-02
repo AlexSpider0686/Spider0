@@ -241,6 +241,15 @@ html {
   padding-left: clamp(92px, 8vw, 138px);
 }
 
+.app-shell .hero__brand-line {
+  display: block;
+}
+
+.app-shell .hero__headline-copy {
+  display: block;
+  margin-left: clamp(-44px, -3.8vw, -24px);
+}
+
 .app-shell .hero__brand-mark {
   position: absolute;
   top: 4px;
@@ -1944,6 +1953,10 @@ html {
 
   .app-shell .hero__brand-title {
     padding-left: 68px;
+  }
+
+  .app-shell .hero__headline-copy {
+    margin-left: -18px;
   }
 
   .app-shell .hero__brand-mark {

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { calculateSystem } from "../src/lib/estimate.js";
 import { calculateSystemWithBreakdown } from "../src/lib/systemCalculators/index.js";
+import { estimateSystemQuantities } from "../src/lib/system-estimator.js";
 import { DEFAULT_BUDGET, DEFAULT_SYSTEM, DEFAULT_ZONE } from "../src/config/estimateConfig.js";
 
 function createFixture() {
@@ -53,4 +54,93 @@ test("calculateSystemWithBreakdown returns resource rows and positive totals", (
   assert.ok(detailed.materialsBase > 0);
   assert.ok(detailed.formulaRows.some((row) => row.key === "conditionLaborFactor"));
   assert.ok((detailed.trace.regionCoef || detailed.trace.regionalCoefficient || 1) >= 1);
+});
+
+test("estimateSystemQuantities scales APS zone counts with mandatory floors", () => {
+  const zoneContexts = [
+    {
+      id: "office-main",
+      zoneName: "Office",
+      zoneType: "office",
+      areaM2: 1800,
+      floors: 5,
+      occupancyDensity: 1,
+      systemRule: {
+        mandatory: true,
+        saturationCoefficient: 1,
+        securityIntensityCoefficient: 1,
+        engineeringDensityCoefficient: 1,
+        installationComplexityCoefficient: 1,
+        routeComplexityCoefficient: 1,
+      },
+    },
+  ];
+
+  const quantities = estimateSystemQuantities({
+    systemType: "aps",
+    zoneContexts,
+    objectClassification: {
+      aboveGroundFloors: 5,
+      undergroundFloors: 0,
+      distributedArchitecture: false,
+    },
+    activeSystemTypes: ["aps", "soue"],
+    recognizedZoneCount: 1,
+  });
+
+  assert.equal(quantities.mandatoryZoneCount, 1);
+  assert.equal(quantities.floorDistributedZoneCount, 5);
+  assert.equal(quantities.effectiveZoneCount, 5);
+  assert.ok((quantities.secondary?.zksps || 0) >= 5);
+  assert.ok((quantities.secondary?.servers || 0) >= 1);
+});
+
+test("estimateSystemQuantities increases SSOI load for vertically distributed zones", () => {
+  const makeZone = (floors) => [
+    {
+      id: `zone-${floors}`,
+      zoneName: "Core",
+      zoneType: "office",
+      areaM2: 2400,
+      floors,
+      occupancyDensity: 1,
+      systemRule: {
+        mandatory: true,
+        saturationCoefficient: 1,
+        securityIntensityCoefficient: 1,
+        engineeringDensityCoefficient: 1,
+        installationComplexityCoefficient: 1,
+        routeComplexityCoefficient: 1,
+      },
+    },
+  ];
+
+  const base = estimateSystemQuantities({
+    systemType: "ssoi",
+    zoneContexts: makeZone(1),
+    objectClassification: {
+      aboveGroundFloors: 1,
+      undergroundFloors: 0,
+      distributedArchitecture: false,
+    },
+    activeSystemTypes: ["ssoi", "aps", "skud"],
+    recognizedZoneCount: 1,
+  });
+
+  const vertical = estimateSystemQuantities({
+    systemType: "ssoi",
+    zoneContexts: makeZone(6),
+    objectClassification: {
+      aboveGroundFloors: 6,
+      undergroundFloors: 0,
+      distributedArchitecture: true,
+    },
+    activeSystemTypes: ["ssoi", "aps", "skud"],
+    recognizedZoneCount: 1,
+  });
+
+  assert.ok(vertical.floorDistributedZoneCount > base.floorDistributedZoneCount);
+  assert.ok(vertical.integrationPoints > base.integrationPoints);
+  assert.ok((vertical.secondary?.servers || 0) >= (base.secondary?.servers || 0));
+  assert.ok((vertical.secondary?.distributedZoneLoad || 0) > (base.secondary?.distributedZoneLoad || 0));
 });
