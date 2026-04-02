@@ -718,6 +718,23 @@ body.ai-survey-open .object-photo-card {
   margin-bottom: 4px;
 }
 
+.hero-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.hero-title__mark {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  color: var(--text);
+}
+
+.hero-title span {
+  display: block;
+}
+
 .hero-card p,
 .panel-header p,
 .subpanel-header p,
@@ -2497,6 +2514,17 @@ tbody tr:hover {
 
   .hero-card {
     flex-direction: column;
+  }
+
+  .hero-title {
+    align-items: flex-start;
+  }
+
+  .hero-title__mark {
+    width: 30px;
+    height: 30px;
+    flex-basis: 30px;
+    margin-top: 2px;
   }
 
   .hero-actions,

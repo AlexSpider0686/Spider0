@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Building2, Layers, Wallet, Download, PieChart, FileText, Ruler, ShieldAlert, CalendarRange } from "lucide-react";
 import useEstimate from "../hooks/useEstimate";
+import projectCoreMarkUrl from "../assets/project-core-mark.svg";
 import ObjectStep from "./ObjectStep";
 import SystemsStep from "./SystemsStep";
 import ProjectDesignStep from "./ProjectDesignStep";
@@ -105,7 +106,10 @@ export default function EstimatorApp() {
         <header className="hero-card">
           <div>
             <div className="hero-kicker">Project.Core™</div>
-            <h1>Project.Core™ — предварительный расчет бюджета систем безопасности</h1>
+            <h1 className="hero-title">
+              <img className="hero-title__mark" src={projectCoreMarkUrl} alt="" aria-hidden="true" />
+              <span>Project.Core™ — предварительный расчет бюджета систем безопасности</span>
+            </h1>
             <p>С AI-аудитом цен и трудозатрат, рыночной верификацией и защитой от недооценки бюджета.</p>
           </div>
           <div className="hero-actions">
