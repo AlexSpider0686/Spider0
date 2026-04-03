@@ -1987,9 +1987,16 @@ html {
     gap: 6px;
   }
 
-  .app-shell .otp-grid input {
-    font-size: 22px;
-  }
+.app-shell .otp-grid input {
+  font-size: 22px;
+}
+
+.app-shell .corridor-emphasis {
+  font-size: clamp(17px, 1.45vw, 21px);
+  line-height: 1.65;
+  font-weight: 600;
+  max-width: 980px;
+}
 }
 
 @media (prefers-reduced-motion: reduce) {
