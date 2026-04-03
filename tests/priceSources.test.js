@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { MANUFACTURER_SOURCES, getVendorNames, getManufacturerSource } from "../src/config/vendorsConfig.js";
 import { buildPriceRequests } from "../src/lib/priceCollector.js";
-import { buildApsProjectPriceRequests } from "../src/lib/apsProjectEstimate.js";
+import { buildApsProjectPriceRequests, inferApsProjectVendor } from "../src/lib/apsProjectEstimate.js";
 
 function toHost(url) {
   try {
@@ -90,4 +90,30 @@ test("APS PDF pricing keeps manufacturer hosts in request lists for all APS vend
       );
     }
   }
+});
+
+test("APS PDF vendor inference can resolve the preferred vendor before repricing", () => {
+  const inferred = inferApsProjectVendor(
+    [
+      {
+        id: "aps-bolid-1",
+        name: "Прибор приемно-контрольный",
+        model: "С2000-М",
+        rawLine: "Болид С2000-М",
+        mark: "Болид",
+        brand: "Болид",
+      },
+      {
+        id: "aps-bolid-2",
+        name: "Пульт контроля",
+        model: "С2000М",
+        rawLine: "Bolid С2000М",
+        mark: "Bolid",
+        brand: "Bolid",
+      },
+    ],
+    "Базовый"
+  );
+
+  assert.equal(inferred, "Болид");
 });

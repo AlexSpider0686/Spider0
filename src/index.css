@@ -1472,6 +1472,20 @@ body.ai-survey-open .object-photo-card {
   font-size: 11px;
 }
 
+.slider-share-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.slider-share-meta .label-with-tooltip {
+  margin: 0;
+}
+
+.slider-share-meta .label-with-tooltip label {
+  font-size: 11px;
+}
+
 .slider-title {
   display: flex;
   align-items: center;

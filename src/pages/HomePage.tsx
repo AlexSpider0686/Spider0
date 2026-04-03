@@ -198,7 +198,8 @@ export function HomePage() {
           <div className="hero__badge">Presale / Budget Intelligence / Security Systems</div>
           <h1 className="hero__brand-title">
             <img className="hero__brand-mark" src={projectCoreMarkUrl} alt="" aria-hidden="true" />
-            <span>{siteConfig.brand} — предварительная бюджетная оценка систем безопасности без Excel-хаоса</span>
+            <span className="hero__brand-line">{siteConfig.brand} —</span>
+            <span className="hero__headline-copy">предварительная бюджетная оценка систем безопасности без Excel-хаоса</span>
           </h1>
           <p className="hero__lead">
             Платформа собирает бюджет по АПС, СОУЭ, СОТС, СОТ, СКУД и ССОИ, учитывает зонирование, тип объекта, регион, а затем запускает собственный

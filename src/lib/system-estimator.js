@@ -63,9 +63,26 @@ function sumMandatoryZoneFloors(zoneContexts = []) {
 }
 
 function estimateAps(context) {
-  const { driver, zoneDemand } = context;
+  const { driver, zoneDemand, zoneContexts, objectClassification } = context;
   const detectors = safeCeil(zoneDemand.total, 1);
-  const zkspsCount = Math.max(context.effectiveZoneCount, context.floorDistributedZoneCount, 1);
+  const areaDrivenZksps = safeCeil(
+    zoneContexts.reduce((sum, zone) => {
+      if (!zone?.systemRule?.mandatory) return sum;
+      const areaDivider = zone.zoneType === "parking" ? 5200 : zone.zoneType === "public" ? 3600 : 4200;
+      const floorPenalty = 1 + Math.max(toNumber(zone.floors, 1) - 1, 0) * 0.12;
+      return sum + zone.areaM2 / areaDivider + floorPenalty * 0.35;
+    }, 0),
+    1
+  );
+  const distributedArchitectureReserve = objectClassification?.distributedArchitecture ? safeCeil(context.floorDistributedZoneCount * 1.15, 1) : 0;
+  const zkspsCount = Math.max(
+    context.effectiveZoneCount,
+    context.floorDistributedZoneCount,
+    areaDrivenZksps,
+    distributedArchitectureReserve,
+    context.recognizedZoneCount,
+    1
+  );
   const loops = Math.max(safeCeil(detectors / Math.max(driver.detectorsPerLoop, 1), 1), safeCeil(zkspsCount / 12, 1));
   const panels = Math.max(safeCeil(loops / Math.max(driver.loopsPerPanel, 1), 1), safeCeil(zkspsCount / 24, 1));
   const notification = Math.max(
@@ -99,6 +116,7 @@ function estimateAps(context) {
     ],
     secondary: {
       zksps: zkspsCount,
+      areaDrivenZksps,
       loops,
       panels,
       notification,

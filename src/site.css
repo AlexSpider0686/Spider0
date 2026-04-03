@@ -247,7 +247,8 @@ html {
 
 .app-shell .hero__headline-copy {
   display: block;
-  margin-left: clamp(-44px, -3.8vw, -24px);
+  margin-left: clamp(-72px, -5.3vw, -40px);
+  max-width: 11ch;
 }
 
 .app-shell .hero__brand-mark {
@@ -1956,7 +1957,8 @@ html {
   }
 
   .app-shell .hero__headline-copy {
-    margin-left: -18px;
+    margin-left: -28px;
+    max-width: 12ch;
   }
 
   .app-shell .hero__brand-mark {

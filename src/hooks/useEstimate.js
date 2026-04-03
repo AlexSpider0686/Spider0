@@ -566,7 +566,7 @@ export default function useEstimate() {
         }));
 
       try {
-        const { buildApsProjectPriceRequests, buildApsProjectSnapshot } = await import("../lib/apsProjectEstimate");
+        const { buildApsProjectPriceRequests, buildApsProjectSnapshot, inferApsProjectVendor } = await import("../lib/apsProjectEstimate");
         const originalItems =
           Array.isArray(apsSnapshot.originalItems) && apsSnapshot.originalItems.length ? apsSnapshot.originalItems : apsSnapshot.items || [];
         const parsedProject = {
@@ -580,11 +580,12 @@ export default function useEstimate() {
           parseQuality: apsSnapshot.parseQuality || {},
           aiQuality: apsSnapshot.aiQuality || null,
         };
+        const preferredVendor = inferApsProjectVendor(parsedProject.items, system.vendor) || system.vendor;
 
         const { priceSnapshot, fallbackNotice, snapshot: resolvedSnapshot } = await resolveApsProjectPricing({
           parsedProject,
           fileName: apsSnapshot.fileName || "aps-project.pdf",
-          vendorName: system.vendor,
+          vendorName: preferredVendor,
           buildApsProjectPriceRequests,
           buildApsProjectSnapshot,
         });
@@ -663,7 +664,7 @@ export default function useEstimate() {
     }));
 
     try {
-      const [{ parseApsProjectPdf }, { buildApsProjectPriceRequests, buildApsProjectSnapshot }] = await Promise.all([
+      const [{ parseApsProjectPdf }, { buildApsProjectPriceRequests, buildApsProjectSnapshot, inferApsProjectVendor }] = await Promise.all([
         import("../lib/apsProjectParser"),
         import("../lib/apsProjectEstimate"),
       ]);
@@ -678,7 +679,8 @@ export default function useEstimate() {
           startedAt: prev?.[systemId]?.startedAt || new Date().toISOString(),
         }),
       }));
-      const initialRequests = buildApsProjectPriceRequests(parsedProject.items, system.vendor);
+      const preferredVendor = inferApsProjectVendor(parsedProject.items, system.vendor) || system.vendor;
+      const initialRequests = buildApsProjectPriceRequests(parsedProject.items, preferredVendor);
       const { priceSnapshot, fallbackNotice } = await loadApsProjectPrices(initialRequests, {
         signal: taskSignal,
         onProgress: (progress) => {
@@ -708,14 +710,14 @@ export default function useEstimate() {
         requests: initialRequests,
         priceSnapshot,
         objectData,
-        vendorName: system.vendor,
+        vendorName: preferredVendor,
       });
 
       let resolvedSnapshot = initialSnapshot;
       let resolvedFallbackNotice = fallbackNotice;
-      const resolvedVendor = initialSnapshot.detectedVendor || initialSnapshot.vendorName || system.vendor;
+      const resolvedVendor = initialSnapshot.detectedVendor || initialSnapshot.vendorName || preferredVendor;
 
-      if (resolvedVendor && resolvedVendor !== system.vendor) {
+      if (resolvedVendor && resolvedVendor !== preferredVendor) {
         const vendorRequests = buildApsProjectPriceRequests(parsedProject.items, resolvedVendor);
         const vendorPricing = await loadApsProjectPrices(vendorRequests, {
           signal: taskSignal,

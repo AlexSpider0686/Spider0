@@ -186,6 +186,10 @@ function inferApsVendor(pricedItems = [], fallbackVendor = "Базовый") {
   return "Базовый";
 }
 
+export function inferApsProjectVendor(items = [], fallbackVendor = "Базовый") {
+  return inferApsVendor(items, fallbackVendor);
+}
+
 function buildTinkoSearchUrl(query) {
   return `https://www.tinko.ru/search/?q=${encodeURIComponent(query)}`;
 }

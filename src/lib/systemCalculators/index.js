@@ -203,7 +203,9 @@ function resolveApsProjectOverrides(projectSnapshot, quantities, cableModel, kns
   const metrics = projectSnapshot.metrics || {};
   const labor = projectSnapshot.labor || {};
   const detectorQty = Math.max(toNumber(metrics.detectorsQty, quantities.primaryUnits), 0);
-  const panelQty = Math.max(toNumber(metrics.panelQty, 0) + toNumber(metrics.powerQty, 0), 0);
+  const panelQty = Math.max(toNumber(metrics.panelQty, quantities.secondary?.panels), 0);
+  const powerQty = Math.max(toNumber(metrics.powerQty, quantities.secondary?.powerUnits), 0);
+  const serverQty = Math.max(toNumber(metrics.serverQty, quantities.secondary?.servers), 1);
   const notificationQty = Math.max(toNumber(metrics.notificationQty, 0), 0);
   const cableLengthM = Math.max(toNumber(metrics.cableLengthM, cableModel.cableLengthM), 0);
   const integrationPoints = Math.max(toNumber(quantities.integrationPoints, 1), 1);
@@ -212,20 +214,24 @@ function resolveApsProjectOverrides(projectSnapshot, quantities, cableModel, kns
     ...quantities,
     primaryUnits: detectorQty,
     markerUnits: detectorQty,
-    controllerUnits: panelQty,
-    activeElements: detectorQty + panelQty + notificationQty,
+    controllerUnits: panelQty + powerQty + serverQty,
+    activeElements: detectorQty + panelQty + powerQty + serverQty + notificationQty,
     integrationPoints,
     designHoursBase: Math.max(toNumber(labor.designHoursBase, quantities.designHoursBase), quantities.designHoursBase),
     resourceRows: [
       { key: "detector", label: "Пожарные извещатели", qty: detectorQty, priceShare: 0.46 },
-      { key: "module", label: "ППКП и модули", qty: Math.max(panelQty, 1), priceShare: 0.28 },
+      { key: "module", label: "ППКП и модули", qty: Math.max(panelQty, 1), priceShare: 0.24 },
       { key: "notification", label: "Оповещатели и табло", qty: Math.max(notificationQty, 1), priceShare: 0.16 },
-      { key: "power", label: "Питание и АКБ", qty: Math.max(toNumber(metrics.powerQty, 1), 1), priceShare: 0.1 },
+      { key: "power", label: "Питание и АКБ", qty: Math.max(powerQty, 1), priceShare: 0.1 },
+      { key: "server", label: "Сервер / АРМ АПС", qty: serverQty, priceShare: 0.04 },
     ],
     secondary: {
       ...(quantities.secondary || {}),
+      zksps: Math.max(toNumber(metrics.zkspsQty, quantities.secondary?.zksps), quantities.secondary?.zksps || 1),
       panels: panelQty,
+      powerUnits: powerQty,
       notification: notificationQty,
+      servers: serverQty,
     },
   };
 
