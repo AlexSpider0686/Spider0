@@ -552,6 +552,16 @@ html {
   background: linear-gradient(135deg, var(--primary), var(--primary-2));
 }
 
+.app-shell .corridor-emphasis {
+  display: block;
+  font-size: clamp(24px, 2vw, 28px);
+  line-height: 1.5;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #18314a;
+  max-width: 980px;
+}
+
 .app-shell .spotlight-card {
   padding: 30px;
   border-radius: 32px;
@@ -1987,19 +1997,9 @@ html {
     gap: 6px;
   }
 
-.app-shell .otp-grid input {
-  font-size: 22px;
-}
-
-.app-shell .corridor-emphasis {
-  display: block;
-  font-size: clamp(26px, 2.2vw, 34px);
-  line-height: 1.45;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  color: #18314a;
-  max-width: 980px;
-}
+  .app-shell .otp-grid input {
+    font-size: 22px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
