@@ -493,7 +493,7 @@ export function calculateSystemWithBreakdown(
 
   laborModel = applyScheduleOverrides(laborModel, projectOverrides.laborOverride);
 
-  const equipmentBase = calculateSystem(system, zones, budget, objectData, marketSnapshot);
+  const equipmentBase = calculateSystem(system, zones, budget, objectData, marketSnapshot, quantities);
   const regionalCoef = coefficients.regionalCoefficient;
   const equipmentCost =
     projectOverrides.equipmentOverride.equipmentCost > 0

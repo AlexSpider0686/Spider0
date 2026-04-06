@@ -14,6 +14,188 @@ const MARKET_KEY_ALIASES = {
   amplifier: ["amplifiers", "amplifier"],
 };
 
+const CONCRETE_MODEL_CATALOG = {
+  sot: {
+    Hikvision: {
+      camera: {
+        "внутренние_2": "DS-2CD1123G2-LIU",
+        "внутренние_4": "DS-2CD2143G2-IU",
+        "внутренние_8": "DS-2CD2183G2-IU",
+        "уличные_2": "DS-2CD2T23G2-2I",
+        "уличные_4": "DS-2CD2T43G2-4I",
+        "уличные_8": "DS-2CD2T83G2-4I",
+      },
+      recorder: { 8: "iDS-7108NXI-M1/S", 16: "iDS-7716NXI-M4/X", 32: "DS-7732NXI-K4", 64: "DS-7764NXI-K4" },
+      switch: {
+        "8_true": "DS-3E0510HP-E",
+        "16_true": "DS-3E0518HP-E",
+        "24_true": "DS-3E0526P-E/M",
+        "48_true": "DS-3E0552P-E",
+        "8_false": "DS-3E0109P-E/M",
+        "16_false": "DS-3E0318P-E/M",
+        "24_false": "DS-3E0326P-E/M",
+        "48_false": "DS-3E0352P-E",
+      },
+    },
+    Dahua: {
+      camera: {
+        "внутренние_2": "DH-IPC-HDW2230TP-AS-0280B",
+        "внутренние_4": "DH-IPC-HDW2439TP-AS-LED-0280B",
+        "внутренние_8": "DH-IPC-HDW2849TMP-S-IL-0280B",
+        "уличные_2": "DH-IPC-HFW2230SP-S-0280B",
+        "уличные_4": "DH-IPC-HFW2449SP-S-IL-0280B",
+        "уличные_8": "DH-IPC-HFW2849TP-AS-LED-0280B",
+      },
+      recorder: { 8: "DHI-NVR2108HS-I2", 16: "DHI-NVR4216-4KS3", 32: "DHI-NVR5232-EI", 64: "DHI-NVR5864-EI" },
+      switch: {
+        "8_true": "PFS3010-8ET-96",
+        "16_true": "PFS4218-16ET-190",
+        "24_true": "PFS3226-24ET-240",
+        "48_true": "PFS4252-48GT4XF-370",
+        "8_false": "PFS3009-8ET1GT",
+        "16_false": "PFS3018-16GT",
+        "24_false": "PFS3024-24GT",
+        "48_false": "PFS3048-48GT",
+      },
+    },
+    TRASSIR: {
+      camera: {
+        "внутренние_2": "TR-D2121IR3 v6",
+        "внутренние_4": "TR-D2B5 v2",
+        "внутренние_8": "TR-D8221WDIR7 v2",
+        "уличные_2": "TR-D2123IR6 v6",
+        "уличные_4": "TR-D4B6 v3",
+        "уличные_8": "TR-D8281WDIR8 v2",
+      },
+      recorder: { 8: "NeuroStation Compact 8", 16: "NeuroStation Compact 16", 32: "NeuroStation 8800R/32", 64: "NeuroStation 8800R/64" },
+      switch: {
+        "8_true": "TR-NS108P",
+        "16_true": "TR-NS116P",
+        "24_true": "TR-NS224P",
+        "48_true": "TR-NS248P",
+        "8_false": "TR-NS108",
+        "16_false": "TR-NS116",
+        "24_false": "TR-NS224",
+        "48_false": "TR-NS248",
+      },
+    },
+    Axis: {
+      camera: {
+        "внутренние_2": "M3085-V",
+        "внутренние_4": "M4216-V",
+        "внутренние_8": "P3268-LVE",
+        "уличные_2": "P1465-LE",
+        "уличные_4": "P1467-LE",
+        "уличные_8": "Q1808-LE",
+      },
+      recorder: { 8: "S3008 Recorder", 16: "S3016 Recorder", 32: "S3050 Recorder", 64: "S3064 Recorder" },
+      switch: {
+        "8_true": "T8504-R",
+        "16_true": "D8208-R",
+        "24_true": "D8212-VE",
+        "48_true": "D8308-R",
+        "8_false": "TS1001",
+        "16_false": "TU1001-VE",
+        "24_false": "TU6004-E",
+        "48_false": "TU8001-E",
+      },
+    },
+  },
+  ssoi: {
+    TRASSIR: {
+      recorder: { 8: "NeuroStation Compact 8", 16: "NeuroStation Compact 16", 32: "NeuroStation 8800R/32", 64: "NeuroStation 8800R/64" },
+      switch: {
+        "8_true": "TR-NS108P",
+        "16_true": "TR-NS116P",
+        "24_true": "TR-NS224P",
+        "48_true": "TR-NS248P",
+        "8_false": "TR-NS108",
+        "16_false": "TR-NS116",
+        "24_false": "TR-NS224",
+        "48_false": "TR-NS248",
+      },
+    },
+    "ISS (Интеллект)": {
+      recorder: { 8: "Интеллект XServer S", 16: "Интеллект XServer M", 32: "Интеллект XServer L", 64: "Интеллект XServer XL" },
+      switch: {
+        "8_true": "Cisco CBS250-8P-E-2G",
+        "16_true": "Cisco CBS250-16P-2G",
+        "24_true": "Cisco CBS250-24P-4G",
+        "48_true": "Cisco CBS250-48P-4G",
+        "8_false": "Cisco CBS250-8T-E-2G",
+        "16_false": "Cisco CBS250-16T-2G",
+        "24_false": "Cisco CBS250-24T-4G",
+        "48_false": "Cisco CBS250-48T-4G",
+      },
+    },
+    Macroscop: {
+      recorder: { 8: "Macroscop NVR Mini", 16: "Macroscop NVR 16", 32: "Macroscop NVR 32", 64: "Macroscop Ultra 64" },
+      switch: {
+        "8_true": "D-Link DGS-1100-10MPV2",
+        "16_true": "D-Link DGS-1210-18MP",
+        "24_true": "D-Link DGS-1210-28MP",
+        "48_true": "D-Link DGS-1210-52MP",
+        "8_false": "D-Link DGS-1100-10",
+        "16_false": "D-Link DGS-1210-16",
+        "24_false": "D-Link DGS-1210-28",
+        "48_false": "D-Link DGS-1210-52",
+      },
+    },
+  },
+  sots: {
+    "Болид": {
+      sensor: { "ИК": "С2000-ИК исп.03", "ИК+СВЧ": "С2000-СТИК", "вибрационный": "Шорох-2" },
+      panel: { 2: "Сигнал-20П исп.01", 4: "Сигнал-10", 8: "Сигнал-20М" },
+    },
+    "Рубеж": {
+      sensor: { "ИК": "ИО 409-28 Рубеж", "ИК+СВЧ": "ИО 414-1 Рубеж", "вибрационный": "ИО 102-26 исп.200" },
+      panel: { 2: "ППКОП R3-Рубеж-2ОП", 4: "ППКОП R3-Рубеж-4ОП", 8: "ППКОП Рубеж-20П" },
+    },
+    "Аргус-Спектр": {
+      sensor: { "ИК": "Икар-5РА", "ИК+СВЧ": "Икар-Ш", "вибрационный": "Стекло-3" },
+      panel: { 2: "РРОП2", 4: "Стрелец-ПРО Контроллер", 8: "ППКОП Стрелец-Интеграл" },
+    },
+  },
+  skud: {
+    Sigur: { controller: { 1: "E510", 2: "E210", 4: "E5100" } },
+    Parsec: { controller: { 1: "NC-100K-IP", 2: "NC-2000", 4: "NC-8000" } },
+    PERCo: { controller: { 1: "CT/L04.2", 2: "CT/L14.1", 4: "CR11.2" } },
+    Biosmart: { controller: { 1: "BS-ACS-1", 2: "BS-ACS-2", 4: "BS-ACS-4" } },
+  },
+  aps: {
+    "Болид": {
+      detector: { "дымовой": "ДИП-34А-03", "тепловой": "С2000-ИП-03", "комбинированный": "С2000-ИПГ" },
+      panel: { 2: "Сигнал-20П исп.01", 4: "С2000-КДЛ", 8: "С2000М + С2000-КДЛ" },
+    },
+    "Рубеж": {
+      detector: { "дымовой": "ИП 212-64-R3", "тепловой": "ИП 101-29-PR-R3", "комбинированный": "ИП 212/101-64-PR-R3" },
+      panel: { 2: "R3-Рубеж-2ОП", 4: "Рубеж-2ОП прот.R3", 8: "Рубеж-20П" },
+    },
+    "Аргус-Спектр": {
+      detector: { "дымовой": "Аврора-Д-ПРО", "тепловой": "Аврора-Т-ПРО", "комбинированный": "Аврора-ДТ-ПРО" },
+      panel: { 2: "Стрелец-ПРО ППКУП", 4: "Стрелец-Интеграл", 8: "ППКУП Стрелец-ПРО" },
+    },
+    Simplex: {
+      detector: { "дымовой": "4098-9714", "тепловой": "4098-9733", "комбинированный": "4098-9754" },
+      panel: { 2: "4007ES", 4: "4100ES", 8: "4100ES Expanded" },
+    },
+  },
+  soue: {
+    "Болид": {
+      speaker: { "настенный": "ОПОП 124-R3", "потолочный": "АС-4-1", "рупорный": "ОПОП 2-35" },
+      amplifier: { 2: "Рупор-200", 4: "Рупор-300", 8: "Рупор-Диспетчер исп.02" },
+    },
+    "Рубеж": {
+      speaker: { "настенный": "ОПОП 124-R3", "потолочный": "ОПОП 024-R3", "рупорный": "ОПОП 2-R3" },
+      amplifier: { 2: "RM-2", 4: "RM-4", 8: "Sonar SCA-8240" },
+    },
+    Roxton: {
+      speaker: { "настенный": "PA-620T", "потолочный": "PC-06T", "рупорный": "HS-30RT" },
+      amplifier: { 2: "PA-200D", 4: "AA-1204", 8: "AA-2408" },
+    },
+  },
+};
+
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
@@ -25,6 +207,10 @@ function getAreaUnits(zones) {
 
 function getValue(input, fallback) {
   return input === undefined || input === null || input === "" ? fallback : input;
+}
+
+function makeDisplayName(label, model) {
+  return model ? `${label} (${model})` : label;
 }
 
 function pushItem(details, item) {
@@ -71,13 +257,60 @@ function pickMarketRatio(marketRatios, aliasKeys) {
   return 1;
 }
 
-function resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, aliasKeys) {
+function resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, aliasKeys, priceMultiplier = 1) {
   const ratio = pickMarketRatio(marketRatios, aliasKeys);
   const reference = toNumber(basePrice, 0) || toNumber(fallbackUnitPrice, 0);
-  return Math.max(reference * ratio, 0);
+  return Math.max(reference * ratio * Math.max(toNumber(priceMultiplier, 1), 0.01), 0);
 }
 
-export function calculateEquipment(system, zones, selectedParams = {}, fallbackUnitPrice = 0, marketEntries = []) {
+function getConcreteModel(systemType, vendor, itemType, optionKey) {
+  return CONCRETE_MODEL_CATALOG?.[systemType]?.[vendor]?.[itemType]?.[optionKey] || "";
+}
+
+function resolveQuantity(systemType, itemType, quantityContext, fallbackQty) {
+  const primaryUnits = Math.max(toNumber(quantityContext?.primaryUnits, 0), 0);
+  const secondary = quantityContext?.secondary || {};
+  const fallback = Math.max(toNumber(fallbackQty, 0), 1);
+
+  switch (`${systemType}:${itemType}`) {
+    case "sot:camera":
+      return Math.max(primaryUnits, fallback);
+    case "sot:recorder":
+      return Math.max(toNumber(secondary.nvr, 0), fallback);
+    case "sot:switch":
+      return Math.max(toNumber(secondary.switches, 0), fallback);
+    case "ssoi:recorder":
+      return Math.max(toNumber(secondary.servers, 0), fallback);
+    case "ssoi:switch":
+      return Math.max(toNumber(secondary.switches, 0), fallback);
+    case "sots:sensor":
+      return Math.max(primaryUnits, fallback);
+    case "sots:panel":
+      return Math.max(toNumber(secondary.controllers, 0), fallback);
+    case "skud:controller":
+      return Math.max(toNumber(secondary.controllers, 0), fallback);
+    case "aps:detector":
+      return Math.max(primaryUnits, fallback);
+    case "aps:panel":
+      return Math.max(toNumber(secondary.panels, 0), fallback);
+    case "soue:speaker":
+      return Math.max(primaryUnits, fallback);
+    case "soue:amplifier":
+      return Math.max(toNumber(secondary.amplifiers, 0), fallback);
+    default:
+      return fallback;
+  }
+}
+
+export function calculateEquipment(
+  system,
+  zones,
+  selectedParams = {},
+  fallbackUnitPrice = 0,
+  marketEntries = [],
+  quantityContext = null,
+  priceMultiplier = 1
+) {
   const areaUnits = getAreaUnits(zones);
   const vendorMeta = getVendorEquipment(system.type, system.vendor);
   const marketRatios = buildMarketRatioMap(marketEntries);
@@ -100,41 +333,45 @@ export function calculateEquipment(system, zones, selectedParams = {}, fallbackU
     const placement = getValue(selectedParams.cameraPlacement, vendorMeta.camera.placement[0]);
     const resolution = Number(getValue(selectedParams.cameraResolution, vendorMeta.camera.resolution[1] || vendorMeta.camera.resolution[0]));
     const key = `${placement}_${resolution}`;
+    const model = getConcreteModel(system.type, system.vendor, "camera", key);
     const basePrice = vendorMeta.camera.basePrices[key] || 0;
-    const unitPrice = resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, MARKET_KEY_ALIASES.camera);
-    const qty = Math.max(Math.round(areaUnits * 6.5), 1);
+    const unitPrice = resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, MARKET_KEY_ALIASES.camera, priceMultiplier);
+    const qty = resolveQuantity(system.type, "camera", quantityContext, Math.round(areaUnits * 6.5));
     pushItem(details, {
       code: "CAM",
-      name: `Камеры (${placement}, ${resolution} Мп)`,
+      name: makeDisplayName(`РљР°РјРµСЂС‹ (${placement}, ${resolution} РњРї)`, model),
+      model,
       qty,
       unitPrice,
       total: qty * unitPrice,
       isKey: true,
-      basis: "Количество камер рассчитывается по нормативной плотности на 1000 м².",
+      basis: "РљРѕР»РёС‡РµСЃС‚РІРѕ РєР°РјРµСЂ Р±РµСЂРµС‚СЃСЏ РёР· СЂР°СЃС‡С‘С‚РЅРѕР№ РїР»РѕС‚РЅРѕСЃС‚Рё Рё Р·РѕРЅР°Р»СЊРЅРѕР№ СЃС‚СЂСѓРєС‚СѓСЂС‹ СЃРёСЃС‚РµРјС‹.",
     });
   }
 
   if (vendorMeta.recorder) {
     const channels = Number(getValue(selectedParams.recorderChannels, vendorMeta.recorder.channels[2] || vendorMeta.recorder.channels[0]));
+    const model = getConcreteModel(system.type, system.vendor, "recorder", channels);
     const basePrice = vendorMeta.recorder.basePrices[channels] || 0;
-    const unitPrice = resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, MARKET_KEY_ALIASES.recorder);
+    const unitPrice = resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, MARKET_KEY_ALIASES.recorder, priceMultiplier);
     const cameraQty = details.find((item) => item.code === "CAM")?.qty || Math.max(Math.round(areaUnits * 6), 1);
-    const qty = Math.max(Math.ceil(cameraQty / Math.max(channels, 1)), 1);
+    const qty = resolveQuantity(system.type, "recorder", quantityContext, Math.ceil(cameraQty / Math.max(channels, 1)));
     pushItem(details, {
       code: "NVR",
-      name: `Регистратор (${channels} каналов)`,
+      name: makeDisplayName(`Р РµРіРёСЃС‚СЂР°С‚РѕСЂ (${channels} РєР°РЅР°Р»РѕРІ)`, model),
+      model,
       qty,
       unitPrice,
       total: qty * unitPrice,
       isKey: true,
-      basis: "Количество регистраторов = количество камер / канальность регистратора, с округлением вверх.",
+      basis: "РљРѕР»РёС‡РµСЃС‚РІРѕ РІС‹С‡РёСЃР»СЏРµС‚СЃСЏ РѕС‚ С‡РёСЃР»Р° РєР°РјРµСЂ/СЃРµСЂРІРµСЂРЅС‹С… РєР°РЅР°Р»РѕРІ РїРѕ СЂР°СЃС‡С‘С‚РЅРѕРјСѓ РѕР±СЉС‘РјСѓ СЃРёСЃС‚РµРјС‹.",
     });
   }
 
   if (vendorMeta.hdd) {
     const hddTb = Number(getValue(selectedParams.hddTb, vendorMeta.hdd.tb[1] || vendorMeta.hdd.tb[0]));
     const basePrice = vendorMeta.hdd.basePrices[hddTb] || 0;
-    const unitPrice = resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, MARKET_KEY_ALIASES.hdd);
+    const unitPrice = resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, MARKET_KEY_ALIASES.hdd, priceMultiplier);
     const recorderQty = details.find((item) => item.code === "NVR")?.qty || 1;
     const cameraResolution = Number(getValue(selectedParams.cameraResolution, 4));
     const cameraQty = details.find((item) => item.code === "CAM")?.qty || Math.max(Math.round(areaUnits * 6), 1);
@@ -142,12 +379,12 @@ export function calculateEquipment(system, zones, selectedParams = {}, fallbackU
     const qty = Math.max(Math.ceil(minTb / Math.max(hddTb, 1)), recorderQty * 2);
     pushItem(details, {
       code: "HDD",
-      name: `HDD ${hddTb} ТБ (архив 30 дней)`,
+      name: `HDD ${hddTb} РўР‘ (Р°СЂС…РёРІ 30 РґРЅРµР№)`,
       qty,
       unitPrice,
       total: qty * unitPrice,
       isKey: true,
-      basis: `Минимальная емкость архива 30 дней: ${Math.ceil(minTb)} ТБ. Количество HDD подбирается автоматически.`,
+      basis: `РњРёРЅРёРјР°Р»СЊРЅР°СЏ РµРјРєРѕСЃС‚СЊ Р°СЂС…РёРІР° 30 РґРЅРµР№: ${Math.ceil(minTb)} РўР‘.`,
     });
   }
 
@@ -155,117 +392,131 @@ export function calculateEquipment(system, zones, selectedParams = {}, fallbackU
     const ports = Number(getValue(selectedParams.switchPorts, vendorMeta.switch.ports[2] || vendorMeta.switch.ports[0]));
     const poe = Boolean(getValue(selectedParams.switchPoe, true));
     const key = `${ports}_${poe}`;
+    const model = getConcreteModel(system.type, system.vendor, "switch", key);
     const basePrice = vendorMeta.switch.basePrices[key] || 0;
-    const unitPrice = resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, MARKET_KEY_ALIASES.switch);
+    const unitPrice = resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, MARKET_KEY_ALIASES.switch, priceMultiplier);
     const cameraQty = details.find((item) => item.code === "CAM")?.qty || Math.max(Math.round(areaUnits * 6), 1);
-    const qty = Math.max(Math.ceil(cameraQty / Math.max(ports, 1)), 1);
+    const qty = resolveQuantity(system.type, "switch", quantityContext, Math.ceil(cameraQty / Math.max(ports, 1)));
     pushItem(details, {
       code: "SW",
-      name: `Коммутатор ${ports} портов (${poe ? "PoE" : "без PoE"})`,
+      name: makeDisplayName(`РљРѕРјРјСѓС‚Р°С‚РѕСЂ ${ports} РїРѕСЂС‚РѕРІ (${poe ? "PoE" : "Р±РµР· PoE"})`, model),
+      model,
       qty,
       unitPrice,
       total: qty * unitPrice,
       isKey: true,
-      basis: "Количество коммутаторов зависит от числа подключаемых устройств и выбранной емкости.",
+      basis: "РљРѕР»РёС‡РµСЃС‚РІРѕ РєРѕРјРјСѓС‚Р°С‚РѕСЂРѕРІ СѓРІСЏР·Р°РЅРѕ СЃ СЂР°СЃС‡С‘С‚РЅС‹Рј РєРѕР»РёС‡РµСЃС‚РІРѕРј РїРѕР»РµРІС‹С… СѓСЃС‚СЂРѕР№СЃС‚РІ.",
     });
   }
 
   if (vendorMeta.controller) {
     const channels = Number(getValue(selectedParams.controllerChannels, vendorMeta.controller.channels[1] || vendorMeta.controller.channels[0]));
+    const model = getConcreteModel(system.type, system.vendor, "controller", channels);
     const basePrice = vendorMeta.controller.basePrices[channels] || 0;
-    const unitPrice = resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, MARKET_KEY_ALIASES.controller);
-    const qty = Math.max(Math.round(areaUnits), 1);
+    const unitPrice = resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, MARKET_KEY_ALIASES.controller, priceMultiplier);
+    const qty = resolveQuantity(system.type, "controller", quantityContext, Math.round(areaUnits));
     pushItem(details, {
       code: "CTRL",
-      name: `Контроллер доступа (${channels} точки)`,
+      name: makeDisplayName(`РљРѕРЅС‚СЂРѕР»Р»РµСЂ РґРѕСЃС‚СѓРїР° (${channels} С‚РѕС‡РєРё)`, model),
+      model,
       qty,
       unitPrice,
       total: qty * unitPrice,
       isKey: true,
-      basis: "Количество контроллеров рассчитывается укрупненно по плотности точек доступа.",
+      basis: "РљРѕРЅС‚СЂРѕР»Р»РµСЂС‹ Р±РµСЂСѓС‚СЃСЏ РёР· СЂР°СЃС‡С‘С‚Р° С‚РѕС‡РµРє РїСЂРѕС…РѕРґР° Рё СЌС‚Р°Р¶РЅРѕСЃС‚Рё.",
     });
   }
 
   if (vendorMeta.sensor) {
     const kind = getValue(selectedParams.sensorKind, vendorMeta.sensor.kind[0]);
+    const model = getConcreteModel(system.type, system.vendor, "sensor", kind);
     const basePrice = vendorMeta.sensor.basePrices[kind] || 0;
-    const unitPrice = resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, MARKET_KEY_ALIASES.sensor);
-    const qty = Math.max(Math.round(areaUnits * 9), 1);
+    const unitPrice = resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, MARKET_KEY_ALIASES.sensor, priceMultiplier);
+    const qty = resolveQuantity(system.type, "sensor", quantityContext, Math.round(areaUnits * 9));
     pushItem(details, {
       code: "SEN",
-      name: `Охранный датчик (${kind})`,
+      name: makeDisplayName(`РћС…СЂР°РЅРЅС‹Р№ РґР°С‚С‡РёРє (${kind})`, model),
+      model,
       qty,
       unitPrice,
       total: qty * unitPrice,
       isKey: true,
-      basis: "Количество датчиков считается по нормативной плотности для системы.",
+      basis: "Р”Р°С‚С‡РёРєРё РѕС…СЂР°РЅС‹ РїСЂРёРІСЏР·Р°РЅС‹ Рє С‚РёРїСѓ Р·РѕРЅ, РѕР±СЉРµРєС‚Сѓ Рё Р·Р°РґР°РЅРЅРѕР№ РїР»РѕС‚РЅРѕСЃС‚Рё.",
     });
   }
 
   if (vendorMeta.detector) {
     const kind = getValue(selectedParams.detectorKind, vendorMeta.detector.kind[0]);
+    const model = getConcreteModel(system.type, system.vendor, "detector", kind);
     const basePrice = vendorMeta.detector.basePrices[kind] || 0;
-    const unitPrice = resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, MARKET_KEY_ALIASES.detector);
-    const qty = Math.max(Math.round(areaUnits * 24), 1);
+    const unitPrice = resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, MARKET_KEY_ALIASES.detector, priceMultiplier);
+    const qty = resolveQuantity(system.type, "detector", quantityContext, Math.round(areaUnits * 24));
     pushItem(details, {
       code: "DET",
-      name: `Извещатель (${kind})`,
+      name: makeDisplayName(`РР·РІРµС‰Р°С‚РµР»СЊ (${kind})`, model),
+      model,
       qty,
       unitPrice,
       total: qty * unitPrice,
       isKey: true,
-      basis: "Количество извещателей берется по нормативной плотности для АПС.",
+      basis: "РљРѕР»РёС‡РµСЃС‚РІРѕ РёР·РІРµС‰Р°С‚РµР»РµР№ Р±РµСЂС‘С‚СЃСЏ РёР· Р·РѕРЅР°Р»СЊРЅРѕРіРѕ Рё РѕР±СЉРµРєС‚РЅРѕРіРѕ СЂР°СЃС‡С‘С‚Р° APS.",
     });
   }
 
   if (vendorMeta.panel) {
     const loops = Number(getValue(selectedParams.panelLoops, vendorMeta.panel.loops[1] || vendorMeta.panel.loops[0]));
+    const model = getConcreteModel(system.type, system.vendor, "panel", loops);
     const basePrice = vendorMeta.panel.basePrices[loops] || 0;
-    const unitPrice = resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, MARKET_KEY_ALIASES.panel);
+    const unitPrice = resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, MARKET_KEY_ALIASES.panel, priceMultiplier);
     const detectorsQty =
       details.find((item) => item.code === "DET")?.qty || details.find((item) => item.code === "SEN")?.qty || Math.max(Math.round(areaUnits * 20), 1);
-    const qty = Math.max(Math.ceil(detectorsQty / Math.max(loops * 64, 1)), 1);
+    const qty = resolveQuantity(system.type, "panel", quantityContext, Math.ceil(detectorsQty / Math.max(loops * 64, 1)));
     pushItem(details, {
       code: "PANEL",
-      name: `Панель / ППКП (${loops} шлейфа)`,
+      name: makeDisplayName(`РџР°РЅРµР»СЊ / РџРџРљРџ (${loops} С€Р»РµР№С„Р°)`, model),
+      model,
       qty,
       unitPrice,
       total: qty * unitPrice,
       isKey: true,
-      basis: "Количество панелей зависит от емкости шлейфов и суммарного числа датчиков.",
+      basis: "РџР°РЅРµР»Рё Рё РџРџРљРџ СѓРІСЏР·Р°РЅС‹ СЃ СЂР°СЃС‡С‘С‚РЅС‹РјРё С€Р»РµР№С„Р°РјРё/Р·РѕРЅР°РјРё Рё РјРѕС‰РЅРѕСЃС‚СЊСЋ СЃРёСЃС‚РµРјС‹.",
     });
   }
 
   if (vendorMeta.speaker) {
     const kind = getValue(selectedParams.speakerKind, vendorMeta.speaker.kind[0]);
+    const model = getConcreteModel(system.type, system.vendor, "speaker", kind);
     const basePrice = vendorMeta.speaker.basePrices[kind] || 0;
-    const unitPrice = resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, MARKET_KEY_ALIASES.speaker);
-    const qty = Math.max(Math.round(areaUnits * 7), 1);
+    const unitPrice = resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, MARKET_KEY_ALIASES.speaker, priceMultiplier);
+    const qty = resolveQuantity(system.type, "speaker", quantityContext, Math.round(areaUnits * 7));
     pushItem(details, {
       code: "SPK",
-      name: `Оповещатель СОУЭ (${kind})`,
+      name: makeDisplayName(`РћРїРѕРІРµС‰Р°С‚РµР»СЊ РЎРћРЈР­ (${kind})`, model),
+      model,
       qty,
       unitPrice,
       total: qty * unitPrice,
       isKey: true,
-      basis: "Количество оповещателей считается по акустической плотности на 1000 м².",
+      basis: "РљРѕР»РёС‡РµСЃС‚РІРѕ РѕРїРѕРІРµС‰Р°С‚РµР»РµР№ Р±РµСЂС‘С‚СЃСЏ РёР· СЂР°СЃС‡С‘С‚РЅРѕР№ РїР»РѕС‚РЅРѕСЃС‚Рё Рё Р·РѕРЅ РѕРїРѕРІРµС‰РµРЅРёСЏ.",
     });
   }
 
   if (vendorMeta.amplifier) {
     const channels = Number(getValue(selectedParams.amplifierChannels, vendorMeta.amplifier.channels[1] || vendorMeta.amplifier.channels[0]));
+    const model = getConcreteModel(system.type, system.vendor, "amplifier", channels);
     const basePrice = vendorMeta.amplifier.basePrices[channels] || 0;
-    const unitPrice = resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, MARKET_KEY_ALIASES.amplifier);
+    const unitPrice = resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, MARKET_KEY_ALIASES.amplifier, priceMultiplier);
     const speakerQty = details.find((item) => item.code === "SPK")?.qty || Math.max(Math.round(areaUnits * 6), 1);
-    const qty = Math.max(Math.ceil(speakerQty / Math.max(channels * 8, 1)), 1);
+    const qty = resolveQuantity(system.type, "amplifier", quantityContext, Math.ceil(speakerQty / Math.max(channels * 8, 1)));
     pushItem(details, {
       code: "AMP",
-      name: `Усилитель СОУЭ (${channels} канала)`,
+      name: makeDisplayName(`РЈСЃРёР»РёС‚РµР»СЊ РЎРћРЈР­ (${channels} РєР°РЅР°Р»Р°)`, model),
+      model,
       qty,
       unitPrice,
       total: qty * unitPrice,
       isKey: true,
-      basis: "Количество усилителей определяется по числу линий оповещения и требуемому резерву.",
+      basis: "РЈСЃРёР»РёС‚РµР»Рё СѓРІСЏР·Р°РЅС‹ СЃ СЂР°СЃС‡С‘С‚РЅС‹Рј РєРѕР»РёС‡РµСЃС‚РІРѕРј РѕРїРѕРІРµС‰Р°С‚РµР»РµР№ Рё Р·РѕРЅ РѕРїРѕРІРµС‰РµРЅРёСЏ.",
     });
   }
 
@@ -283,7 +534,7 @@ export function calculateEquipment(system, zones, selectedParams = {}, fallbackU
 
   const totalEquipmentCost = details.reduce((sum, item) => sum + item.total, 0);
   const keyEquipment = details.filter((item) => item.isKey);
-  const normalizedUnits = Math.max(keyEquipment[0]?.qty || areaUnits, 1);
+  const normalizedUnits = Math.max(toNumber(quantityContext?.markerUnits, keyEquipment[0]?.qty || areaUnits), 1);
 
   return {
     units: normalizedUnits,
@@ -295,4 +546,3 @@ export function calculateEquipment(system, zones, selectedParams = {}, fallbackU
     keyEquipment,
   };
 }
-

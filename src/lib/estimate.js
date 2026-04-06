@@ -48,7 +48,7 @@ function getMarketSnapshotFactor(snapshot) {
   return clamp(weightedRatio / weightSum, 0.7, 1.8);
 }
 
-export function calculateSystem(system, zones, budget, objectData = {}, marketSnapshot = null) {
+export function calculateSystem(system, zones, budget, objectData = {}, marketSnapshot = null, quantityContext = null) {
   const rates = BASE_RATES[system.type];
   if (!rates) {
     return {
@@ -85,7 +85,9 @@ export function calculateSystem(system, zones, budget, objectData = {}, marketSn
   const technicalComplexityFactor =
     (vendorProfile.technicalParameters?.integrationComplexity || 1) /
     (baseVendorProfile.technicalParameters?.integrationComplexity || 1);
-  const vendorFactor = vendorCostRatio * technicalComplexityFactor * toNumber(system.customVendorIndex, 1);
+  const customVendorFactor = toNumber(system.customVendorIndex, 1);
+  const vendorBaseFactor = vendorCostRatio * technicalComplexityFactor;
+  const vendorFactor = vendorBaseFactor * customVendorFactor;
   const marketSnapshotFactor = getMarketSnapshotFactor(marketSnapshot);
 
   let cable = 0;
@@ -112,8 +114,16 @@ export function calculateSystem(system, zones, budget, objectData = {}, marketSn
   cable *= toNumber(budget.cableCoef, 1) * toNumber(budget.complexityCoef, 1) * (vendorProfile.cableCoefficient || 1);
   units *= toNumber(budget.equipmentCoef, 1) * (vendorProfile.qualityCoefficient || 1);
 
-  const fallbackUnitPrice = rates.equipUnit * vendorFactor * equipmentProfileFactor;
-  const equipmentData = calculateEquipment(system, zones, system.selectedEquipmentParams, fallbackUnitPrice, marketSnapshot?.entries || []);
+  const fallbackUnitPrice = rates.equipUnit * vendorBaseFactor * equipmentProfileFactor;
+  const equipmentData = calculateEquipment(
+    system,
+    zones,
+    system.selectedEquipmentParams,
+    fallbackUnitPrice,
+    marketSnapshot?.entries || [],
+    quantityContext,
+    toNumber(system.customVendorIndex, 1)
+  );
   const equipmentCost = equipmentData.totalEquipmentCost;
   const cableMaterials = cable * 92;
   const trayAndFasteners = cable * 51;
@@ -192,6 +202,8 @@ export function calculateSystem(system, zones, budget, objectData = {}, marketSn
     },
     trace: {
       vendorFactor,
+      vendorBaseFactor,
+      customVendorFactor,
       marketSnapshotFactor,
       equipmentProfileFactor,
       speedFactor,

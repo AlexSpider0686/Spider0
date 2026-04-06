@@ -515,14 +515,43 @@ body.ai-survey-open .object-photo-card {
   top: 12px;
   left: 12px;
   z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 220px;
   font-size: 11px;
-  font-weight: 700;
   color: #0f3f79;
   background: rgba(255, 255, 255, 0.92);
   border: 1px solid rgba(47, 127, 241, 0.35);
-  border-radius: 999px;
-  padding: 4px 10px;
+  border-radius: 18px;
+  padding: 6px 12px;
   box-shadow: var(--shadow-soft);
+}
+
+.build-badge__logo {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: block;
+  filter: drop-shadow(0 4px 10px rgba(47, 127, 241, 0.22));
+}
+
+.build-badge__text {
+  display: grid;
+  gap: 2px;
+  line-height: 1.2;
+}
+
+.build-badge__text strong {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  color: #0f3f79;
+}
+
+.build-badge__text span {
+  color: rgba(15, 63, 121, 0.86);
+  font-weight: 700;
 }
 
 .app-wrap {

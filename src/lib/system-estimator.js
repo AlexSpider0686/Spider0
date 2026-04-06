@@ -9,7 +9,7 @@ function safeCeil(value, min = 0) {
   return Math.max(Math.ceil(toNumber(value, 0)), min);
 }
 
-function buildZoneDemand(zoneContexts, densityMap) {
+function buildZoneDemand(zoneContexts, densityMap, objectClassification = {}) {
   const zonePrimaryUnits = {};
   const drivers = [];
   let total = 0;
@@ -24,13 +24,23 @@ function buildZoneDemand(zoneContexts, densityMap) {
     const baseDensity = toNumber(densityMap[zone.zoneType], toNumber(densityMap.office, 0));
     const areaUnits = zone.areaM2 / 1000;
     const floorFactor = 1 + Math.max(zone.floors - 1, 0) * 0.04;
+    const zoneDensityFactor = clamp(toNumber(zone.densityCoefficient, 1), 0.55, 1.85);
+    const architectureFactor = clamp(1 + (toNumber(objectClassification.architectureComplexityIndex, 1) - 1) * 0.4, 0.9, 1.35);
+    const engineeringFactor = clamp(1 + (toNumber(objectClassification.engineeringSaturationIndex, 1) - 1) * 0.45, 0.9, 1.45);
+    const securityFactor = clamp(1 + (toNumber(objectClassification.securityIntensityIndex, 1) - 1) * 0.35, 0.9, 1.4);
+    const distributedFactor = objectClassification.distributedArchitecture ? 1.06 : 1;
     const qty =
       areaUnits *
       baseDensity *
       toNumber(rule.saturationCoefficient, 1) *
       toNumber(rule.securityIntensityCoefficient, 1) *
       toNumber(rule.engineeringDensityCoefficient, 1) *
-      floorFactor;
+      zoneDensityFactor *
+      floorFactor *
+      architectureFactor *
+      engineeringFactor *
+      securityFactor *
+      distributedFactor;
 
     const normalized = Math.max(qty, 0);
     zonePrimaryUnits[zone.id] = normalized;
@@ -48,6 +58,11 @@ function buildZoneDemand(zoneContexts, densityMap) {
       securityIntensityCoefficient: rule.securityIntensityCoefficient,
       installationComplexityCoefficient: rule.installationComplexityCoefficient,
       routeComplexityCoefficient: rule.routeComplexityCoefficient,
+      zoneDensityFactor,
+      architectureFactor,
+      engineeringFactor,
+      securityFactor,
+      distributedFactor,
       derivedPrimaryUnits: normalized,
     });
   }
@@ -83,8 +98,15 @@ function estimateAps(context) {
     context.recognizedZoneCount,
     1
   );
-  const loops = Math.max(safeCeil(detectors / Math.max(driver.detectorsPerLoop, 1), 1), safeCeil(zkspsCount / 12, 1));
-  const panels = Math.max(safeCeil(loops / Math.max(driver.loopsPerPanel, 1), 1), safeCeil(zkspsCount / 24, 1));
+  const loopReserveFactor = objectClassification?.distributedArchitecture ? 1.18 : 1.08;
+  const loops = Math.max(
+    safeCeil((detectors / Math.max(driver.detectorsPerLoop, 1)) * loopReserveFactor, 1),
+    safeCeil(zkspsCount / 10, 1)
+  );
+  const panels = Math.max(
+    safeCeil(loops / Math.max(driver.loopsPerPanel, 1), 1),
+    safeCeil(zkspsCount / 18, 1)
+  );
   const notification = Math.max(
     safeCeil(detectors * toNumber(driver.notificationPerPrimary, 0.15), 1),
     safeCeil(zkspsCount * 0.75, 1)
@@ -131,8 +153,8 @@ function estimateSoue(context) {
   const peopleFactor = 1 + zoneContexts.reduce((sum, zone) => sum + zone.occupancyDensity, 0) / Math.max(zoneContexts.length, 1) * 1.8;
   const speakers = safeCeil(zoneDemand.total * peopleFactor, 1);
   const alarmZones = Math.max(context.effectiveZoneCount, context.floorDistributedZoneCount, 1);
-  const amplifiers = safeCeil(speakers * toNumber(driver.amplifiersPerPrimary, 1 / 36), 1);
-  const controllers = safeCeil(amplifiers * toNumber(driver.controllersPerAmplifier, 0.25) + alarmZones / 6, 1);
+  const amplifiers = Math.max(safeCeil(speakers * toNumber(driver.amplifiersPerPrimary, 1 / 36), 1), safeCeil(alarmZones / 4, 1));
+  const controllers = safeCeil(amplifiers * toNumber(driver.controllersPerAmplifier, 0.25) + alarmZones / 5, 1);
   const servers = safeCeil(Math.max(amplifiers / 3, alarmZones / 14), 1);
   const integrationPoints = safeCeil(alarmZones * toNumber(driver.integrationPointsPerZone, 0.2), 1);
 
@@ -170,10 +192,14 @@ function estimateSots(context) {
   const { driver, zoneDemand } = context;
   const sensors = safeCeil(zoneDemand.total, 1);
   const boundaries = Math.max(
-    safeCeil(sensors * toNumber(driver.boundariesPerPrimary, 1 / 20), 1),
+    safeCeil(sensors * toNumber(driver.boundariesPerPrimary, 1 / 20) * 1.15, 1),
     safeCeil(Math.max(context.effectiveZoneCount, context.floorDistributedZoneCount), 1)
   );
-  const controllers = safeCeil(boundaries * toNumber(driver.controllerPerBoundary, 0.1), 1);
+  const controllers = Math.max(
+    safeCeil(boundaries * toNumber(driver.controllerPerBoundary, 0.1), 1),
+    safeCeil(sensors / 48, 1),
+    safeCeil(context.effectiveZoneCount / 4, 1)
+  );
   const cabinets = safeCeil(controllers * toNumber(driver.cabinetsPerController, 0.25), 1);
   const servers = safeCeil(Math.max(boundaries / 24, controllers / 2), 1);
   const integrationPoints = safeCeil(Math.max(context.effectiveZoneCount, context.floorDistributedZoneCount) * toNumber(driver.integrationPointsPerZone, 0.16), 1);
@@ -374,7 +400,7 @@ export function estimateSystemQuantities({
   recognizedZoneCount = 0,
 }) {
   const driver = SYSTEM_DRIVER_CONFIG[systemType] || SYSTEM_DRIVER_CONFIG.sot;
-  const zoneDemand = buildZoneDemand(zoneContexts, driver.densityPer1000 || {});
+  const zoneDemand = buildZoneDemand(zoneContexts, driver.densityPer1000 || {}, objectClassification);
   const mandatoryZoneCount = zoneContexts.filter((zone) => zone.systemRule?.mandatory).length;
   const floorDistributedZoneCount = Math.max(sumMandatoryZoneFloors(zoneContexts), mandatoryZoneCount, 0);
   const weightedZoneCount = zoneContexts.reduce((sum, zone) => {
@@ -405,7 +431,7 @@ export function estimateSystemQuantities({
 
   const routeComplexityAverage =
     zoneContexts.length > 0
-      ? zoneContexts.reduce((sum, zone) => sum + toNumber(zone.systemRule?.routeComplexityCoefficient, 1), 0) / zoneContexts.length
+      ? zoneContexts.reduce((sum, zone) => sum + toNumber(zone.systemRule?.routeComplexityCoefficient, 1) * toNumber(zone.cableCoefficient, 1), 0) / zoneContexts.length
       : 1;
 
   return {

@@ -1,4 +1,5 @@
 import { getZoneProfile, getZoneSystemMatrixRule } from "../config/costModelConfig";
+import { getZoneCalcProfile } from "../config/zonesConfig";
 import { toNumber } from "./estimate";
 
 function clamp(value, min, max) {
@@ -17,16 +18,20 @@ export function classifyZonesForSystem({ objectType, zones, systemType }) {
     const floors = Math.max(toNumber(zone.floors, 1), 1);
     const zoneType = zone.zoneType || zone.type || "office";
     const zoneProfile = getZoneProfile(zoneType);
+    const zoneCalcProfile = getZoneCalcProfile(zoneType);
     const matrixRule = getZoneSystemMatrixRule(objectType, zoneType, systemType);
 
     const floorComplexityFactor = clamp(1 + (floors - 1) * 0.035, 1, 1.8);
     const effectiveInstallationComplexity = clamp(
-      matrixRule.installationComplexityCoefficient * zoneProfile.installationComplexity * floorComplexityFactor,
+      matrixRule.installationComplexityCoefficient *
+        zoneProfile.installationComplexity *
+        toNumber(zoneCalcProfile.laborCoef, 1) *
+        floorComplexityFactor,
       0.75,
       2.6
     );
     const effectiveRouteComplexity = clamp(
-      matrixRule.routeComplexityCoefficient * zoneProfile.routeComplexity,
+      matrixRule.routeComplexityCoefficient * zoneProfile.routeComplexity * toNumber(zoneCalcProfile.cableCoef, 1),
       0.7,
       2.8
     );
@@ -40,6 +45,9 @@ export function classifyZonesForSystem({ objectType, zones, systemType }) {
       sharePercent: (areaM2 / protectedAreaM2) * 100,
       occupancyDensity: zoneProfile.occupancyDensity,
       hiddenRoutingShare: zoneProfile.hiddenRoutingShare,
+      densityCoefficient: toNumber(zoneCalcProfile.densityCoef, 1),
+      cableCoefficient: toNumber(zoneCalcProfile.cableCoef, 1),
+      laborCoefficient: toNumber(zoneCalcProfile.laborCoef, 1),
       systemRule: {
         ...matrixRule,
         installationComplexityCoefficient: effectiveInstallationComplexity,

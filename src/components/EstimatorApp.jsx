@@ -41,13 +41,13 @@ export default function EstimatorApp() {
   });
 
   const steps = [
-    { key: "object", label: "Объект", icon: Building2 },
-    { key: "systems", label: "Системы", icon: Layers },
-    { key: "design", label: "Проектирование", icon: Ruler },
-    { key: "budget", label: "Бюджет", icon: Wallet },
-    { key: "breakdown", label: "Стоимость проекта", icon: PieChart },
-    { key: "logic", label: "Логика расчетов", icon: FileText },
-    { key: "risks", label: "AI-риски проекта", icon: ShieldAlert },
+    { key: "object", label: "РћР±СЉРµРєС‚", icon: Building2 },
+    { key: "systems", label: "РЎРёСЃС‚РµРјС‹", icon: Layers },
+    { key: "design", label: "РџСЂРѕРµРєС‚РёСЂРѕРІР°РЅРёРµ", icon: Ruler },
+    { key: "budget", label: "Р‘СЋРґР¶РµС‚", icon: Wallet },
+    { key: "breakdown", label: "РЎС‚РѕРёРјРѕСЃС‚СЊ РїСЂРѕРµРєС‚Р°", icon: PieChart },
+    { key: "logic", label: "Р›РѕРіРёРєР° СЂР°СЃС‡РµС‚РѕРІ", icon: FileText },
+    { key: "risks", label: "AI-СЂРёСЃРєРё РїСЂРѕРµРєС‚Р°", icon: ShieldAlert },
   ];
   const stepRows = [steps.slice(0, 4), steps.slice(4)];
 
@@ -100,24 +100,30 @@ export default function EstimatorApp() {
         ) : null}
       </div>
 
-      <div className="build-badge">Версия {APP_VERSION_LABEL} · сборка {BUILD_NUMBER}</div>
+      <div className="build-badge">
+        <img src={projectCoreMarkUrl} alt="Project.Core" className="build-badge__logo" />
+        <div className="build-badge__text">
+          <strong>Project.Core</strong>
+          <span>Р’РµСЂСЃРёСЏ {APP_VERSION_LABEL} · СЃР±РѕСЂРєР° {BUILD_NUMBER}</span>
+        </div>
+      </div>
 
       <div className={`app-wrap ${authorized ? "" : "locked"}`} aria-hidden={!authorized}>
         <header className="hero-card">
           <div>
-            <div className="hero-kicker">Project.Core™</div>
+            <div className="hero-kicker">Project.Coreв„ў</div>
             <h1 className="hero-title">
               <img className="hero-title__mark" src={projectCoreMarkUrl} alt="" aria-hidden="true" />
-              <span>Project.Core™ — предварительный расчет бюджета систем безопасности</span>
+              <span>Project.Coreв„ў вЂ” РїСЂРµРґРІР°СЂРёС‚РµР»СЊРЅС‹Р№ СЂР°СЃС‡РµС‚ Р±СЋРґР¶РµС‚Р° СЃРёСЃС‚РµРј Р±РµР·РѕРїР°СЃРЅРѕСЃС‚Рё</span>
             </h1>
-            <p>С AI-аудитом цен и трудозатрат, рыночной верификацией и защитой от недооценки бюджета.</p>
+            <p>РЎ AI-Р°СѓРґРёС‚РѕРј С†РµРЅ Рё С‚СЂСѓРґРѕР·Р°С‚СЂР°С‚, СЂС‹РЅРѕС‡РЅРѕР№ РІРµСЂРёС„РёРєР°С†РёРµР№ Рё Р·Р°С‰РёС‚РѕР№ РѕС‚ РЅРµРґРѕРѕС†РµРЅРєРё Р±СЋРґР¶РµС‚Р°.</p>
           </div>
           <div className="hero-actions">
             <button className="primary-btn" onClick={vm.exportEstimate} type="button">
-              <Download size={16} /> Экспорт ТКП
+              <Download size={16} /> Р­РєСЃРїРѕСЂС‚ РўРљРџ
             </button>
             <button className="ghost-btn" onClick={() => setPlanModalOpen(true)} type="button">
-              <CalendarRange size={16} /> Сгенерировать план проекта
+              <CalendarRange size={16} /> РЎРіРµРЅРµСЂРёСЂРѕРІР°С‚СЊ РїР»Р°РЅ РїСЂРѕРµРєС‚Р°
             </button>
           </div>
         </header>

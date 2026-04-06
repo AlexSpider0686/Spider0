@@ -56,6 +56,63 @@ test("calculateSystemWithBreakdown returns resource rows and positive totals", (
   assert.ok((detailed.trace.regionCoef || detailed.trace.regionalCoefficient || 1) >= 1);
 });
 
+test("customVendorIndex affects equipment cost and concrete model names", () => {
+  const { zones, baseBudget, objectData } = createFixture();
+  const baseSystem = {
+    ...DEFAULT_SYSTEM(1, "aps"),
+    vendor: "Болид",
+    baseVendor: "Базовый",
+    selectedEquipmentParams: {
+      detectorKind: "дымовой",
+      panelLoops: 4,
+    },
+  };
+
+  const base = calculateSystemWithBreakdown(baseSystem, zones, baseBudget, objectData);
+  const indexed = calculateSystemWithBreakdown(
+    {
+      ...baseSystem,
+      customVendorIndex: 1.3,
+    },
+    zones,
+    baseBudget,
+    objectData
+  );
+
+  assert.ok(indexed.equipmentCost > base.equipmentCost);
+  assert.match(base.bom[0]?.name || "", /ДИП|С2000|Болид/u);
+});
+
+test("zone distribution changes equipment density and cost", () => {
+  const { baseBudget, objectData } = createFixture();
+  const system = {
+    ...DEFAULT_SYSTEM(1, "soue"),
+    vendor: "Болид",
+    baseVendor: "Базовый",
+    selectedEquipmentParams: {
+      speakerKind: "настенный",
+      amplifierChannels: 4,
+    },
+  };
+
+  const officeHeavy = [
+    DEFAULT_ZONE(1, "Офисы", "office", 7000, 5),
+    DEFAULT_ZONE(2, "Техпомещения", "technical", 3000, 2),
+  ];
+  const publicHeavy = [
+    DEFAULT_ZONE(1, "Лобби", "lobby", 3000, 5),
+    DEFAULT_ZONE(2, "Коридоры", "corridor", 4000, 5),
+    DEFAULT_ZONE(3, "Ритейл", "retail", 3000, 3),
+  ];
+
+  const officeResult = calculateSystemWithBreakdown(system, officeHeavy, baseBudget, { ...objectData, totalArea: 10000 });
+  const publicResult = calculateSystemWithBreakdown(system, publicHeavy, baseBudget, { ...objectData, totalArea: 10000 });
+
+  assert.notEqual(publicResult.units, officeResult.units);
+  assert.notEqual(publicResult.equipmentCost, officeResult.equipmentCost);
+  assert.notEqual(publicResult.total, officeResult.total);
+});
+
 test("estimateSystemQuantities scales APS zone counts with mandatory floors", () => {
   const zoneContexts = [
     {
