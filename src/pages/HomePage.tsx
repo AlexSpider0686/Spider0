@@ -256,7 +256,7 @@ export function HomePage() {
       <DevelopmentPlanModal open={developmentPlanOpen} onClose={() => setDevelopmentPlanOpen(false)} />
       <MetricSpotlightModal metric={activeMetric} onClose={() => setActiveMetric(null)} />
 
-      <section className="section section--dark" id="comparison">
+      <section className="section section--dark section--positioning" id="comparison">
         <div className="container">
           <SectionHeader eyebrow="Позиционирование" title={`Почему ${siteConfig.brand} нужен рынку прямо сейчас`}>
             На рынке РФ много либо тяжелых сметных систем, либо локальных таблиц. Ниша быстрого браузерного пресейл-движка для нескольких систем
@@ -284,7 +284,7 @@ export function HomePage() {
         </div>
       </section>
 
-      <section className="section section--light">
+      <section className="section section--light section--key-feature">
         <div className="container feature-layout">
           <div>
             <SectionHeader eyebrow="Ключевая особенность" title="Собственный AI-аудит цен и трудозатрат уже встроен в расчет">
@@ -314,7 +314,7 @@ export function HomePage() {
         </div>
       </section>
 
-      <section className="section section--dark ai-showcase" id="ai-engine">
+      <section className="section section--dark section--ai-engine ai-showcase" id="ai-engine">
         <div className="container">
           <SectionHeader eyebrow={`AI-движок ${siteConfig.brand}`} title="Как именно AI снимает риск недооцененности бюджета">
             Алгоритм одновременно работает в контуре цен и в контуре работ. Он проверяет рыночные предложения, анализирует структуру проекта и усиливает
@@ -339,7 +339,7 @@ export function HomePage() {
         </div>
       </section>
 
-      <section className="section section--light" id="ai-technical-solution">
+      <section className="section section--light section--technical-solution" id="ai-technical-solution">
         <div className="container feature-layout">
           <div>
             <SectionHeader eyebrow="AI-Техническое решение" title="Как модуль превращает описание объекта в обследование и техническое решение">
@@ -370,7 +370,7 @@ export function HomePage() {
         </div>
       </section>
 
-      <section className="section section--dark">
+      <section className="section section--dark section--project-risks">
         <div className="container feature-layout">
           <div>
             <SectionHeader eyebrow="AI-риски проекта" title="Как модуль заранее показывает критичные риски именно по вашему объекту">
@@ -396,7 +396,7 @@ export function HomePage() {
         </div>
       </section>
 
-      <section className="section section--light" id="calculation-logic">
+      <section className="section section--light section--calculation-logic" id="calculation-logic">
         <div className="container">
           <SectionHeader eyebrow="Логика расчета" title="Как формируется бюджет: от параметров объекта до итоговой суммы проекта">
             Расчет идет по фиксированной последовательности: входные данные, автоматическое определение объемов, AI-аудит цен, AI-обследование, AI-риски проекта, проверка риска недооценки работ, применение коэффициентов и формирование финального бюджета.
