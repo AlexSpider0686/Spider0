@@ -2005,6 +2005,49 @@ body.ai-survey-open .object-photo-card {
   font-size: 12px;
 }
 
+.budget-share-input {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.budget-share-input label {
+  font-size: 0.86rem;
+}
+
+.risk-guard-inline {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(75, 117, 168, 0.18);
+}
+
+.risk-guard-inline__text {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.risk-guard-inline__button {
+  border: none;
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: linear-gradient(135deg, #67c3ff, #5ecf9a);
+  color: #0e2b46;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  box-shadow: 0 10px 24px rgba(87, 185, 214, 0.22);
+}
+
+.risk-guard-inline__button:hover,
+.risk-guard-inline__button:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(87, 185, 214, 0.28);
+}
+
+.risk-guard-inline__details {
+  margin-top: 10px;
+}
+
 .coeff-list {
   display: grid;
   gap: 6px;

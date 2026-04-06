@@ -1,4 +1,5 @@
 import { calculateZoneModelWithoutPlans } from "./evacuationPlanRecognition";
+import { repairUtf8Cp1251Mojibake } from "./textEncoding";
 
 function num(value, fallback = 0) {
   const parsed = Number(value);
@@ -22,6 +23,22 @@ function boolAnswer(answers, key, fallback = false) {
   return fallback;
 }
 
+function sanitizeText(value) {
+  return repairUtf8Cp1251Mojibake(String(value ?? ""));
+}
+
+function sanitizeRow(row) {
+  return {
+    ...row,
+    key: String(row?.key ?? ""),
+    name: sanitizeText(row?.name),
+    unit: sanitizeText(row?.unit),
+    basis: sanitizeText(row?.basis),
+    category: row?.category || "material",
+    source: row?.source || "algorithm",
+  };
+}
+
 function collectRecognizedPlanData(photoAnalyses, systemType) {
   return Object.values(photoAnalyses || {}).reduce(
     (acc, analysis) => {
@@ -35,11 +52,11 @@ function collectRecognizedPlanData(photoAnalyses, systemType) {
       acc.expectedFloors = Math.max(acc.expectedFloors, num(planRecognition.expectedFloorCount, 0));
       acc.forecastedFloors += num(planRecognition.forecastedFloors, 0);
       acc.totalZones += num(systemPlan.zoneCount, 0);
-      acc.layoutTypes.add(planRecognition.layoutType || "Смешанная");
-      acc.zoneNames.push(...(systemPlan.zones || []).map((zone) => zone.name));
+      acc.layoutTypes.add(sanitizeText(planRecognition.layoutType || "Смешанная"));
+      acc.zoneNames.push(...(systemPlan.zones || []).map((zone) => sanitizeText(zone.name)));
       acc.validationSources.add(systemPlan.validationSource || "unknown");
-      acc.notes.push(...(systemPlan.notes || []));
-      acc.warnings.push(...((planRecognition.warnings || []).map((warning) => warning.message)));
+      acc.notes.push(...(systemPlan.notes || []).map((note) => sanitizeText(note)));
+      acc.warnings.push(...((planRecognition.warnings || []).map((warning) => sanitizeText(warning.message))));
       if (planRecognition.areaComparison) {
         acc.areaComparisons.push(planRecognition.areaComparison);
       }
@@ -260,7 +277,7 @@ function roundMoney(value) {
 }
 
 function detectSpecCategory(name = "", fallback = "equipment") {
-  const normalized = String(name || "").toLowerCase();
+  const normalized = sanitizeText(name).toLowerCase();
   if (
     normalized.includes("кабель") ||
     normalized.includes("лот") ||
@@ -279,7 +296,7 @@ function detectSpecCategory(name = "", fallback = "equipment") {
 }
 
 function inferSurveyUnitPrice(row) {
-  const normalized = String(row?.name || "").toLowerCase();
+  const normalized = sanitizeText(row?.name).toLowerCase();
   if (normalized.includes("лот")) return 420;
   if (normalized.includes("короб")) return 310;
   if (normalized.includes("гофр") || normalized.includes("труб")) return 180;
@@ -298,7 +315,8 @@ function inferSurveyUnitPrice(row) {
 }
 
 function finalizeSpecRows(rows, overrideMap = {}) {
-  return rows.map((row, index) => {
+  return rows.map((sourceRow, index) => {
+    const row = sanitizeRow(sourceRow);
     const override = overrideMap?.[row.key] || {};
     const qty = override.qty !== undefined ? Math.max(num(override.qty, row.qty), 0) : Math.max(num(row.qty, 0), 0);
     const unitPrice = roundMoney(row.unitPrice);
@@ -308,8 +326,8 @@ function finalizeSpecRows(rows, overrideMap = {}) {
       qty,
       unitPrice,
       total: roundMoney(qty * unitPrice),
-      category: row.category || "material",
-      source: row.source || "algorithm",
+      category: row.category,
+      source: row.source,
     };
   });
 }
@@ -588,8 +606,8 @@ export function buildAiTechnicalRecommendations({
         `Площадь и зонирование учтены через расчетные объемы системы: ${Math.round(num(result?.units, markerUnits))} базовых единиц.`,
         `Этажность и вертикальные переходы учтены через дополнительные материалы и узлы: ${Math.max(num(objectData?.floors, 1), 1)} этажей.`,
         system.hasWorkingDocs
-          ? "По системе отмечено наличие РД, поэтому AI-обследование используется как уточняющий, а не базовый контур."
-          : "По системе нет РД, поэтому AI-обследование напрямую влияет на формирование техрешения.",
+          ? "По системе отмечено наличие РД, поэтому AI-обследование используется как уточняющий контур и не подменяет базовый расчет."
+          : "По системе нет РД, поэтому техрешение формируется по базовому расчету объекта, а AI-обследование только уточняет плотность, зональность и трассировку.",
         effectiveZoneData.totalZones > 0
           ? `По планам эвакуации и перепроверке распознано ${effectiveZoneData.totalZones} ${
               system.type === "aps" ? "ЗКСПС" : system.type === "soue" ? "зон оповещения" : "охранных зон"

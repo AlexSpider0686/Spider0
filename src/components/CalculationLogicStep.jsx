@@ -21,11 +21,13 @@ function summarizeAiGuard(systemResults) {
     .map((row) => row?.laborDetails)
     .filter(Boolean);
 
-  const maxRisk = rows.reduce((max, item) => Math.max(max, toNumber(item?.neuralCheck?.underestimationRisk, 0)), 0);
+  const maxRisk = rows.reduce((max, item) => Math.max(max, toNumber(item?.neuralCheck?.imbalanceRisk ?? item?.neuralCheck?.underestimationRisk, 0)), 0);
   const maxUplift = rows.reduce((max, item) => Math.max(max, toNumber(item?.neuralCheck?.neuralUpliftMultiplier, 1)), 1);
+  const maxOverpricingRisk = rows.reduce((max, item) => Math.max(max, toNumber(item?.neuralCheck?.overestimationRisk, 0)), 0);
+  const maxUnderpricingRisk = rows.reduce((max, item) => Math.max(max, toNumber(item?.neuralCheck?.underestimationRisk, 0)), 0);
   const totalMarketFloor = rows.reduce((sum, item) => sum + toNumber(item?.marketGuard?.marketFloorTotal, 0), 0);
 
-  return { maxRisk, maxUplift, totalMarketFloor };
+  return { maxRisk, maxUplift, maxOverpricingRisk, maxUnderpricingRisk, totalMarketFloor };
 }
 
 export default function CalculationLogicStep({ objectData, effectiveObjectData, systems, systemResults, budget, totals, projectRisks = [] }) {
@@ -178,7 +180,7 @@ export default function CalculationLogicStep({ objectData, effectiveObjectData, 
       <div className="panel-header">
         <div>
           <h2>Логика расчета</h2>
-          <p>Пошагово: как платформа собирает объемы, проводит AI-аудит цен, использует AI-обследование, оценивает риски проекта и защищает бюджет от недооценки.</p>
+          <p>Пошагово: как платформа собирает объемы, проводит AI-аудит цен, использует AI-обследование, оценивает риски проекта и балансирует бюджет через контроль качества и точности расчета.</p>
         </div>
       </div>
 
@@ -253,10 +255,10 @@ export default function CalculationLogicStep({ objectData, effectiveObjectData, 
         </article>
 
         <article className="logic-card">
-          <h3>6. AI-проверка недооценки работ</h3>
-          <p>В расчете есть отдельный AI-контур, который оценивает риск недооценки СМР+ПНР. Он анализирует PDF-override, кабельную насыщенность, КНС, плотность узлов, набор оборудования, регион и условия работ.</p>
-          <p>Если риск повышен, система автоматически применяет консервативный uplift и удерживает трудовую часть не ниже безопасного рыночного floor.</p>
-          <p>По текущему расчету максимальный риск: <strong>{num(aiGuard.maxRisk * 100, 0)}%</strong>, максимальный AI uplift: <strong>{coef(aiGuard.maxUplift)}</strong>, суммарный рыночный floor: <strong>{rub(aiGuard.totalMarketFloor)}</strong>.</p>
+          <h3>6. Risk Guard AI: контроль сбалансированности</h3>
+          <p>В расчете есть отдельный AI-контур, который перепроверяет СМР+ПНР не только на недооцененность, но и на переоцененность. Он анализирует PDF-override, кабельную насыщенность, КНС, плотность узлов, набор оборудования, регион и условия работ.</p>
+          <p>Если Risk Guard AI видит дисбаланс, он не меняет коэффициенты автоматически, а корректирует защитные границы расчета и подсказывает, где бюджет может быть занижен или перезаложен относительно параметров объекта.</p>
+          <p>По текущему расчету максимальный риск дисбаланса: <strong>{num(aiGuard.maxRisk * 100, 0)}%</strong>, риск недооцененности: <strong>{num(aiGuard.maxUnderpricingRisk * 100, 0)}%</strong>, риск переоцененности: <strong>{num(aiGuard.maxOverpricingRisk * 100, 0)}%</strong>, суммарный рыночный floor: <strong>{rub(aiGuard.totalMarketFloor)}</strong>.</p>
         </article>
 
         <article className="logic-card">
@@ -303,7 +305,7 @@ export default function CalculationLogicStep({ objectData, effectiveObjectData, 
 
         <article className="logic-card">
           <h3>11. Что происходит при изменении параметров</h3>
-          <p>Любое изменение объекта, систем, вендора, PDF-спецификации, цен, обследования или бюджета запускает пересчет: обновляются объемы, AI-аудит цен, контур рисков проекта, блок защиты от недооценки работ и общий бюджет проекта.</p>
+          <p>Любое изменение объекта, систем, вендора, PDF-спецификации, цен, обследования или бюджета запускает пересчет: обновляются объемы, AI-аудит цен, контур рисков проекта, блок Risk Guard AI и общий бюджет проекта.</p>
           <div className="logic-equipment-list">
             {systemResults.map((row, index) => (
               <p key={`${row.systemType}-logic-${index}`}>

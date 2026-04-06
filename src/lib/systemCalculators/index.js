@@ -431,6 +431,11 @@ export function calculateSystemWithBreakdown(
     objectClassification,
     activeSystemTypes: normalizedInput.activeSystemTypes,
     recognizedZoneCount: recognizedPlanZones.totalZones,
+    surveyRefinement: {
+      recognizedZoneCount: recognizedPlanZones.totalZones,
+      acceptedPlans: recognizedPlanZones.acceptedPlans,
+      expectedFloors: recognizedPlanZones.expectedFloors || objectClassification.totalFloors,
+    },
   });
 
   let cableModel = estimateCableBySystem({
@@ -701,7 +706,11 @@ export function calculateSystemWithBreakdown(
         activeElements: quantities.activeElements,
         integrationPoints: quantities.integrationPoints,
         mandatoryZoneCount: quantities.mandatoryZoneCount,
+        baseZoneCount: quantities.baseZoneCount,
         recognizedZoneCount: quantities.recognizedZoneCount,
+        surveyAdjustedZoneCount: quantities.surveyAdjustedZoneCount,
+        surveyConfidence: quantities.surveyConfidence,
+        surveyInfluenceWeight: quantities.surveyInfluenceWeight,
         effectiveZoneCount: quantities.effectiveZoneCount,
         floorDistributedZoneCount: quantities.floorDistributedZoneCount,
       },

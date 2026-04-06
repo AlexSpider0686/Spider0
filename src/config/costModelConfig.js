@@ -262,6 +262,10 @@ export const SYSTEM_DRIVER_CONFIG = {
   aps: {
     markerLabel: "Монтаж+ПНР 1 извещателя",
     primaryUnitKey: "detectors",
+    zoneAreaCapacityM2: 1600,
+    zoneFloorsPerZone: 1.15,
+    surveyRefinementWeight: 0.72,
+    surveyMaxDrift: 0.5,
     densityPer1000: {
       office: 24,
       parking: 13,
@@ -284,6 +288,10 @@ export const SYSTEM_DRIVER_CONFIG = {
   soue: {
     markerLabel: "Монтаж+ПНР 1 оповещателя",
     primaryUnitKey: "speakers",
+    zoneAreaCapacityM2: 2100,
+    zoneFloorsPerZone: 1.25,
+    surveyRefinementWeight: 0.68,
+    surveyMaxDrift: 0.48,
     densityPer1000: {
       office: 7,
       parking: 5,
@@ -305,6 +313,10 @@ export const SYSTEM_DRIVER_CONFIG = {
   sots: {
     markerLabel: "Монтаж+ПНР 1 охранного датчика",
     primaryUnitKey: "sensors",
+    zoneAreaCapacityM2: 1350,
+    zoneFloorsPerZone: 1.2,
+    surveyRefinementWeight: 0.64,
+    surveyMaxDrift: 0.44,
     densityPer1000: {
       office: 8,
       parking: 5,
@@ -326,6 +338,10 @@ export const SYSTEM_DRIVER_CONFIG = {
   sot: {
     markerLabel: "Монтаж+ПНР 1 камеры",
     primaryUnitKey: "cameras",
+    zoneAreaCapacityM2: 1750,
+    zoneFloorsPerZone: 1.3,
+    surveyRefinementWeight: 0.56,
+    surveyMaxDrift: 0.4,
     densityPer1000: {
       office: 6.5,
       parking: 4.5,
@@ -349,6 +365,10 @@ export const SYSTEM_DRIVER_CONFIG = {
   ssoi: {
     markerLabel: "Интеграция 1 элемента",
     primaryUnitKey: "integrationPoints",
+    zoneAreaCapacityM2: 3200,
+    zoneFloorsPerZone: 1.8,
+    surveyRefinementWeight: 0.46,
+    surveyMaxDrift: 0.32,
     densityPer1000: {
       office: 1.1,
       parking: 0.5,
@@ -371,6 +391,10 @@ export const SYSTEM_DRIVER_CONFIG = {
   skud: {
     markerLabel: "Монтаж+ПНР 1 точки прохода",
     primaryUnitKey: "accessPoints",
+    zoneAreaCapacityM2: 2400,
+    zoneFloorsPerZone: 1.45,
+    surveyRefinementWeight: 0.58,
+    surveyMaxDrift: 0.38,
     densityPer1000: {
       office: 1.6,
       parking: 0.6,
@@ -512,10 +536,11 @@ export const LABOR_MARKET_GUARDRAILS = {
 };
 
 export const WORK_CONDITION_COEFFICIENTS = [
-  { key: "heightCoef", label: "Высотные работы", max: 1.35 },
+  { key: "heightCoef", label: "Высотные работы", max: 1.35, shareKey: "heightWorkSharePercent" },
   { key: "constrainedCoef", label: "Стесненные условия", max: 1.35 },
   { key: "operatingFacilityCoef", label: "Ограниченный доступ / режимность", max: 1.3 },
-  { key: "nightWorkCoef", label: "Ночные работы", max: 1.4 },
+  { key: "nightWorkCoef", label: "Ночные работы", max: 1.4, shareKey: "nightWorkSharePercent" },
+  { key: "weekendWorkCoef", label: "Работы в выходные дни", max: 1.3, shareKey: "weekendWorkSharePercent" },
   { key: "routingCoef", label: "Сложность маршрутов", max: 1.3 },
   { key: "finishCoef", label: "Требования к эстетике", max: 1.22 },
 ];

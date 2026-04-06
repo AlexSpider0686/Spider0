@@ -127,7 +127,11 @@ export function calculateLaborCost({
     projectMode,
     marketFloorBase,
   });
-  const workBase = Math.max(projectWorkBase, marketFloorBase, neuralCheck.neuralFloorBase, computedWorkBase);
+  const workBase = clamp(
+    Math.max(neuralCheck.neuralFloorBase, computedWorkBase),
+    computedWorkBase,
+    Math.max(projectWorkBase, marketFloorBase, computedWorkBase) * 1.32
+  );
   const { workAfterConditions, workChargesBeforeRegion, workTotalBeforeRegion, workTotal } = calculateWorkTotals(
     workBase,
     conditionFactor,

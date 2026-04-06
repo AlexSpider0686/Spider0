@@ -12,8 +12,16 @@ function normalizeName(value) {
     .toLowerCase()
     .replace(/ё/g, "е")
     .replace(/[«»"]/g, "")
+    .replace(/\b(ул|улица|пр-кт|проспект|д|дом|корп|корпус|стр|строение)\b/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function tokenizeAddress(value) {
+  return normalizeName(value)
+    .split(/[,\s]+/)
+    .map((item) => item.trim())
+    .filter((item) => item.length >= 2);
 }
 
 function findRegionByStateName(stateName) {
@@ -28,18 +36,31 @@ function findRegionByStateName(stateName) {
   );
 }
 
-function scoreAddressResult(item) {
+function scoreAddressResult(item, queryTokens) {
   const address = item?.address || {};
+  const resultText = [
+    item?.display_name || "",
+    address.road || "",
+    address.house_number || "",
+    address.city || address.town || address.village || "",
+    address.state || "",
+  ].join(" ");
+  const resultTokens = new Set(tokenizeAddress(resultText));
+  const overlap = queryTokens.filter((token) => resultTokens.has(token)).length;
+  const overlapScore = queryTokens.length ? overlap / queryTokens.length : 0;
+
   let score = Number(item?.importance || 0);
-  if (address.house_number) score += 0.35;
-  if (address.road) score += 0.2;
-  if (address.city || address.town || address.village) score += 0.15;
-  if (address.state) score += 0.1;
+  if (address.house_number) score += 0.45;
+  if (address.road) score += 0.25;
+  if (address.city || address.town || address.village) score += 0.18;
+  if (address.state) score += 0.12;
+  score += overlapScore * 0.8;
+
   return score;
 }
 
-function pickBestAddressResult(results = []) {
-  return [...results].sort((left, right) => scoreAddressResult(right) - scoreAddressResult(left))[0] || null;
+function pickBestAddressResult(results = [], queryTokens = []) {
+  return [...results].sort((left, right) => scoreAddressResult(right, queryTokens) - scoreAddressResult(left, queryTokens))[0] || null;
 }
 
 function buildDistrictLabel(address = {}) {
@@ -59,9 +80,7 @@ function buildDistrictLabel(address = {}) {
 
 function buildVerifiedLabel(item) {
   const parts = [
-    item?.address?.road && item?.address?.house_number
-      ? `${item.address.road}, ${item.address.house_number}`
-      : item?.address?.road || "",
+    item?.address?.road && item?.address?.house_number ? `${item.address.road}, ${item.address.house_number}` : item?.address?.road || "",
     item?.address?.suburb || item?.address?.city_district || item?.address?.neighbourhood || "",
     item?.address?.city || item?.address?.town || item?.address?.village || "",
     item?.address?.state || "",
@@ -85,46 +104,55 @@ async function fetchJson(url, message) {
   return response.json();
 }
 
+function buildSearchVariants(normalizedQuery) {
+  return [
+    normalizedQuery,
+    `${normalizedQuery}, Россия`,
+    normalizedQuery.replace(/[«»"]/g, ""),
+  ].filter(Boolean);
+}
+
 export async function verifyObjectAddress(addressLine) {
   const normalizedQuery = sanitizeAddress(addressLine);
   if (!normalizedQuery) {
     throw new Error("Укажите адрес объекта.");
   }
 
-  const primaryQuery = new URLSearchParams({
-    format: "jsonv2",
-    addressdetails: "1",
-    limit: "5",
-    "accept-language": "ru",
-    countrycodes: "ru",
-    q: normalizedQuery,
-  });
+  const queryTokens = tokenizeAddress(normalizedQuery);
+  let results = [];
 
-  let results = await fetchJson(
-    `https://nominatim.openstreetmap.org/search?${primaryQuery.toString()}`,
-    "Не удалось выполнить онлайн-поиск адреса."
-  );
-
-  if (!Array.isArray(results) || !results.length) {
-    const fallbackQuery = new URLSearchParams({
+  for (const query of buildSearchVariants(normalizedQuery)) {
+    const params = new URLSearchParams({
       format: "jsonv2",
       addressdetails: "1",
-      limit: "5",
+      limit: "6",
       "accept-language": "ru",
-      q: normalizedQuery,
+      countrycodes: "ru",
+      q: query,
     });
-    results = await fetchJson(
-      `https://nominatim.openstreetmap.org/search?${fallbackQuery.toString()}`,
+
+    const nextResults = await fetchJson(
+      `https://nominatim.openstreetmap.org/search?${params.toString()}`,
       "Не удалось выполнить онлайн-поиск адреса."
     );
+
+    if (Array.isArray(nextResults) && nextResults.length) {
+      results = nextResults;
+      break;
+    }
   }
 
-  const bestResult = pickBestAddressResult(results);
+  if (!results.length) {
+    throw new Error("Адрес не найден. Уточните дом, улицу или населенный пункт.");
+  }
+
+  const bestResult = pickBestAddressResult(results, queryTokens);
   if (!bestResult) {
-    throw new Error("Адрес не найден. Уточните дом, улицу или населённый пункт.");
+    throw new Error("Адрес не найден. Уточните дом, улицу или населенный пункт.");
   }
 
   const matchedRegion = findRegionByStateName(bestResult.address?.state);
+  const confidence = scoreAddressResult(bestResult, queryTokens);
 
   return {
     query: normalizedQuery,
@@ -133,6 +161,8 @@ export async function verifyObjectAddress(addressLine) {
     district: buildDistrictLabel(bestResult.address),
     regionName: matchedRegion?.name || bestResult.address?.state || "",
     regionCoef: matchedRegion?.coef || null,
-    confidence: scoreAddressResult(bestResult),
+    lat: bestResult.lat || "",
+    lon: bestResult.lon || "",
+    confidence,
   };
 }

@@ -116,7 +116,7 @@ export default function EstimatorApp() {
               <img className="hero-title__mark" src={projectCoreMarkUrl} alt="" aria-hidden="true" />
               <span>Project.Core™ — предварительный расчет бюджета систем безопасности</span>
             </h1>
-            <p>С AI-аудитом цен и трудозатрат, рыночной верификацией и защитой от недооценки бюджета.</p>
+            <p>С AI-аудитом цен и трудозатрат, рыночной верификацией и Risk Guard AI для контроля сбалансированности бюджета.</p>
           </div>
           <div className="hero-actions">
             <button className="primary-btn" onClick={vm.exportEstimate} type="button">

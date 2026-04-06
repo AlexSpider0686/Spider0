@@ -1,5 +1,6 @@
 import { SYSTEM_DRIVER_CONFIG } from "../config/costModelConfig";
 import { toNumber } from "./estimate";
+import { repairUtf8Cp1251Mojibake } from "./textEncoding";
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -7,6 +8,88 @@ function clamp(value, min, max) {
 
 function safeCeil(value, min = 0) {
   return Math.max(Math.ceil(toNumber(value, 0)), min);
+}
+
+function sanitizeText(value) {
+  return repairUtf8Cp1251Mojibake(String(value ?? ""));
+}
+
+function sanitizeResourceRows(rows = []) {
+  return rows.map((row) => ({
+    ...row,
+    label: sanitizeText(row?.label),
+  }));
+}
+
+function buildBaseZoneCount({
+  driver,
+  zoneContexts = [],
+  objectClassification = {},
+  mandatoryZoneCount = 0,
+  floorDistributedZoneCount = 0,
+  weightedZoneCount = 0,
+}) {
+  const areaCapacityBase = Math.max(toNumber(driver.zoneAreaCapacityM2, 1800), 320);
+  const floorsPerZone = Math.max(toNumber(driver.zoneFloorsPerZone, 1.6), 1);
+  const architectureFactor = clamp(1 + (toNumber(objectClassification.architectureComplexityIndex, 1) - 1) * 0.18, 0.88, 1.28);
+  const securityFactor = clamp(1 + (toNumber(objectClassification.securityIntensityIndex, 1) - 1) * 0.15, 0.9, 1.24);
+  const distributedFactor = objectClassification?.distributedArchitecture ? 1.08 : 1;
+
+  const areaDrivenZoneCount = zoneContexts.reduce((sum, zone) => {
+    if (!zone?.systemRule?.mandatory) return sum;
+
+    const zoneArea = Math.max(toNumber(zone.areaM2, 0), 0);
+    const zoneFloors = Math.max(toNumber(zone.floors, 1), 1);
+    const routeFactor = clamp(toNumber(zone.systemRule?.routeComplexityCoefficient, 1), 0.8, 1.7);
+    const installationFactor = clamp(toNumber(zone.systemRule?.installationComplexityCoefficient, 1), 0.8, 1.7);
+    const densityFactor = clamp(toNumber(zone.systemRule?.engineeringDensityCoefficient, 1) * toNumber(zone.densityCoefficient, 1), 0.75, 1.9);
+    const effectiveCapacity = areaCapacityBase / Math.max(routeFactor * installationFactor * densityFactor * architectureFactor * securityFactor, 0.35);
+    const areaSegments = safeCeil(zoneArea / Math.max(effectiveCapacity, 180), 1);
+    const verticalSegments = safeCeil(zoneFloors / floorsPerZone, 1);
+    const distributedReserve = zoneFloors > 1 ? safeCeil((zoneFloors - 1) * 0.4 * distributedFactor, 0) : 0;
+
+    return sum + areaSegments + verticalSegments - 1 + distributedReserve;
+  }, 0);
+
+  return Math.max(mandatoryZoneCount, floorDistributedZoneCount, Math.round(weightedZoneCount), areaDrivenZoneCount, 1);
+}
+
+function buildSurveyRefinedZoneCount({
+  baseZoneCount,
+  surveyRefinement = {},
+  floorDistributedZoneCount = 0,
+}) {
+  const recognizedZoneCount = Math.max(toNumber(surveyRefinement.recognizedZoneCount, 0), 0);
+  if (recognizedZoneCount <= 0) {
+    return {
+      recognizedZoneCount: 0,
+      surveyAdjustedZoneCount: baseZoneCount,
+      surveyConfidence: 0,
+      surveyInfluenceWeight: 0,
+      surveyClamped: false,
+    };
+  }
+
+  const acceptedPlans = Math.max(toNumber(surveyRefinement.acceptedPlans, 0), 0);
+  const expectedFloors = Math.max(toNumber(surveyRefinement.expectedFloors, floorDistributedZoneCount || 0), 0);
+  const coverage = expectedFloors > 0 ? acceptedPlans / expectedFloors : acceptedPlans > 0 ? 0.55 : 0.35;
+  const surveyConfidence = clamp(0.35 + coverage * 0.45 + (acceptedPlans > 1 ? 0.08 : 0), 0.35, 0.92);
+  const weightBase = clamp(toNumber(surveyRefinement.weight, 0.58), 0.25, 0.85);
+  const surveyInfluenceWeight = clamp(weightBase * surveyConfidence, 0.18, 0.82);
+  const driftLimit = clamp(toNumber(surveyRefinement.maxDrift, 0.45), 0.15, 0.8);
+  const blended = baseZoneCount + (recognizedZoneCount - baseZoneCount) * surveyInfluenceWeight;
+  const minAllowed = Math.max(1, Math.round(baseZoneCount * (1 - driftLimit)));
+  const maxAllowed = Math.max(minAllowed, Math.round(baseZoneCount * (1 + driftLimit)));
+  const rounded = Math.max(Math.round(blended), 1);
+  const surveyAdjustedZoneCount = clamp(rounded, minAllowed, maxAllowed);
+
+  return {
+    recognizedZoneCount,
+    surveyAdjustedZoneCount,
+    surveyConfidence,
+    surveyInfluenceWeight,
+    surveyClamped: surveyAdjustedZoneCount !== rounded,
+  };
 }
 
 function buildZoneDemand(zoneContexts, densityMap, objectClassification = {}) {
@@ -239,14 +322,21 @@ function estimateSot(context) {
   const outdoorZoneTypes = driver.outdoorZoneTypes || new Set();
   let camerasOutdoor = 0;
   let camerasIndoor = 0;
+  let highCeilingReserve = 0;
+  let corridorCoverageReserve = 0;
 
   for (const zone of zoneContexts) {
     const qty = toNumber(zoneDemand.zonePrimaryUnits[zone.id], 0);
+    const ceilingHeight = Math.max(toNumber(zone.ceilingHeight, 3.2), 0);
+    const zoneArea = Math.max(toNumber(zone.areaM2, 0), 0);
+    const corridorFactor = zone.zoneType === "corridor" ? zoneArea / 900 : 0;
     if (outdoorZoneTypes.has(zone.zoneType)) camerasOutdoor += qty;
     else camerasIndoor += qty;
+    highCeilingReserve += ceilingHeight >= 5 ? qty * 0.14 : ceilingHeight >= 3.8 ? qty * 0.06 : 0;
+    corridorCoverageReserve += corridorFactor;
   }
 
-  const cameras = safeCeil(camerasIndoor + camerasOutdoor, 1);
+  const cameras = safeCeil(camerasIndoor + camerasOutdoor + highCeilingReserve + corridorCoverageReserve, 1);
   const nvr = safeCeil(cameras / Math.max(toNumber(driver.nvrChannels, 64), 1), 1);
   const servers = safeCeil(cameras * toNumber(driver.serverPerCamera, 1 / 220), cameras > 120 ? 1 : 0);
   const arms = safeCeil(cameras * toNumber(driver.armPerCamera, 1 / 150), 1);
@@ -289,18 +379,20 @@ function estimateSsoi(context) {
   const baseFromZones = zoneDemand.total;
   const integratedSubsystems = Math.max(1, (activeSystemTypes || []).filter((item) => item && item !== "ssoi").length);
   const distributedZoneLoad = Math.max(context.mandatoryZoneCount, context.floorDistributedZoneCount, 1);
+  const floorPressure = Math.max(toNumber(objectClassification.aboveGroundFloors, 0) + toNumber(objectClassification.undergroundFloors, 0), 1);
   const integrationPoints = safeCeil(
     toNumber(driver.baseIntegrationPoints, 2) +
-      baseFromZones +
-      integratedSubsystems * 1.8 +
-      distributedZoneLoad * 0.45 +
+      baseFromZones * 1.1 +
+      integratedSubsystems * 2.1 +
+      distributedZoneLoad * 0.55 +
+      floorPressure * 0.28 +
       (objectClassification.distributedArchitecture ? 2 : 0),
     1
   );
 
-  const servers = safeCeil(Math.max(integrationPoints * toNumber(driver.serverPerPoint, 1 / 22), distributedZoneLoad / 16), 1);
-  const arms = safeCeil(integrationPoints * toNumber(driver.armPerPoint, 1 / 26), 1);
-  const switches = safeCeil(integrationPoints * toNumber(driver.switchPerPoint, 1 / 20), 1);
+  const servers = safeCeil(Math.max(integrationPoints * toNumber(driver.serverPerPoint, 1 / 22), distributedZoneLoad / 14, floorPressure / 10), 1);
+  const arms = safeCeil(integrationPoints * toNumber(driver.armPerPoint, 1 / 26) + integratedSubsystems / 4, 1);
+  const switches = safeCeil(integrationPoints * toNumber(driver.switchPerPoint, 1 / 20) + floorPressure / 8, 1);
   const gateways = safeCeil(integrationPoints * toNumber(driver.gatewayPerPoint, 1 / 7), 1);
 
   const designHours =
@@ -338,18 +430,33 @@ function estimateSkud(context) {
   const { driver, zoneDemand, zoneContexts, objectClassification } = context;
   const lobbyAreaM2 = zoneContexts.filter((zone) => zone.zoneType === "lobby").reduce((sum, zone) => sum + zone.areaM2, 0);
   const parkingAreaM2 = zoneContexts.filter((zone) => zone.zoneType === "parking").reduce((sum, zone) => sum + zone.areaM2, 0);
+  const accessDemandFromZones = zoneContexts.reduce((sum, zone) => {
+    const area = Math.max(toNumber(zone.areaM2, 0), 0);
+    const floors = Math.max(toNumber(zone.floors, 1), 1);
+    const zoneFactor =
+      zone.zoneType === "lobby"
+        ? area / 650
+        : zone.zoneType === "corridor"
+          ? area / 1800
+          : zone.zoneType === "parking"
+            ? area / 2200
+            : zone.zoneType === "technical"
+              ? area / 2600
+              : area / 2000;
+    return sum + zoneFactor + Math.max(floors - 1, 0) * 0.35;
+  }, 0);
 
   const floorBoost = objectClassification.aboveGroundFloors * 0.42 + objectClassification.undergroundFloors * 0.2;
   const lobbyBoost = lobbyAreaM2 / 1300;
   const parkingBoost = parkingAreaM2 / 2800;
-  const basePoints = zoneDemand.total + floorBoost + lobbyBoost + parkingBoost;
+  const basePoints = Math.max(zoneDemand.total, accessDemandFromZones) + floorBoost + lobbyBoost + parkingBoost;
   const accessPoints = safeCeil(basePoints, 1);
 
   const readers = safeCeil(accessPoints * toNumber(driver.readersPerPoint, 2), 1);
-  const controllers = safeCeil(accessPoints * toNumber(driver.controllerPerPoint, 0.5), 1);
+  const controllers = safeCeil(accessPoints * toNumber(driver.controllerPerPoint, 0.5) + lobbyAreaM2 / 5000, 1);
   const turnstiles = safeCeil((lobbyAreaM2 / 1200) * toNumber(driver.turnstilePerLobbyPoint, 1 / 3), 0);
   const cabinets = safeCeil((controllers + turnstiles) / 4, 1);
-  const servers = safeCeil(Math.max(controllers / 8, accessPoints / 28, context.floorDistributedZoneCount / 18), 1);
+  const servers = safeCeil(Math.max(controllers / 8, accessPoints / 26, context.floorDistributedZoneCount / 16), 1);
   const integrationPoints = safeCeil(Math.max(context.mandatoryZoneCount, context.floorDistributedZoneCount) * toNumber(driver.integrationPointsPerZone, 0.2) + accessPoints / 16, 1);
 
   const designHours =
@@ -398,6 +505,7 @@ export function estimateSystemQuantities({
   objectClassification,
   activeSystemTypes = [],
   recognizedZoneCount = 0,
+  surveyRefinement = null,
 }) {
   const driver = SYSTEM_DRIVER_CONFIG[systemType] || SYSTEM_DRIVER_CONFIG.sot;
   const zoneDemand = buildZoneDemand(zoneContexts, driver.densityPer1000 || {}, objectClassification);
@@ -408,13 +516,31 @@ export function estimateSystemQuantities({
     const zoneFloors = Math.max(toNumber(zone?.floors, 1), 1);
     return sum + 1 + Math.max(zoneFloors - 1, 0) * 0.65;
   }, 0);
-  const effectiveZoneCount = Math.max(
+  const baseZoneCount = buildBaseZoneCount({
+    driver,
+    zoneContexts,
+    objectClassification,
     mandatoryZoneCount,
     floorDistributedZoneCount,
-    Math.round(weightedZoneCount),
-    toNumber(recognizedZoneCount, 0),
-    0
-  );
+    weightedZoneCount,
+  });
+  const normalizedSurveyRefinement = surveyRefinement || {
+    recognizedZoneCount,
+    acceptedPlans: 0,
+    expectedFloors: floorDistributedZoneCount,
+    weight: driver.surveyRefinementWeight,
+    maxDrift: driver.surveyMaxDrift,
+  };
+  const surveyZoneRefinement = buildSurveyRefinedZoneCount({
+    baseZoneCount,
+    surveyRefinement: {
+      ...normalizedSurveyRefinement,
+      weight: normalizedSurveyRefinement.weight ?? driver.surveyRefinementWeight,
+      maxDrift: normalizedSurveyRefinement.maxDrift ?? driver.surveyMaxDrift,
+    },
+    floorDistributedZoneCount,
+  });
+  const effectiveZoneCount = Math.max(baseZoneCount, surveyZoneRefinement.surveyAdjustedZoneCount, 1);
 
   const estimator = SYSTEM_ESTIMATORS[systemType] || SYSTEM_ESTIMATORS.sot;
   const raw = estimator({
@@ -425,7 +551,7 @@ export function estimateSystemQuantities({
     mandatoryZoneCount,
     effectiveZoneCount,
     floorDistributedZoneCount,
-    recognizedZoneCount: Math.max(toNumber(recognizedZoneCount, 0), 0),
+    recognizedZoneCount: surveyZoneRefinement.recognizedZoneCount,
     activeSystemTypes,
   });
 
@@ -436,9 +562,9 @@ export function estimateSystemQuantities({
 
   return {
     systemType,
-    markerLabel: driver.markerLabel,
+    markerLabel: sanitizeText(driver.markerLabel),
     primaryUnitKey: raw.primaryUnitKey || driver.primaryUnitKey,
-    primaryUnitLabel: raw.primaryUnitLabel || "Единица",
+    primaryUnitLabel: sanitizeText(raw.primaryUnitLabel || "Единица"),
     primaryUnits: Math.max(toNumber(raw.primaryUnits, 0), 0),
     markerUnits: Math.max(toNumber(raw.markerUnits, raw.primaryUnits), 1),
     controllerUnits: Math.max(toNumber(raw.controllerUnits, 0), 0),
@@ -446,13 +572,18 @@ export function estimateSystemQuantities({
     integrationPoints: Math.max(toNumber(raw.integrationPoints, 0), 0),
     designHoursBase: Math.max(toNumber(raw.designHoursBase, 0), 0),
     mandatoryZoneCount,
-    recognizedZoneCount: Math.max(toNumber(recognizedZoneCount, 0), 0),
+    recognizedZoneCount: surveyZoneRefinement.recognizedZoneCount,
+    baseZoneCount,
     effectiveZoneCount,
     floorDistributedZoneCount,
+    surveyAdjustedZoneCount: surveyZoneRefinement.surveyAdjustedZoneCount,
+    surveyConfidence: surveyZoneRefinement.surveyConfidence,
+    surveyInfluenceWeight: surveyZoneRefinement.surveyInfluenceWeight,
+    surveyClamped: surveyZoneRefinement.surveyClamped,
     zonePrimaryUnits: zoneDemand.zonePrimaryUnits,
     zoneDrivers: zoneDemand.drivers,
     routeComplexityAverage: clamp(routeComplexityAverage, 0.7, 2.8),
-    resourceRows: raw.resourceRows || [],
+    resourceRows: sanitizeResourceRows(raw.resourceRows || []),
     secondary: raw.secondary || {},
   };
 }

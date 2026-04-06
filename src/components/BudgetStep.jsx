@@ -4,6 +4,7 @@ import { COEFFICIENT_GUIDE } from "../config/estimateConfig";
 import { validateBudgetCoefficients } from "../lib/validation";
 import { num, rub, toNumber } from "../lib/estimate";
 import { buildCoefficientLayer } from "../lib/coefficient-engine";
+import { buildRiskGuardInsight, getCoefficientShareLabel, getCoefficientSharePercent } from "../lib/budget-risk-guard";
 
 const sliderFields = [
   { key: "cableCoef", min: 0.7, max: 1.5, step: 0.01 },
@@ -14,6 +15,7 @@ const sliderFields = [
   { key: "constrainedCoef", min: 1, max: 1.3, step: 0.01 },
   { key: "operatingFacilityCoef", min: 1, max: 1.25, step: 0.01 },
   { key: "nightWorkCoef", min: 1, max: 1.4, step: 0.01 },
+  { key: "weekendWorkCoef", min: 1, max: 1.3, step: 0.01 },
   { key: "routingCoef", min: 1, max: 1.25, step: 0.01 },
   { key: "finishCoef", min: 1, max: 1.2, step: 0.01 },
 ];
@@ -45,9 +47,30 @@ const percentFields = [
   },
   {
     key: "adminPercent",
-    label: "Административно-хозяйственные расходы (АХР), %",
+    label: "Административно-хозяйственные расходы, %",
     hint: "Начисляются после ФОТ, ОПР, утилизации и СИЗ.",
     amountKey: "admin",
+  },
+];
+
+const shareFields = [
+  {
+    key: "heightCoef",
+    shareKey: "heightWorkSharePercent",
+    label: "Доля высотных работ, %",
+    hint: "Показывает, на какой процент работ реально действует коэффициент высотности.",
+  },
+  {
+    key: "nightWorkCoef",
+    shareKey: "nightWorkSharePercent",
+    label: "Доля ночных работ, %",
+    hint: "Показывает, какая часть работ выполняется в ночные смены.",
+  },
+  {
+    key: "weekendWorkCoef",
+    shareKey: "weekendWorkSharePercent",
+    label: "Доля работ в выходные, %",
+    hint: "Показывает, на какой объем работ распространяется коэффициент выходных дней.",
   },
 ];
 
@@ -103,12 +126,12 @@ function average(values = []) {
   return values.reduce((sum, value) => sum + toNumber(value, 0), 0) / values.length;
 }
 
-function buildBudgetRecommendations({ budget, objectData, zones, systems, systemResults }) {
+function buildBudgetRecommendations({ objectData, zones, systems, systemResults }) {
   const activeSystems = systems || [];
   const activeZones = zones || [];
   const routeSamples = (systemResults || []).map((row) => row?.routeComplexityAverage).filter((value) => Number.isFinite(toNumber(value, NaN)));
   const riskSamples = (systemResults || [])
-    .map((row) => row?.laborDetails?.neuralCheck?.underestimationRisk)
+    .map((row) => row?.laborDetails?.neuralCheck?.imbalanceRisk ?? row?.laborDetails?.neuralCheck?.underestimationRisk)
     .filter((value) => Number.isFinite(toNumber(value, NaN)));
   const sourceConfidence = (systemResults || [])
     .map((row) => row?.vendorSnapshotMetrics?.confidencePercent || row?.priceConfidencePercent || 0)
@@ -122,19 +145,20 @@ function buildBudgetRecommendations({ budget, objectData, zones, systems, system
   const objectType = objectData?.objectType;
   const buildingStatus = objectData?.buildingStatus;
   const systemCount = Math.max(activeSystems.length, 1);
+  const operationalSensitiveObject = buildingStatus === "operational" && ["public", "transport", "energy"].includes(objectType);
 
   const recommendations = {
     cableCoef: {
       value: clamp(avgRouteComplexity * (systemCount > 2 ? 1.03 : 1), 0.9, 1.25),
-      reason: `Опирается на среднюю сложность трасс по текущим системам (${num(avgRouteComplexity, 2)}) и число систем в расчете (${systemCount}).`,
+      reason: `Опирается на среднюю сложность трасс по системам (${num(avgRouteComplexity, 2)}) и число подсистем (${systemCount}).`,
     },
     equipmentCoef: {
       value: clamp(avgConfidence > 75 ? 1 : avgConfidence > 55 ? 1.03 : 1.06, 0.95, 1.12),
-      reason: `Опирается на качество найденных рыночных цен по текущим системам: средняя уверенность ${num(avgConfidence, 0)}%.`,
+      reason: `Опирается на качество найденных рыночных цен: средняя уверенность ${num(avgConfidence, 0)}%.`,
     },
     laborCoef: {
-      value: clamp(1 + avgRisk * 0.18 + Math.max(systemCount - 2, 0) * 0.02, 0.95, 1.25),
-      reason: `Опирается на риск недооценки работ (${num(avgRisk * 100, 0)}%) и количество одновременно считаемых систем.`,
+      value: clamp(1 + avgRisk * 0.14 + Math.max(systemCount - 2, 0) * 0.02, 0.95, 1.22),
+      reason: `Опирается на сигнал дисбаланса по трудовой части (${num(avgRisk * 100, 0)}%) и число систем.`,
     },
     complexityCoef: {
       value: clamp(
@@ -145,7 +169,7 @@ function buildBudgetRecommendations({ budget, objectData, zones, systems, system
         1,
         1.28
       ),
-      reason: `Опирается на тип объекта (${objectType || "не задан"}) и число инженерных подсистем в расчете.`,
+      reason: `Опирается на тип объекта (${objectType || "не задан"}) и число инженерных подсистем.`,
     },
     heightCoef: {
       value: clamp(maxZoneCeiling >= 6 ? 1.18 : maxZoneCeiling >= 4.5 ? 1.1 : maxZoneCeiling >= 3.6 ? 1.04 : 1, 1, 1.25),
@@ -160,26 +184,30 @@ function buildBudgetRecommendations({ budget, objectData, zones, systems, system
         1,
         1.18
       ),
-      reason: `Опирается на трассировку, этажность (${num(maxFloors, 0)}) и плотность инженерной среды для этого объекта.`,
+      reason: `Опирается на трассировку, этажность (${num(maxFloors, 0)}) и плотность инженерной среды.`,
     },
     operatingFacilityCoef: {
       value: buildingStatus === "operational" ? 1 : 1,
       reason:
         buildingStatus === "operational"
-          ? "Для действующего здания отдельный ручной коэффициент рекомендован как x1.00, потому что автоматический коэффициент эксплуатации уже применяется отдельно."
-          : "Для строящегося объекта дополнительная надбавка по действующему режиму не рекомендуется.",
+          ? "Для действующего здания отдельный ручной коэффициент обычно держат на x1.00, так как автоматическая поправка уже применяется отдельно."
+          : "Для строящегося объекта дополнительная надбавка по действующему режиму не требуется.",
     },
     nightWorkCoef: {
-      value: clamp(buildingStatus === "operational" && ["public", "transport", "energy"].includes(objectType) ? 1.08 : 1, 1, 1.12),
-      reason: "Рекомендуется только если монтаж реально будет выполняться в технологические окна или ночные смены.",
+      value: clamp(operationalSensitiveObject ? 1.08 : 1, 1, 1.12),
+      reason: "Рекомендуется только если монтаж действительно выполняется в ночные смены или технологические окна.",
+    },
+    weekendWorkCoef: {
+      value: clamp(operationalSensitiveObject ? 1.06 : 1, 1, 1.1),
+      reason: "Оправдан только если часть фронта работ реально переносится на выходные или праздничные дни.",
     },
     routingCoef: {
       value: clamp(avgRouteComplexity, 1, 1.2),
-      reason: `Опирается на среднюю сложность маршрутов прокладки по текущему набору систем (${num(avgRouteComplexity, 2)}).`,
+      reason: `Опирается на среднюю сложность маршрутов прокладки (${num(avgRouteComplexity, 2)}).`,
     },
     finishCoef: {
       value: clamp(["public", "residential"].includes(objectType) ? 1.06 : objectType === "transport" ? 1.04 : 1, 1, 1.1),
-      reason: "Опирается на вероятность чистовой отделки и требования к аккуратному монтажу на объекте такого типа.",
+      reason: "Опирается на вероятность чистовой отделки и требования к аккуратному монтажу.",
     },
   };
 
@@ -237,6 +265,23 @@ function getCurrentCoefficientCost({ fieldKey, budget, totals, systemResults, ob
   return currentAggregate.workTotal - baselineAggregate.workTotal;
 }
 
+function buildShareInput(field, budget, updateBudget) {
+  return (
+    <div className="budget-share-input">
+      <label>{field.label}</label>
+      <input
+        type="number"
+        min="0"
+        max="100"
+        step="1"
+        value={toNumber(budget?.[field.shareKey], 100)}
+        onChange={(event) => updateBudget(field.shareKey, clamp(toNumber(event.target.value, 100), 0, 100))}
+      />
+      <small className="hint-inline">{field.hint}</small>
+    </div>
+  );
+}
+
 export default function BudgetStep({ budget, updateBudget, objectData, effectiveObjectData, zones = [], systems = [], systemResults = [], totals = {} }) {
   const calcObjectData = effectiveObjectData || objectData;
   const validations = validateBudgetCoefficients(budget).reduce((acc, item) => ({ ...acc, [item.key]: item }), {});
@@ -244,13 +289,12 @@ export default function BudgetStep({ budget, updateBudget, objectData, effective
   const recommendations = useMemo(
     () =>
       buildBudgetRecommendations({
-        budget,
         objectData: calcObjectData,
         zones,
         systems,
         systemResults,
       }),
-    [budget, calcObjectData, zones, systems, systemResults]
+    [calcObjectData, zones, systems, systemResults]
   );
 
   const aggregateWork = useMemo(
@@ -274,8 +318,8 @@ export default function BudgetStep({ budget, updateBudget, objectData, effective
         <div>
           <h2>Характеристики бюджета</h2>
           <p>
-            Формула работ: базовая стоимость работ × коэффициенты условий + отчисления ФОТ + утилизация + СИЗ + АХР; затем
-            применяется региональный коэффициент.
+            Формула работ: базовая стоимость работ × коэффициенты условий + отчисления ФОТ + утилизация + СИЗ + АХР; затем применяется региональный коэффициент.
+            Для ночных, высотных и выходных работ коэффициент можно применять только к нужной доле объема, а не ко всем 100% работ.
           </p>
         </div>
       </div>
@@ -291,11 +335,20 @@ export default function BudgetStep({ budget, updateBudget, objectData, effective
             systemResults,
             objectData: calcObjectData,
           });
+          const shareField = shareFields.find((item) => item.key === field.key);
+          const shareLabel = shareField ? getCoefficientShareLabel(budget, field.key) : "";
           const helperLines = [
-            recommendation ? `Рекомендуемо для этого объекта и набора систем: x${num(recommendation.value, 2)}.` : null,
+            recommendation ? `Рекомендуемо для этого объекта: x${num(recommendation.value, 2)}.` : null,
             recommendation?.reason || null,
+            shareField ? `Сейчас коэффициент действует на ${shareLabel}.` : null,
             `Вклад коэффициента в текущем расчете: ${rub(coefficientRub)}.`,
           ].filter(Boolean);
+          const insight = buildRiskGuardInsight({
+            fieldKey: field.key,
+            budget,
+            recommendation,
+            coefficientRub,
+          });
 
           return (
             <SliderControl
@@ -308,6 +361,8 @@ export default function BudgetStep({ budget, updateBudget, objectData, effective
               tooltip={`${meta?.tip || ""}${recommendation ? ` Рекомендуемо сейчас: x${num(recommendation.value, 2)}. ${recommendation.reason}` : ""}`}
               warning={validation?.warning}
               helperLines={helperLines}
+              extraContent={shareField ? buildShareInput(shareField, budget, updateBudget) : null}
+              insight={insight}
               onChange={(next) => updateBudget(field.key, toNumber(next, budget[field.key]))}
             />
           );

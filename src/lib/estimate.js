@@ -29,6 +29,11 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+function applyShare(coefficient, sharePercent = 100) {
+  const share = clamp(toNumber(sharePercent, 100), 0, 100) / 100;
+  return 1 + (toNumber(coefficient, 1) - 1) * share;
+}
+
 function getMarketSnapshotFactor(snapshot) {
   const entries = snapshot?.entries || [];
   let weightedRatio = 0;
@@ -93,11 +98,15 @@ export function calculateSystem(system, zones, budget, objectData = {}, marketSn
   let cable = 0;
   let units = 0;
   const equipmentProfileFactor = calculateEquipmentProfileFactor(system.type, system.equipmentProfiles);
+  const heightFactor = applyShare(budget.heightCoef, budget.heightWorkSharePercent);
+  const nightFactor = applyShare(budget.nightWorkCoef, budget.nightWorkSharePercent);
+  const weekendFactor = applyShare(budget.weekendWorkCoef, budget.weekendWorkSharePercent);
   const conditionLaborFactor =
-    toNumber(budget.heightCoef, 1) *
+    heightFactor *
     toNumber(budget.constrainedCoef, 1) *
     toNumber(budget.operatingFacilityCoef, 1) *
-    toNumber(budget.nightWorkCoef, 1) *
+    nightFactor *
+    weekendFactor *
     toNumber(budget.routingCoef, 1) *
     toNumber(budget.finishCoef, 1);
 
@@ -215,6 +224,10 @@ export function calculateSystem(system, zones, budget, objectData = {}, marketSn
       constrainedCoef: toNumber(budget.constrainedCoef, 1),
       operatingFacilityCoef: toNumber(budget.operatingFacilityCoef, 1),
       nightWorkCoef: toNumber(budget.nightWorkCoef, 1),
+      nightWorkSharePercent: toNumber(budget.nightWorkSharePercent, 100),
+      weekendWorkCoef: toNumber(budget.weekendWorkCoef, 1),
+      weekendWorkSharePercent: toNumber(budget.weekendWorkSharePercent, 100),
+      heightWorkSharePercent: toNumber(budget.heightWorkSharePercent, 100),
       routingCoef: toNumber(budget.routingCoef, 1),
       finishCoef: toNumber(budget.finishCoef, 1),
       conditionLaborFactor,

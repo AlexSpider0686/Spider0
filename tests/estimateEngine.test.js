@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { calculateSystem } from "../src/lib/estimate.js";
 import { calculateSystemWithBreakdown } from "../src/lib/systemCalculators/index.js";
 import { estimateSystemQuantities } from "../src/lib/system-estimator.js";
+import { getConcreteModel } from "../src/lib/equipment.js";
 import { repairUtf8Cp1251Mojibake } from "../src/lib/textEncoding.js";
 import { DEFAULT_BUDGET, DEFAULT_SYSTEM, DEFAULT_ZONE } from "../src/config/estimateConfig.js";
 
@@ -43,6 +44,44 @@ test("calculateSystem responds to work-condition coefficients", () => {
 
   assert.ok(harder.laborBase > base.laborBase);
   assert.ok((harder.trace?.conditionLaborFactor || 1) > 1);
+});
+
+test("partial work shares apply height, night and weekend coefficients proportionally", () => {
+  const { zones, baseBudget, system, objectData } = createFixture();
+
+  const base = calculateSystem(system, zones, baseBudget, objectData);
+  const partial = calculateSystem(
+    system,
+    zones,
+    {
+      ...baseBudget,
+      heightCoef: 1.2,
+      heightWorkSharePercent: 50,
+      nightWorkCoef: 1.2,
+      nightWorkSharePercent: 25,
+      weekendWorkCoef: 1.3,
+      weekendWorkSharePercent: 20,
+    },
+    objectData
+  );
+  const full = calculateSystem(
+    system,
+    zones,
+    {
+      ...baseBudget,
+      heightCoef: 1.2,
+      heightWorkSharePercent: 100,
+      nightWorkCoef: 1.2,
+      nightWorkSharePercent: 100,
+      weekendWorkCoef: 1.3,
+      weekendWorkSharePercent: 100,
+    },
+    objectData
+  );
+
+  assert.ok(partial.laborBase > base.laborBase);
+  assert.ok(full.laborBase > partial.laborBase);
+  assert.ok((partial.trace?.weekendWorkCoef || 1) > 1);
 });
 
 test("calculateSystemWithBreakdown returns resource rows and positive totals", () => {
@@ -148,7 +187,8 @@ test("estimateSystemQuantities scales APS zone counts with mandatory floors", ()
 
   assert.equal(quantities.mandatoryZoneCount, 1);
   assert.equal(quantities.floorDistributedZoneCount, 5);
-  assert.equal(quantities.effectiveZoneCount, 5);
+  assert.ok(quantities.baseZoneCount >= 5);
+  assert.equal(quantities.effectiveZoneCount, quantities.baseZoneCount);
   assert.ok((quantities.secondary?.zksps || 0) >= 5);
   assert.ok((quantities.secondary?.servers || 0) >= 1);
 });
@@ -209,4 +249,64 @@ test("repairUtf8Cp1251Mojibake restores CP1251 mojibake to readable UTF-8", () =
   const expected = "\u041f\u041f\u041a\u041e\u041f|\u0420\u0443\u0431\u0435\u0436|\u0414\u044b\u043c\u043e\u0432\u043e\u0439";
 
   assert.equal(repairUtf8Cp1251Mojibake(mojibake), expected);
+});
+
+test("survey refinement adjusts zone count but does not replace base object model", () => {
+  const zoneContexts = [
+    {
+      id: "lobby-core",
+      zoneName: "Lobby",
+      zoneType: "lobby",
+      areaM2: 4200,
+      floors: 6,
+      densityCoefficient: 1.2,
+      systemRule: {
+        mandatory: true,
+        saturationCoefficient: 1.2,
+        securityIntensityCoefficient: 1.1,
+        engineeringDensityCoefficient: 1.08,
+        installationComplexityCoefficient: 1.12,
+        routeComplexityCoefficient: 1.08,
+      },
+    },
+  ];
+
+  const sharedObjectClassification = {
+    aboveGroundFloors: 6,
+    undergroundFloors: 0,
+    architectureComplexityIndex: 1.12,
+    engineeringSaturationIndex: 1.08,
+    securityIntensityIndex: 1.06,
+    distributedArchitecture: true,
+  };
+
+  const base = estimateSystemQuantities({
+    systemType: "aps",
+    zoneContexts,
+    objectClassification: sharedObjectClassification,
+    activeSystemTypes: ["aps", "soue"],
+  });
+
+  const refined = estimateSystemQuantities({
+    systemType: "aps",
+    zoneContexts,
+    objectClassification: sharedObjectClassification,
+    activeSystemTypes: ["aps", "soue"],
+    surveyRefinement: {
+      recognizedZoneCount: 30,
+      acceptedPlans: 2,
+      expectedFloors: 6,
+    },
+  });
+
+  assert.ok(base.baseZoneCount > 0);
+  assert.ok(refined.surveyAdjustedZoneCount > base.baseZoneCount);
+  assert.ok(refined.surveyAdjustedZoneCount < 30);
+  assert.equal(refined.effectiveZoneCount, refined.surveyAdjustedZoneCount);
+});
+
+test("concrete equipment catalog labels are sanitized before display", () => {
+  const model = getConcreteModel("sot", "Hikvision", "camera", "внутренние_4");
+
+  assert.equal(model, "DS-2CD2143G2-IU");
 });

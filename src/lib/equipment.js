@@ -1,5 +1,6 @@
 import { toNumber } from "./estimate";
 import { getVendorEquipment } from "../config/vendorConfig";
+import { repairUtf8Cp1251Mojibake } from "./textEncoding";
 
 const MARKET_KEY_ALIASES = {
   camera: ["cameras", "camera"],
@@ -14,7 +15,25 @@ const MARKET_KEY_ALIASES = {
   amplifier: ["amplifiers", "amplifier"],
 };
 
-const CONCRETE_MODEL_CATALOG = {
+function repairCatalogNode(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => repairCatalogNode(item));
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, nestedValue]) => [repairUtf8Cp1251Mojibake(key), repairCatalogNode(nestedValue)])
+    );
+  }
+
+  return typeof value === "string" ? repairUtf8Cp1251Mojibake(value) : value;
+}
+
+function sanitizeDisplayText(value) {
+  return repairUtf8Cp1251Mojibake(String(value ?? ""));
+}
+
+const CONCRETE_MODEL_CATALOG = repairCatalogNode({
   sot: {
     Hikvision: {
       camera: {
@@ -194,7 +213,7 @@ const CONCRETE_MODEL_CATALOG = {
       amplifier: { 2: "PA-200D", 4: "AA-1204", 8: "AA-2408" },
     },
   },
-};
+});
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -210,12 +229,17 @@ function getValue(input, fallback) {
 }
 
 function makeDisplayName(label, model) {
-  return model ? `${label} (${model})` : label;
+  const safeLabel = sanitizeDisplayText(label);
+  const safeModel = sanitizeDisplayText(model);
+  return safeModel ? `${safeLabel} (${safeModel})` : safeLabel;
 }
 
 function pushItem(details, item) {
   details.push({
     ...item,
+    name: sanitizeDisplayText(item.name),
+    model: sanitizeDisplayText(item.model),
+    basis: sanitizeDisplayText(item.basis),
     qty: Math.max(toNumber(item.qty), 1),
     unitPrice: Math.max(toNumber(item.unitPrice), 0),
   });
@@ -263,8 +287,8 @@ function resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, aliasKeys,
   return Math.max(reference * ratio * Math.max(toNumber(priceMultiplier, 1), 0.01), 0);
 }
 
-function getConcreteModel(systemType, vendor, itemType, optionKey) {
-  return CONCRETE_MODEL_CATALOG?.[systemType]?.[vendor]?.[itemType]?.[optionKey] || "";
+export function getConcreteModel(systemType, vendor, itemType, optionKey) {
+  return sanitizeDisplayText(CONCRETE_MODEL_CATALOG?.[systemType]?.[vendor]?.[itemType]?.[optionKey] || "");
 }
 
 function resolveQuantity(systemType, itemType, quantityContext, fallbackQty) {

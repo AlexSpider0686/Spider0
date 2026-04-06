@@ -1,6 +1,15 @@
 import PptxGenJS from "pptxgenjs";
 import { buildProjectTimeline } from "./projectTimeline";
 
+const OBJECT_TYPE_COVER_IMAGES = {
+  production: "/assets/object-types/production.jpg",
+  warehouse: "/assets/object-types/warehouse.jpg",
+  public: "/assets/object-types/public.jpg",
+  residential: "/assets/object-types/residential.jpg",
+  transport: "/assets/object-types/transport.jpg",
+  energy: "/assets/object-types/energy.jpg",
+};
+
 const COLORS = {
   bg: "EEF4FC",
   panel: "F7FAFF",
@@ -49,6 +58,22 @@ function safeFileName(name) {
   const base = sanitizeText(name || "Объект 1");
   const cleaned = base.replace(/[<>:"/\\|?*]+/g, "_").slice(0, 80);
   return `${cleaned || "Объект_1"}-presentation.pptx`;
+}
+
+async function loadImageData(path) {
+  if (typeof window === "undefined" || !path) return null;
+  try {
+    const response = await fetch(new URL(path, window.location.origin).toString());
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    return await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(typeof reader.result === "string" ? reader.result : null);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
 }
 
 function normalizeWidths(widths, totalWidth) {
@@ -137,6 +162,99 @@ function addMetricCards(slide, cards, x, y, w) {
       color: COLORS.title,
     });
   });
+}
+
+function buildForcesAndMeans(systemResults = []) {
+  const executionHours = systemResults.reduce((sum, row) => sum + safeNum(row?.executionHours, 0), 0);
+  const designHours = systemResults.reduce((sum, row) => sum + safeNum(row?.designHours, 0), 0);
+  const peakExecutionTeam = Math.max(...systemResults.map((row) => safeNum(row?.executionTeamSize, 0)), 0);
+  const peakDesignTeam = Math.max(...systemResults.map((row) => safeNum(row?.designTeamSize, 0)), 0);
+  const executionMonths = Math.max(...systemResults.map((row) => safeNum(row?.executionDurationMonths, 0)), 0);
+
+  return [
+    ["Трудоемкость СМР+ПНР", `${num(executionHours, 0)} ч`],
+    ["Трудоемкость проектирования", `${num(designHours, 0)} ч`],
+    ["Пиковая монтажная бригада", `${num(peakExecutionTeam, 0)} чел.`],
+    ["Пиковая проектная группа", `${num(peakDesignTeam, 0)} чел.`],
+    ["Монтажный горизонт", `${num(executionMonths, 0)} мес.`],
+  ];
+}
+
+function addCoverSlide(slide, objectData, totals, coverImageData) {
+  slide.background = { color: "0A1727" };
+  if (coverImageData) {
+    slide.addImage({ data: coverImageData, x: 0, y: 0, w: 13.333, h: 7.5 });
+    slide.addShape("rect", { x: 0, y: 0, w: 13.333, h: 7.5, fill: { color: "09192A", transparency: 38 }, line: { color: "09192A", pt: 0 } });
+  }
+
+  slide.addShape("roundRect", {
+    x: 0.72,
+    y: 0.68,
+    w: 6.65,
+    h: 5.9,
+    rectRadius: 0.12,
+    fill: { color: "FFFFFF", transparency: coverImageData ? 10 : 0 },
+    line: { color: "D8E6F4", pt: 1 },
+  });
+
+  slide.addText("PROJECT.CORE", {
+    x: 1.04,
+    y: 0.98,
+    w: 2.6,
+    h: 0.18,
+    fontFace: "Calibri",
+    fontSize: 10,
+    bold: true,
+    color: "1E9FC5",
+    charSpace: 0.8,
+  });
+
+  slide.addText("Предварительный бюджет проекта систем безопасности", {
+    x: 1.04,
+    y: 1.36,
+    w: 5.8,
+    h: 0.86,
+    fontFace: "Calibri",
+    fontSize: 24,
+    bold: true,
+    color: COLORS.title,
+    fit: "shrink",
+  });
+
+  slide.addText(sanitizeText(objectData?.projectName || "Объект"), {
+    x: 1.04,
+    y: 2.36,
+    w: 5.7,
+    h: 0.26,
+    fontFace: "Calibri",
+    fontSize: 15,
+    bold: true,
+    color: COLORS.text,
+  });
+
+  slide.addText(sanitizeText(objectData?.address || "Адрес объекта не указан"), {
+    x: 1.04,
+    y: 2.72,
+    w: 5.7,
+    h: 0.52,
+    fontFace: "Calibri",
+    fontSize: 11,
+    color: COLORS.muted,
+    fit: "shrink",
+  });
+
+  addSlideFrame(slide4, "РЎС‚РѕРёРјРѕСЃС‚СЊ РїСЂРѕРµРєС‚Р° РїРѕ СЃРёСЃС‚РµРјР°Рј", "Р Р°Р·Р»РѕР¶РµРЅРёРµ СЃС‚РѕРёРјРѕСЃС‚Рё РїРѕ РєР°Р¶РґРѕР№ СЃРёСЃС‚РµРјРµ РѕС‚РґРµР»СЊРЅРѕ.", 5);
+  addMetricCards(
+    slide,
+    [
+      { label: "Итог проекта", value: rub(totals?.total) },
+      { label: "Оборудование", value: rub(totals?.totalEquipment) },
+      { label: "Работы", value: rub(totals?.totalWork) },
+    ],
+    1.02,
+    4.48,
+    5.7
+  );
 }
 
 function drawTable(slide, options) {
@@ -453,6 +571,7 @@ function buildTimeline(systemResults, objectData, totals) {
 
 function addGanttSlide(slide, systemResults, objectData, totals) {
   const { bars, totalMonths } = buildProjectTimeline(systemResults, objectData, totals);
+  const forcesAndMeans = buildForcesAndMeans(systemResults);
   const chartX = 3.1;
   const chartY = 1.65;
   const chartW = 8.6;
@@ -548,6 +667,18 @@ function addGanttSlide(slide, systemResults, objectData, totals) {
       color: COLORS.muted,
     }
   );
+  drawTable(slide, {
+    x: 0.78,
+    y: 5.42,
+    w: 4.8,
+    headers: ["РЎРёР»С‹ Рё СЃСЂРµРґСЃС‚РІР°", "Р—РЅР°С‡РµРЅРёРµ"],
+    widths: [0.68, 0.32],
+    rows: forcesAndMeans,
+    maxRows: 5,
+    rowH: 0.27,
+    fontSize: 8,
+    headerFill: "D9E9F8",
+  });
 }
 
 export async function exportEstimatePptx({ objectData, budget, systemResults, totals, apsProjectExports = [], projectRisks = [], vendorComparisons = [] }) {
@@ -567,12 +698,16 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
   pptx.title = "Project.Core™ — Экспорт ТКП";
   pptx.lang = "ru-RU";
 
+  const coverImageData = await loadImageData(OBJECT_TYPE_COVER_IMAGES[safeObject.objectType]);
+  const coverSlide = pptx.addSlide();
+  addCoverSlide(coverSlide, safeObject, safeTotals, coverImageData);
+
   const slide1 = pptx.addSlide();
   addSlideFrame(
     slide1,
     "Общая бюджетная оценка проекта",
     "Оценка включает оборудование, материалы, СМР/ПНР и проектирование.",
-    1
+    2
   );
   addMetricCards(
     slide1,
@@ -633,7 +768,7 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
     slide2,
     "Системы и ключевое оборудование",
     "Наименование, объём и стоимость ключевых позиций, влияющих на итоговую цену.",
-    2
+    3
   );
 
   const equipmentRows = [];
@@ -696,6 +831,8 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
   const slide3 = pptx.addSlide();
   addSlideFrame(slide3, "Характеристики бюджета", "Коэффициенты и параметры, влияющие на стоимость работ.", 3);
 
+  addSlideFrame(slide3, "РҐР°СЂР°РєС‚РµСЂРёСЃС‚РёРєРё Р±СЋРґР¶РµС‚Р°", "РљРѕСЌС„С„РёС†РёРµРЅС‚С‹ Рё РїР°СЂР°РјРµС‚СЂС‹, РІР»РёСЏСЋС‰РёРµ РЅР° СЃС‚РѕРёРјРѕСЃС‚СЊ СЂР°Р±РѕС‚.", 4);
+  addSlideFrame(slide3, "РҐР°СЂР°РєС‚РµСЂРёСЃС‚РёРєРё Р±СЋРґР¶РµС‚Р°", "РљРѕСЌС„С„РёС†РёРµРЅС‚С‹ Рё РїР°СЂР°РјРµС‚СЂС‹, РІР»РёСЏСЋС‰РёРµ РЅР° СЃС‚РѕРёРјРѕСЃС‚СЊ СЂР°Р±РѕС‚.", 4);
   drawTable(slide3, {
     x: 0.55,
     y: 1.2,
@@ -777,7 +914,7 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
       slide,
       `Сравнение цен по вендорам${titleSuffix}`,
       "Текущий вендор и две альтернативы по каждой системе с пересчетом стоимости оборудования, материалов и работ.",
-      5 + chunkIndex
+      6 + chunkIndex
     );
     drawTable(slide, {
       x: 0.55,
@@ -805,7 +942,7 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
       slide,
       `Спецификация оборудования и материалов${titleSuffix}`,
       "Единый перечень по всем системам: оборудование, материалы, количество, цена, сумма, ссылка и позиция из проекта.",
-      5 + comparisonChunks.length + chunkIndex
+      6 + comparisonChunks.length + chunkIndex
     );
     drawTable(slide, {
       x: 0.55,
@@ -826,7 +963,7 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
     riskSlide,
     "AI-риски проекта",
     "До пяти самых критичных индивидуальных рисков по текущему объекту: монтаж, спецификация, закупка, координация и сроки.",
-    5 + comparisonChunks.length + specificationChunks.length
+    6 + comparisonChunks.length + specificationChunks.length
   );
   drawTable(riskSlide, {
     x: 0.55,
@@ -847,7 +984,7 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
     slide6,
     "График реализации проекта",
     "Ориентировочные сроки проектирования, поставки, СМР, ПНР и интеграции.",
-    6 + comparisonChunks.length + specificationChunks.length
+    7 + comparisonChunks.length + specificationChunks.length
   );
   addGanttSlide(slide6, safeSystems, safeObject, safeTotals);
 
