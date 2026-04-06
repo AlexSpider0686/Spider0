@@ -24,6 +24,35 @@ const MANAGEMENT_UNIT_DEFAULTS = {
   skud: { serverPrice: 208000, armPrice: 128000 },
 };
 
+const CATEGORY_PRICE_GUARDRAILS = {
+  cameras: { min: 0.82, max: 1.32 },
+  camera: { min: 0.82, max: 1.32 },
+  nvr: { min: 0.86, max: 1.36 },
+  recorder: { min: 0.86, max: 1.36 },
+  integrationServer: { min: 0.88, max: 1.42 },
+  storage: { min: 0.84, max: 1.34 },
+  hdd: { min: 0.84, max: 1.34 },
+  switch: { min: 0.84, max: 1.3 },
+  switches: { min: 0.84, max: 1.3 },
+  controller: { min: 0.85, max: 1.3 },
+  controllers: { min: 0.85, max: 1.3 },
+  readers: { min: 0.82, max: 1.28 },
+  locks: { min: 0.8, max: 1.26 },
+  sensors: { min: 0.8, max: 1.24 },
+  sensor: { min: 0.8, max: 1.24 },
+  detectors: { min: 0.8, max: 1.24 },
+  detector: { min: 0.8, max: 1.24 },
+  panel: { min: 0.88, max: 1.34 },
+  panels: { min: 0.88, max: 1.34 },
+  "fire-panels": { min: 0.88, max: 1.34 },
+  speakers: { min: 0.82, max: 1.24 },
+  speaker: { min: 0.82, max: 1.24 },
+  amplifiers: { min: 0.86, max: 1.32 },
+  amplifier: { min: 0.86, max: 1.32 },
+  notification: { min: 0.8, max: 1.22 },
+  "network-core": { min: 0.9, max: 1.36 },
+};
+
 function repairCatalogNode(value) {
   if (Array.isArray(value)) {
     return value.map((item) => repairCatalogNode(item));
@@ -273,6 +302,13 @@ function weightedMedian(entries = []) {
   return sorted[sorted.length - 1]?.ratio || 1;
 }
 
+function resolveCategoryGuardrails(aliasKeys = []) {
+  for (const key of aliasKeys || []) {
+    if (CATEGORY_PRICE_GUARDRAILS[key]) return CATEGORY_PRICE_GUARDRAILS[key];
+  }
+  return { min: 0.78, max: 1.34 };
+}
+
 function buildMarketRatioMap(marketEntries = []) {
   const grouped = new Map();
 
@@ -287,7 +323,8 @@ function buildMarketRatioMap(marketEntries = []) {
     const weakEvidence = Boolean(entry?.recheckRequired) || toNumber(entry?.sourceCount, 0) < 2 || confidence < 0.45;
     if (weakEvidence && !hasManufacturerMatch) continue;
 
-    const ratio = clamp(price / fallback, hasManufacturerMatch ? 0.45 : 0.72, hasManufacturerMatch ? 2.2 : 1.45);
+    const { min, max } = resolveCategoryGuardrails([equipmentKey]);
+    const ratio = clamp(price / fallback, hasManufacturerMatch ? Math.max(min - 0.18, 0.45) : min, hasManufacturerMatch ? max + 0.22 : max);
     const weight = confidence * (hasManufacturerMatch ? 1.35 : 1) * (entry?.recheckRequired ? 0.55 : 1);
     if (!grouped.has(equipmentKey)) grouped.set(equipmentKey, []);
     grouped.get(equipmentKey).push({ ratio, weight });
@@ -301,7 +338,8 @@ function buildMarketRatioMap(marketEntries = []) {
     const weightedAverage =
       filtered.reduce((sum, item) => sum + item.ratio * item.weight, 0) /
       Math.max(filtered.reduce((sum, item) => sum + item.weight, 0), 0.0001);
-    map.set(key, clamp(weightedAverage, 0.72, 1.45));
+    const { min, max } = resolveCategoryGuardrails([key]);
+    map.set(key, clamp(weightedAverage, min, max));
   });
 
   return map;

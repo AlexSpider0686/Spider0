@@ -1,4 +1,20 @@
-export const EQUIPMENT_CATALOG = {
+import { repairUtf8Cp1251Mojibake } from "../lib/textEncoding";
+
+function repairCatalogNode(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => repairCatalogNode(item));
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, nestedValue]) => [repairUtf8Cp1251Mojibake(key), repairCatalogNode(nestedValue)])
+    );
+  }
+
+  return typeof value === "string" ? repairUtf8Cp1251Mojibake(value) : value;
+}
+
+export const EQUIPMENT_CATALOG = repairCatalogNode({
   sot: [
     {
       key: "cameras",
@@ -258,7 +274,7 @@ export const EQUIPMENT_CATALOG = {
       },
     },
   ],
-};
+});
 
 export function getEquipmentForSystem(systemType) {
   return EQUIPMENT_CATALOG[systemType] || [];

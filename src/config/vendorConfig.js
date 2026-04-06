@@ -1,3 +1,19 @@
+import { repairUtf8Cp1251Mojibake } from "../lib/textEncoding";
+
+function repairCatalogNode(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => repairCatalogNode(item));
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, nestedValue]) => [repairUtf8Cp1251Mojibake(key), repairCatalogNode(nestedValue)])
+    );
+  }
+
+  return typeof value === "string" ? repairUtf8Cp1251Mojibake(value) : value;
+}
+
 const CCTV_PROFILE = {
   camera: {
     placement: ["внутренние", "уличные"],
@@ -50,7 +66,7 @@ const SOUE_PROFILE = {
   },
 };
 
-export const VENDOR_EQUIPMENT = {
+export const VENDOR_EQUIPMENT = repairCatalogNode({
   sot: {
     Базовый: CCTV_PROFILE,
     Hikvision: CCTV_PROFILE,
@@ -175,7 +191,7 @@ export const VENDOR_EQUIPMENT = {
       amplifier: { channels: [2, 4, 8], basePrices: { 2: 86000, 4: 122000, 8: 189000 } },
     },
   },
-};
+});
 
 export function getVendorEquipment(systemType, vendor) {
   return VENDOR_EQUIPMENT?.[systemType]?.[vendor] || VENDOR_EQUIPMENT?.[systemType]?.Базовый || null;
