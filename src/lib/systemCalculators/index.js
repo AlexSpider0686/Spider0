@@ -11,6 +11,7 @@ import { classifyObject } from "../object-classifier";
 import { estimateSystemQuantities } from "../system-estimator";
 import { classifyZonesForSystem } from "../zone-classifier";
 import { calculateDesignSurveyAdjustment, hasProjectForSystem } from "../designSurveyEngine";
+import { repairTextTree } from "../textEncoding";
 
 function getSystemName(systemType) {
   return SYSTEM_TYPES.find((item) => item.code === systemType)?.name || systemType;
@@ -403,7 +404,8 @@ export function calculateSystemWithBreakdown(
   projectSnapshot = null,
   allSystems = [],
   surveyAnswers = {},
-  photoAnalyses = {}
+  photoAnalyses = {},
+  normativeContext = null
 ) {
   const normalizedInput = normalizeEstimateInput({
     system,
@@ -424,6 +426,7 @@ export function calculateSystemWithBreakdown(
     systemType: system.type,
   });
   const recognizedPlanZones = collectRecognizedPlanZones(photoAnalyses, system.type);
+  const normativeAdjustments = normativeContext?.applied ? normativeContext?.profile?.adjustments?.[system.type] || null : null;
 
   let quantities = estimateSystemQuantities({
     systemType: system.type,
@@ -436,6 +439,7 @@ export function calculateSystemWithBreakdown(
       acceptedPlans: recognizedPlanZones.acceptedPlans,
       expectedFloors: recognizedPlanZones.expectedFloors || objectClassification.totalFloors,
     },
+    normativeAdjustments,
   });
 
   let cableModel = estimateCableBySystem({
@@ -770,7 +774,7 @@ export function calculateSystemWithBreakdown(
     },
   ];
 
-  return {
+  return repairTextTree({
     ...systemResult,
     formulaRows: [
       ...vendorRows,
@@ -820,5 +824,5 @@ export function calculateSystemWithBreakdown(
         ? [`AI-обследование маршрутов прокладки учтено в смете: материалы +${routingMaterialsCost} руб., работы +${routingWorkCost} руб.`]
         : []),
     ],
-  };
+  });
 }

@@ -2,18 +2,19 @@ import { Camera, Shield, Lock, Cpu, Bell, Siren } from "lucide-react";
 import vendors, { getVendorNames } from "./vendorsConfig";
 import { getDefaultEquipmentProfiles } from "./equipmentCatalog";
 import { APP_VERSION, SYSTEM_BUILD_NUMBER } from "./buildInfo";
+import { repairTextTree, repairUtf8Cp1251Mojibake } from "../lib/textEncoding";
 
 export const BUILD_NUMBER = SYSTEM_BUILD_NUMBER;
 export const APP_VERSION_LABEL = APP_VERSION;
 
-export const SYSTEM_TYPES = [
+export const SYSTEM_TYPES = repairTextTree([
   { code: "sot", shortName: "СОТ", name: "Система охранного телевидения (СОТ)", icon: Camera },
   { code: "sots", shortName: "СОТС", name: "Система охранно-тревожной сигнализации (СОТС)", icon: Shield },
   { code: "skud", shortName: "СКУД", name: "Система контроля и управления доступом (СКУД)", icon: Lock },
   { code: "ssoi", shortName: "ССОИ", name: "Система сбора и обработки информации (ССОИ)", icon: Cpu },
   { code: "aps", shortName: "АПС", name: "Автоматическая пожарная сигнализация (АПС)", icon: Bell },
   { code: "soue", shortName: "СОУЭ", name: "Система оповещения и управления эвакуацией (СОУЭ)", icon: Siren },
-];
+]);
 
 export const VENDORS = {
   sot: getVendorNames("sot"),
@@ -24,7 +25,7 @@ export const VENDORS = {
   soue: getVendorNames("soue"),
 };
 
-export const OBJECT_TYPES = [
+export const OBJECT_TYPES = repairTextTree([
   {
     value: "production",
     label: "Производственные объекты",
@@ -55,7 +56,7 @@ export const OBJECT_TYPES = [
     label: "Объекты энергетики",
     description: "Электростанции, подстанции.",
   },
-];
+]);
 
 export const DEFAULT_BUDGET = {
   cableCoef: 1.0,
@@ -127,7 +128,7 @@ export const BASE_RATES = {
   },
 };
 
-export const COEFFICIENT_GUIDE = [
+export const COEFFICIENT_GUIDE = repairTextTree([
   {
     key: "cableCoef",
     title: "Коэффициент кабельных работ",
@@ -194,7 +195,7 @@ export const COEFFICIENT_GUIDE = [
     range: "1.00–1.18",
     tip: "Повышает трудоёмкость из-за требований к аккуратному монтажу.",
   },
-];
+]);
 
 export const DEFAULT_ZONE = (id, name, type = "office", area = 5000, floors = 1) => ({
   id,

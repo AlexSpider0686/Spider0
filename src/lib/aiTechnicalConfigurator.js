@@ -353,7 +353,7 @@ function buildPricedEquipmentRows(systemType, result, apsSnapshot) {
       name: item.name,
       qty: Math.max(num(item.qty, 0), 0),
       unit: "шт",
-      basis: "Расчетный BOM системы",
+      basis: "Расчетная ведомость оборудования и материалов (BOM) системы",
       unitPrice: num(item.unitPrice, 0),
       category: detectSpecCategory(item.name, "equipment"),
       source: "model_bom",
@@ -492,7 +492,7 @@ function buildBaseSpecRows(systemType, result, apsSnapshot) {
       name: item.name,
       qty: Math.max(num(item.qty, 0), 0),
       unit: "шт",
-      basis: "Расчетный BOM системы",
+      basis: "Расчетная ведомость оборудования и материалов (BOM) системы",
     }));
   }
 

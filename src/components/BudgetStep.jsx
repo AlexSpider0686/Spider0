@@ -5,6 +5,7 @@ import { validateBudgetCoefficients } from "../lib/validation";
 import { num, rub, toNumber } from "../lib/estimate";
 import { buildCoefficientLayer } from "../lib/coefficient-engine";
 import { buildRiskGuardInsight, getCoefficientShareLabel, getCoefficientSharePercent } from "../lib/budget-risk-guard";
+import { repairTextTree } from "../lib/textEncoding";
 
 const sliderFields = [
   { key: "cableCoef", min: 0.7, max: 1.5, step: 0.01 },
@@ -20,7 +21,7 @@ const sliderFields = [
   { key: "finishCoef", min: 1, max: 1.2, step: 0.01 },
 ];
 
-const percentFields = [
+const percentFields = repairTextTree([
   {
     key: "overheadPercent",
     label: "ОПР (накладные расходы), %",
@@ -51,9 +52,9 @@ const percentFields = [
     hint: "Начисляются после ФОТ, ОПР, утилизации и СИЗ.",
     amountKey: "admin",
   },
-];
+]);
 
-const shareFields = [
+const shareFields = repairTextTree([
   {
     key: "heightCoef",
     shareKey: "heightWorkSharePercent",
@@ -72,7 +73,7 @@ const shareFields = [
     label: "Доля работ в выходные, %",
     hint: "Показывает, на какой объем работ распространяется коэффициент выходных дней.",
   },
-];
+]);
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));

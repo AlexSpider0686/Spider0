@@ -23,6 +23,8 @@ import { buildAiTechnicalRecommendations } from "../lib/aiTechnicalConfigurator"
 import { buildAiProjectRisks } from "../lib/aiProjectRiskEngine";
 import { aggregatePlanRecognitions } from "../lib/evacuationPlanRecognition";
 import { downloadSystemSpecificationExcel } from "../lib/specExport";
+import { buildNormativeRequirements } from "../lib/normativeRequirements";
+import { repairUtf8Cp1251Mojibake } from "../lib/textEncoding";
 
 function removeById(mapObject, id) {
   if (!(id in mapObject)) return mapObject;
@@ -113,6 +115,7 @@ function deriveSurveyAreaRefinement(photoAnalyses = {}, fallbackTotalArea = 0) {
 }
 
 export default function useEstimate() {
+  const t = repairUtf8Cp1251Mojibake;
   const initialIdentityRef = useRef(createProjectIdentity());
   const apsImportTasksRef = useRef(new Map());
   const [step, setStep] = useState(0);
@@ -138,6 +141,7 @@ export default function useEstimate() {
   ]);
   const [systems, setSystems] = useState([DEFAULT_SYSTEM(1, "sot"), DEFAULT_SYSTEM(2, "sots"), DEFAULT_SYSTEM(3, "skud")]);
   const [budget, setBudget] = useState(DEFAULT_BUDGET);
+  const [normativeRequirementsApplied, setNormativeRequirementsApplied] = useState(true);
   const [zonePreset, setZonePreset] = useState("business_center");
   const [lockedZoneIds, setLockedZoneIds] = useState([]);
   const [vendorPriceSnapshots, setVendorPriceSnapshots] = useState({});
@@ -194,6 +198,22 @@ export default function useEstimate() {
   );
   const protectedAreaMeta = useMemo(() => calculateProtectedArea(effectiveObjectData), [effectiveObjectData]);
   const recalculatedArea = protectedAreaMeta.protectedAreaM2;
+  const normativeProfile = useMemo(
+    () =>
+      buildNormativeRequirements({
+        objectData: effectiveObjectData,
+        zones,
+        systems,
+      }),
+    [effectiveObjectData, zones, systems]
+  );
+  const normativeContext = useMemo(
+    () => ({
+      applied: normativeRequirementsApplied,
+      profile: normativeProfile,
+    }),
+    [normativeProfile, normativeRequirementsApplied]
+  );
   const { systemsDetailed: systemResults, totals } = useMemo(
     () =>
       calculateEstimateEngine(
@@ -204,7 +224,8 @@ export default function useEstimate() {
         vendorPriceSnapshots,
         apsProjectSnapshots,
         technicalSolution.appliedAnswers,
-        technicalSolution.appliedPhotoAnalyses
+        technicalSolution.appliedPhotoAnalyses,
+        normativeContext
       ),
     [
       systems,
@@ -215,6 +236,7 @@ export default function useEstimate() {
       apsProjectSnapshots,
       technicalSolution.appliedAnswers,
       technicalSolution.appliedPhotoAnalyses,
+      normativeContext,
     ]
   );
   const zoneDistribution = useMemo(() => validateZoneDistribution(zones, recalculatedArea), [zones, recalculatedArea]);
@@ -1495,6 +1517,9 @@ export default function useEstimate() {
     return true;
   };
 
+  const applyNormativeRequirements = () => setNormativeRequirementsApplied(true);
+  const excludeNormativeRequirements = () => setNormativeRequirementsApplied(false);
+
   return {
     step,
     setStep,
@@ -1511,6 +1536,8 @@ export default function useEstimate() {
     lockedZoneIds,
     vendorPriceSnapshots,
     vendorComparisonsBySystem,
+    normativeProfile,
+    normativeRequirementsApplied,
     apsProjectSnapshots,
     apsImportStatuses,
     protectedAreaMeta,
@@ -1541,6 +1568,8 @@ export default function useEstimate() {
     removeSystem,
     updateSystemEquipmentProfile,
     updateBudget,
+    applyNormativeRequirements,
+    excludeNormativeRequirements,
     refreshVendorPricing,
       compareVendorPrices,
       clearVendorComparison,

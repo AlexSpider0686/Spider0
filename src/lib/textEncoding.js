@@ -100,3 +100,15 @@ export function repairUtf8Cp1251Mojibake(input) {
 
   return current;
 }
+
+export function repairTextTree(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => repairTextTree(item));
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, nestedValue]) => [repairUtf8Cp1251Mojibake(key), repairTextTree(nestedValue)]));
+  }
+
+  return typeof value === "string" ? repairUtf8Cp1251Mojibake(value) : value;
+}

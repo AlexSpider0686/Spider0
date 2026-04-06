@@ -21,6 +21,79 @@ function sanitizeResourceRows(rows = []) {
   }));
 }
 
+function normalizeManagementMode(mode) {
+  return mode === "server" ? "server" : mode === "arm" ? "arm" : null;
+}
+
+function applyNormativeAdjustments(raw, normative = {}) {
+  if (!normative || typeof normative !== "object") return raw;
+
+  const next = {
+    ...raw,
+    resourceRows: Array.isArray(raw.resourceRows) ? raw.resourceRows.map((row) => ({ ...row })) : [],
+    secondary: { ...(raw.secondary || {}) },
+  };
+
+  const reserveFactor = Math.max(toNumber(normative.minPrimaryReserveFactor, 1), 1);
+  if (reserveFactor > 1) {
+    next.primaryUnits = safeCeil(Math.max(toNumber(next.primaryUnits, 0), 0) * reserveFactor, Math.max(toNumber(next.primaryUnits, 0), 1));
+    next.markerUnits = Math.max(next.primaryUnits, safeCeil(toNumber(next.markerUnits, next.primaryUnits), 1));
+  }
+
+  if (toNumber(normative.minAccessPoints, 0) > 0) {
+    const minAccessPoints = safeCeil(normative.minAccessPoints, 1);
+    next.primaryUnits = Math.max(toNumber(next.primaryUnits, 0), minAccessPoints);
+    next.markerUnits = Math.max(toNumber(next.markerUnits, next.primaryUnits), minAccessPoints);
+  }
+
+  const minControllerReserve = Math.max(toNumber(normative.minControllerReserve, 0), 0);
+  if (minControllerReserve > 0) {
+    next.controllerUnits = Math.max(safeCeil(toNumber(next.controllerUnits, 0), 0), safeCeil(minControllerReserve, 0));
+  }
+
+  const currentMode = normalizeManagementMode(next.secondary?.managementPlan?.deploymentMode);
+  const requiredMode = normalizeManagementMode(normative.minManagementMode);
+  if (requiredMode && currentMode && currentMode !== requiredMode) {
+    const managementPlan = { ...(next.secondary?.managementPlan || {}) };
+    if (requiredMode === "server") {
+      managementPlan.serverCount = Math.max(toNumber(managementPlan.serverCount, 0), 1);
+      managementPlan.armCount = Math.max(toNumber(managementPlan.armCount, 0), 1);
+      managementPlan.deploymentMode = "server";
+      next.secondary.servers = Math.max(toNumber(next.secondary.servers, 0), toNumber(managementPlan.serverCount, 0));
+      next.secondary.arms = Math.max(toNumber(next.secondary.arms, 0), toNumber(managementPlan.armCount, 0));
+    } else {
+      managementPlan.armCount = Math.max(toNumber(managementPlan.armCount, 0), 1);
+      managementPlan.deploymentMode = "arm";
+      next.secondary.arms = Math.max(toNumber(next.secondary.arms, 0), toNumber(managementPlan.armCount, 0));
+    }
+    managementPlan.reason = sanitizeText(
+      `${managementPlan.reason || ""} Нормативный слой удержал архитектуру управления в режиме ${
+        requiredMode === "server" ? "выделенного сервера" : "АРМ"
+      }.`
+    ).trim();
+    next.secondary.managementPlan = managementPlan;
+  }
+
+  next.resourceRows = next.resourceRows.map((row) => {
+    const rowKey = String(row?.key || "");
+    const qty = Math.max(toNumber(row?.qty, 0), 0);
+    if (["reader", "detector", "camera", "sensor", "speaker"].includes(rowKey) && reserveFactor > 1) {
+      return { ...row, qty: Math.max(safeCeil(qty * reserveFactor, qty), qty) };
+    }
+    if (["controller", "module", "panel", "gateway", "server"].includes(rowKey) && minControllerReserve > 0) {
+      return { ...row, qty: Math.max(qty, minControllerReserve) };
+    }
+    return row;
+  });
+
+  const designFactor = Math.max(toNumber(normative.designFactor, 1), 1);
+  if (designFactor > 1) {
+    next.designHoursBase = Math.max(toNumber(next.designHoursBase, 0), 0) * designFactor;
+  }
+
+  return next;
+}
+
 function buildBaseZoneCount({
   driver,
   zoneContexts = [],
@@ -572,25 +645,27 @@ function estimateSkud(context) {
     const floors = Math.max(toNumber(zone.floors, 1), 1);
     const zoneFactor =
       zone.zoneType === "lobby"
-        ? area / 650
+        ? area / 520
         : zone.zoneType === "corridor"
-          ? area / 1800
+          ? area / 1450
           : zone.zoneType === "parking"
-            ? area / 2200
+            ? area / 1650
             : zone.zoneType === "technical"
-              ? area / 2600
-              : area / 2000;
-    return sum + zoneFactor + Math.max(floors - 1, 0) * 0.35;
+              ? area / 2100
+              : area / 1550;
+    const verticalAccessReserve = floors > 1 ? 0.45 + (floors - 1) * 0.32 : 0;
+    return sum + zoneFactor + verticalAccessReserve;
   }, 0);
 
-  const floorBoost = objectClassification.aboveGroundFloors * 0.42 + objectClassification.undergroundFloors * 0.2;
-  const lobbyBoost = lobbyAreaM2 / 1300;
-  const parkingBoost = parkingAreaM2 / 2800;
+  const floorBoost = objectClassification.aboveGroundFloors * 0.58 + objectClassification.undergroundFloors * 0.34;
+  const lobbyBoost = lobbyAreaM2 / 900;
+  const parkingBoost = parkingAreaM2 / 1800;
   const basePoints = Math.max(zoneDemand.total, accessDemandFromZones) + floorBoost + lobbyBoost + parkingBoost;
   const accessPoints = safeCeil(basePoints, 1);
 
   const readers = safeCeil(accessPoints * toNumber(driver.readersPerPoint, 2), 1);
-  const controllers = safeCeil(accessPoints * toNumber(driver.controllerPerPoint, 0.5) + lobbyAreaM2 / 5000, 1);
+  const controllerBaseLoad = Math.max(accessPoints * toNumber(driver.controllerPerPoint, 0.5), readers / 3.6);
+  const controllers = safeCeil(controllerBaseLoad + lobbyAreaM2 / 3200 + parkingAreaM2 / 5200 + objectClassification.totalFloors / 3.5, 1);
   const turnstiles = safeCeil((lobbyAreaM2 / 1200) * toNumber(driver.turnstilePerLobbyPoint, 1 / 3), 0);
   const cabinets = safeCeil((controllers + turnstiles) / 4, 1);
   const integrationPoints = safeCeil(Math.max(context.mandatoryZoneCount, context.floorDistributedZoneCount) * toNumber(driver.integrationPointsPerZone, 0.2) + accessPoints / 16, 1);
@@ -657,6 +732,7 @@ export function estimateSystemQuantities({
   activeSystemTypes = [],
   recognizedZoneCount = 0,
   surveyRefinement = null,
+  normativeAdjustments = null,
 }) {
   const driver = SYSTEM_DRIVER_CONFIG[systemType] || SYSTEM_DRIVER_CONFIG.sot;
   const zoneDemand = buildZoneDemand(zoneContexts, driver.densityPer1000 || {}, objectClassification);
@@ -705,6 +781,7 @@ export function estimateSystemQuantities({
     recognizedZoneCount: surveyZoneRefinement.recognizedZoneCount,
     activeSystemTypes,
   });
+  const adjustedRaw = applyNormativeAdjustments(raw, normativeAdjustments);
 
   const routeComplexityAverage =
     zoneContexts.length > 0
@@ -714,14 +791,14 @@ export function estimateSystemQuantities({
   return {
     systemType,
     markerLabel: sanitizeText(driver.markerLabel),
-    primaryUnitKey: raw.primaryUnitKey || driver.primaryUnitKey,
+    primaryUnitKey: adjustedRaw.primaryUnitKey || driver.primaryUnitKey,
     primaryUnitLabel: sanitizeText(raw.primaryUnitLabel || "Единица"),
-    primaryUnits: Math.max(toNumber(raw.primaryUnits, 0), 0),
-    markerUnits: Math.max(toNumber(raw.markerUnits, raw.primaryUnits), 1),
-    controllerUnits: Math.max(toNumber(raw.controllerUnits, 0), 0),
-    activeElements: Math.max(toNumber(raw.activeElements, raw.primaryUnits), 0),
-    integrationPoints: Math.max(toNumber(raw.integrationPoints, 0), 0),
-    designHoursBase: Math.max(toNumber(raw.designHoursBase, 0), 0),
+    primaryUnits: Math.max(toNumber(adjustedRaw.primaryUnits, 0), 0),
+    markerUnits: Math.max(toNumber(adjustedRaw.markerUnits, adjustedRaw.primaryUnits), 1),
+    controllerUnits: Math.max(toNumber(adjustedRaw.controllerUnits, 0), 0),
+    activeElements: Math.max(toNumber(adjustedRaw.activeElements, adjustedRaw.primaryUnits), 0),
+    integrationPoints: Math.max(toNumber(adjustedRaw.integrationPoints, 0), 0),
+    designHoursBase: Math.max(toNumber(adjustedRaw.designHoursBase, 0), 0),
     mandatoryZoneCount,
     recognizedZoneCount: surveyZoneRefinement.recognizedZoneCount,
     baseZoneCount,
@@ -734,7 +811,7 @@ export function estimateSystemQuantities({
     zonePrimaryUnits: zoneDemand.zonePrimaryUnits,
     zoneDrivers: zoneDemand.drivers,
     routeComplexityAverage: clamp(routeComplexityAverage, 0.7, 2.8),
-    resourceRows: sanitizeResourceRows(raw.resourceRows || []),
-    secondary: raw.secondary || {},
+    resourceRows: sanitizeResourceRows(adjustedRaw.resourceRows || []),
+    secondary: adjustedRaw.secondary || {},
   };
 }

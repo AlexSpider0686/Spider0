@@ -1,5 +1,5 @@
 import { toNumber } from "./estimate";
-import { getVendorEquipment } from "../config/vendorConfig";
+import { resolveVendorEquipment } from "../config/vendorResolver";
 import { repairUtf8Cp1251Mojibake } from "./textEncoding";
 
 const MARKET_KEY_ALIASES = {
@@ -450,7 +450,7 @@ export function calculateEquipment(
   priceMultiplier = 1
 ) {
   const areaUnits = getAreaUnits(zones);
-  const vendorMeta = getVendorEquipment(system.type, system.vendor);
+  const vendorMeta = resolveVendorEquipment(system.type, system.vendor);
   const marketRatios = buildMarketRatioMap(marketEntries);
 
   if (!vendorMeta) {

@@ -39,10 +39,10 @@ export function buildRiskGuardInsight({ fieldKey, budget, recommendation, coeffi
 
   const direction = overBudget ? "выше" : underBudget ? "ниже" : "рядом";
   const shortHint = overBudget
-    ? `Risk Guard AI: коэффициент выглядит завышенным относительно объекта.`
+    ? "Risk Guard AI: коэффициент выглядит завышенным относительно объекта."
     : underBudget
-      ? `Risk Guard AI: коэффициент выглядит заниженным относительно объекта.`
-      : `Risk Guard AI: проверьте долю применения коэффициента.`;
+      ? "Risk Guard AI: коэффициент выглядит заниженным относительно объекта."
+      : "Risk Guard AI: проверьте долю применения коэффициента.";
 
   const reasonLines = [
     recommendation?.reason || "",

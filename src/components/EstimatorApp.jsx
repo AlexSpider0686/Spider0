@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Building2, Layers, Wallet, Download, PieChart, FileText, Ruler, ShieldAlert, CalendarRange } from "lucide-react";
+import { Building2, Layers, Wallet, Download, PieChart, FileText, Ruler, ShieldAlert, CalendarRange, Scale } from "lucide-react";
 import useEstimate from "../hooks/useEstimate";
 import projectCoreMarkUrl from "../assets/project-core-mark.svg";
 import ObjectStep from "./ObjectStep";
 import SystemsStep from "./SystemsStep";
 import ProjectDesignStep from "./ProjectDesignStep";
+import NormativeRequirementsStep from "./NormativeRequirementsStep";
 import BudgetStep from "./BudgetStep";
 import CostBreakdownStep from "./CostBreakdownStep";
 import ProjectRisksStep from "./ProjectRisksStep";
@@ -14,6 +15,7 @@ import AuthGate from "./AuthGate";
 import ProjectPlanModal from "./ProjectPlanModal";
 import { APP_VERSION_LABEL, BUILD_NUMBER } from "../config/estimateConfig";
 import { isStoredAuthTokenValid } from "../lib/authApi";
+import { repairUtf8Cp1251Mojibake } from "../lib/textEncoding";
 
 const ASSET_BASE = import.meta.env.BASE_URL || "/";
 
@@ -22,12 +24,10 @@ function assetUrl(path) {
   return `${normalizedBase}${String(path).replace(/^\/+/, "")}`;
 }
 
-const BACKGROUND_VIDEO_URLS = [
-  assetUrl("assets/background/city-loop.mp4"),
-  assetUrl("assets/background/manhattan-loop-2min.mp4"),
-];
+const BACKGROUND_VIDEO_URLS = [assetUrl("assets/background/city-loop.mp4"), assetUrl("assets/background/manhattan-loop-2min.mp4")];
 
 export default function EstimatorApp() {
+  const t = repairUtf8Cp1251Mojibake;
   const vm = useEstimate();
   const [videoIndex, setVideoIndex] = useState(0);
   const [videoUnavailable, setVideoUnavailable] = useState(false);
@@ -41,18 +41,19 @@ export default function EstimatorApp() {
   });
 
   const steps = [
-    { key: "object", label: "Объект", icon: Building2 },
-    { key: "systems", label: "Системы", icon: Layers },
-    { key: "design", label: "Проектирование", icon: Ruler },
-    { key: "budget", label: "Бюджет", icon: Wallet },
-    { key: "breakdown", label: "Стоимость проекта", icon: PieChart },
-    { key: "logic", label: "Логика расчетов", icon: FileText },
-    { key: "risks", label: "AI-риски проекта", icon: ShieldAlert },
+    { key: "object", label: t("РћР±СЉРµРєС‚"), icon: Building2 },
+    { key: "systems", label: t("РЎРёСЃС‚РµРјС‹"), icon: Layers },
+    { key: "design", label: t("РџСЂРѕРµРєС‚РёСЂРѕРІР°РЅРёРµ"), icon: Ruler },
+    { key: "norms", label: "Нормативные требования", icon: Scale },
+    { key: "budget", label: t("Р‘СЋРґР¶РµС‚"), icon: Wallet },
+    { key: "breakdown", label: t("РЎС‚РѕРёРјРѕСЃС‚СЊ РїСЂРѕРµРєС‚Р°"), icon: PieChart },
+    { key: "logic", label: t("Р›РѕРіРёРєР° СЂР°СЃС‡РµС‚РѕРІ"), icon: FileText },
+    { key: "risks", label: t("AI-СЂРёСЃРєРё РїСЂРѕРµРєС‚Р°"), icon: ShieldAlert },
   ];
   const stepRows = [steps.slice(0, 4), steps.slice(4)];
 
   const currentVideoUrl = useMemo(() => BACKGROUND_VIDEO_URLS[Math.min(videoIndex, BACKGROUND_VIDEO_URLS.length - 1)], [videoIndex]);
-  const hideSummary = vm.step >= 4;
+  const hideSummary = vm.step >= 5;
 
   useEffect(() => {
     setVideoReady(false);
@@ -131,11 +132,7 @@ export default function EstimatorApp() {
         <section className="stepper-card">
           <div className="stepper">
             {stepRows.map((row, rowIndex) => (
-              <div
-                className="stepper-row"
-                key={`step-row-${rowIndex}`}
-                style={{ gridTemplateColumns: `repeat(${row.length}, minmax(0, 1fr))` }}
-              >
+              <div className="stepper-row" key={`step-row-${rowIndex}`} style={{ gridTemplateColumns: `repeat(${row.length}, minmax(0, 1fr))` }}>
                 {row.map((item) => {
                   const index = steps.findIndex((step) => step.key === item.key);
                   const Icon = item.icon;
@@ -165,10 +162,11 @@ export default function EstimatorApp() {
         {vm.step === 0 ? <ObjectStep {...vm} /> : null}
         {vm.step === 1 ? <SystemsStep {...vm} /> : null}
         {vm.step === 2 ? <ProjectDesignStep {...vm} /> : null}
-        {vm.step === 3 ? <BudgetStep {...vm} /> : null}
-        {vm.step === 4 ? <CostBreakdownStep systemResults={vm.systemResults} totals={vm.totals} /> : null}
-        {vm.step === 5 ? <CalculationLogicStep {...vm} /> : null}
-        {vm.step === 6 ? <ProjectRisksStep projectRisks={vm.projectRisks} /> : null}
+        {vm.step === 3 ? <NormativeRequirementsStep {...vm} /> : null}
+        {vm.step === 4 ? <BudgetStep {...vm} /> : null}
+        {vm.step === 5 ? <CostBreakdownStep systemResults={vm.systemResults} totals={vm.totals} /> : null}
+        {vm.step === 6 ? <CalculationLogicStep {...vm} /> : null}
+        {vm.step === 7 ? <ProjectRisksStep projectRisks={vm.projectRisks} /> : null}
 
         {!hideSummary ? <Summary totals={vm.totals} systemResults={vm.systemResults} objectData={vm.objectData} /> : null}
       </div>

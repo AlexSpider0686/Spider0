@@ -1,4 +1,6 @@
-const vendors = {
+import { repairTextTree } from "../lib/textEncoding";
+
+const vendors = repairTextTree({
   sot: [
     {
       name: "Базовый",
@@ -290,7 +292,7 @@ const vendors = {
       technicalParameters: { maxDistance: 290, efficiency: 0.9, integrationComplexity: 1.12 },
     },
   ],
-};
+});
 
 export function getVendorsBySystem(systemType) {
   return vendors[systemType] || vendors.sot;
