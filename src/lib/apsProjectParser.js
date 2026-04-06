@@ -1,6 +1,7 @@
 import { GlobalWorkerOptions, getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { toNumber } from "./estimate";
 import { applyApsAiRefinement } from "./apsAiRefiner";
+import { repairUtf8Cp1251Mojibake } from "./textEncoding";
 
 const CYR_UPPER = "\u0410\u0411\u0412\u0413\u0414\u0415\u0416\u0417\u0418\u0419\u041a\u041b\u041c\u041d\u041e\u041f\u0420\u0421\u0422\u0423\u0424\u0425\u0426\u0427\u0428\u0429\u042a\u042b\u042c\u042d\u042e\u042f";
 const CYR_LOWER = "\u0430\u0431\u0432\u0433\u0434\u0435\u0436\u0437\u0438\u0439\u043a\u043b\u043c\u043d\u043e\u043f\u0440\u0441\u0442\u0443\u0444\u0445\u0446\u0447\u0448\u0449\u044a\u044b\u044c\u044d\u044e\u044f";
@@ -145,7 +146,7 @@ function decodePseudoCyrillic(text) {
 }
 
 function normalizeText(value) {
-  return decodePseudoCyrillic(String(value || ""))
+  return decodePseudoCyrillic(repairUtf8Cp1251Mojibake(String(value || "")))
     .replace(/[\u0000-\u001f\u007f-\u009f]/g, " ")
     .replace(/\u00a0/g, " ")
     .replace(/[‐‑‒–—]/g, "-")

@@ -1,6 +1,7 @@
 import { getManufacturerSource } from "../config/vendorsConfig";
 import { toNumber } from "./estimate";
 import { buildApsProjectMetrics } from "./apsProjectParser";
+import { repairUtf8Cp1251Mojibake } from "./textEncoding";
 
 const LABOR_RATE_PER_HOUR = 1850;
 const DESIGN_RATE_PER_HOUR = 2100;
@@ -269,7 +270,7 @@ function sanitizeManualItemDraft(draft = {}, existingItems = []) {
 }
 
 function normalizeSearchText(value) {
-  return String(value || "")
+  return repairUtf8Cp1251Mojibake(String(value || ""))
     .replace(/[«»"'`]/g, " ")
     .replace(/[(){}\[\],;:]+/g, " ")
     .replace(/\s+/g, " ")
@@ -623,6 +624,11 @@ function mapPricesToItems(items, requests, priceSnapshot, itemOverrides = {}) {
 
     return {
       ...item,
+      name: normalizeSearchText(item.name || ""),
+      model: normalizeSearchText(item.model || ""),
+      mark: normalizeSearchText(item.mark || item.brand || ""),
+      brand: normalizeSearchText(item.brand || item.mark || ""),
+      rawLine: normalizeSearchText(item.rawLine || ""),
       qty,
       unitPrice,
       total: unitPrice * qty,

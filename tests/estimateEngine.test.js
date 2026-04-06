@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { calculateSystem } from "../src/lib/estimate.js";
 import { calculateSystemWithBreakdown } from "../src/lib/systemCalculators/index.js";
 import { estimateSystemQuantities } from "../src/lib/system-estimator.js";
+import { repairUtf8Cp1251Mojibake } from "../src/lib/textEncoding.js";
 import { DEFAULT_BUDGET, DEFAULT_SYSTEM, DEFAULT_ZONE } from "../src/config/estimateConfig.js";
 
 function createFixture() {
@@ -200,4 +201,12 @@ test("estimateSystemQuantities increases SSOI load for vertically distributed zo
   assert.ok(vertical.integrationPoints > base.integrationPoints);
   assert.ok((vertical.secondary?.servers || 0) >= (base.secondary?.servers || 0));
   assert.ok((vertical.secondary?.distributedZoneLoad || 0) > (base.secondary?.distributedZoneLoad || 0));
+});
+
+test("repairUtf8Cp1251Mojibake restores CP1251 mojibake to readable UTF-8", () => {
+  const mojibake =
+    "\u0420\u045f\u0420\u045f\u0420\u0459\u0420\u045b\u0420\u045f|\u0420\u00a0\u0421\u0453\u0420\u00b1\u0420\u00b5\u0420\u00b6|\u0420\u201d\u0421\u2039\u0420\u0458\u0420\u0455\u0420\u0406\u0420\u0455\u0420\u2116";
+  const expected = "\u041f\u041f\u041a\u041e\u041f|\u0420\u0443\u0431\u0435\u0436|\u0414\u044b\u043c\u043e\u0432\u043e\u0439";
+
+  assert.equal(repairUtf8Cp1251Mojibake(mojibake), expected);
 });
