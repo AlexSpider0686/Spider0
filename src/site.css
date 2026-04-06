@@ -738,6 +738,8 @@ html {
   margin: 0 0 10px;
   font-size: 22px;
   line-height: 1.2;
+  color: #f4fbff;
+  text-shadow: 0 1px 8px rgba(2, 10, 18, 0.22);
 }
 
 .app-shell .ai-capability-card p {
@@ -1624,7 +1626,7 @@ html {
   inset: 0;
   background:
     linear-gradient(180deg, rgba(5, 13, 24, 0.16) 0%, rgba(5, 13, 24, 0.72) 56%, rgba(5, 13, 24, 0.92) 100%),
-    url("https://images.unsplash.com/photo-1499092346589-b9b6be3e94b2?auto=format&fit=crop&w=2200&q=80")
+    url("./assets/about-system/hero-bg.jpg")
       center/cover no-repeat;
   transform: scale(1.03);
 }
@@ -1699,11 +1701,11 @@ html {
   padding-bottom: 88px;
   background:
     linear-gradient(180deg, rgba(5, 13, 24, 0.12) 0%, rgba(5, 13, 24, 0.42) 12%, rgba(5, 13, 24, 0.74) 30%, rgba(5, 13, 24, 0.3) 46%, rgba(5, 13, 24, 0.76) 66%, rgba(5, 13, 24, 0.26) 82%, rgba(5, 13, 24, 0.92) 100%),
-    url("https://images.unsplash.com/photo-1534430480872-3498386e7856?auto=format&fit=crop&w=2200&q=80")
+    url("./assets/about-system/body-top.jpg")
       center top / 100% 33% no-repeat,
-    url("https://images.unsplash.com/photo-1518391846015-55a9cc003b25?auto=format&fit=crop&w=2200&q=80")
+    url("./assets/about-system/body-middle.jpg")
       center 44% / 100% 33% no-repeat,
-    url("https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?auto=format&fit=crop&w=2200&q=80")
+    url("./assets/about-system/body-bottom.jpg")
       center bottom / 100% 33% no-repeat;
 }
 
