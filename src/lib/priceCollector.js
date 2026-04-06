@@ -1,5 +1,6 @@
 import { getCriticalEquipment } from "../config/equipmentCatalog";
 import { getManufacturerSource } from "../config/vendorsConfig";
+import { repairUtf8Cp1251Mojibake } from "./textEncoding";
 
 function buildTinkoSearchUrl(query) {
   return `https://www.tinko.ru/search/?q=${encodeURIComponent(query)}`;
@@ -36,7 +37,7 @@ function buildLuisApiRequest(query) {
 }
 
 function normalizeSearchText(value) {
-  return String(value || "")
+  return repairUtf8Cp1251Mojibake(String(value || ""))
     .replace(/[«»"'`]/g, " ")
     .replace(/[(){}\[\],;:]+/g, " ")
     .replace(/\s+/g, " ")
@@ -464,7 +465,7 @@ export async function fetchPricesByRequests(requests = [], options = {}) {
 
     if (isStrictModelPrice) {
       if (Number.isFinite(fallback) && fallback > 0) {
-        if ((fetched > fallback * 4 || fetched < fallback * 0.2) && !fromManufacturerSource) {
+        if ((fetched > fallback * 1.9 || fetched < fallback * 0.55) && !fromManufacturerSource) {
           return {
             price: fallback,
             status: "fallback",
@@ -494,8 +495,10 @@ export async function fetchPricesByRequests(requests = [], options = {}) {
     const isMaterialLike = /material|кабел|труб|короб|лоток|дюбел|саморез|хомут|пена/iu.test(label) || request?.kind === "material";
     const unit = String(request?.unit || "").trim().toLowerCase();
     const isLinearOrWeight = ["м", "м2", "кг", "л"].includes(unit);
-    const minRatio = isMaterialLike ? (isLinearOrWeight ? 0.1 : 0.08) : 0.2;
-    const maxRatio = isMaterialLike ? (isLinearOrWeight ? 20 : 14) : 12;
+    const confidence = Math.max(Number(result?.priceConfidence || 0), 0);
+    const weakEvidence = Boolean(result?.recheckRequired) || Number(result?.sourceCount || 0) < 2 || confidence < 0.58;
+    const minRatio = isMaterialLike ? (isLinearOrWeight ? 0.42 : 0.35) : weakEvidence ? 0.62 : 0.5;
+    const maxRatio = isMaterialLike ? (isLinearOrWeight ? 2.8 : 2.4) : fromManufacturerSource ? 2.25 : weakEvidence ? 1.45 : 1.8;
     const minAllowed = fallback * minRatio;
     const maxAllowed = fallback * maxRatio;
 
@@ -504,6 +507,15 @@ export async function fetchPricesByRequests(requests = [], options = {}) {
         price: fallback,
         status: "fallback_outlier",
         reason: "outlier_filtered",
+        sourceCount: result?.sourceCount || 0,
+      };
+    }
+
+    if (weakEvidence && Math.abs(fetched / fallback - 1) > 0.28 && !fromManufacturerSource) {
+      return {
+        price: fallback,
+        status: "fallback_low_confidence",
+        reason: "low_confidence_variation",
         sourceCount: result?.sourceCount || 0,
       };
     }

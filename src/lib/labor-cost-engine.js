@@ -79,6 +79,8 @@ export function calculateLaborCost({
   const controllerUnits = Math.max(toNumber(quantities?.controllerUnits, 0), 0);
   const activeElements = Math.max(toNumber(quantities?.activeElements, primaryUnits + controllerUnits), 0);
   const integrationPoints = Math.max(toNumber(quantities?.integrationPoints, 0), 0);
+  const managementServerCount = Math.max(toNumber(quantities?.secondary?.managementPlan?.serverCount, quantities?.secondary?.servers), 0);
+  const armCount = Math.max(toNumber(quantities?.secondary?.managementPlan?.armCount, quantities?.secondary?.arms), 0);
   const cableLengthM = Math.max(toNumber(cableModel?.cableLengthM, 0), 0);
   const knsLengthM = Math.max(toNumber(knsModel?.knsLengthM, 0), 0);
   const knsWorkUnits = Math.max(toNumber(knsModel?.knsWorkUnits, 0), 0);
@@ -126,6 +128,9 @@ export function calculateLaborCost({
     regionalFactor,
     projectMode,
     marketFloorBase,
+    integrationPoints,
+    managementServerCount,
+    armCount,
   });
   const workBase = clamp(
     Math.max(neuralCheck.neuralFloorBase, computedWorkBase),
@@ -201,6 +206,8 @@ export function calculateLaborCost({
       controllerUnits,
       activeElements,
       integrationPoints,
+      managementServerCount,
+      armCount,
       cableLengthM,
       knsLengthM,
       knsWorkUnits,

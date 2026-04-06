@@ -15,6 +15,15 @@ const MARKET_KEY_ALIASES = {
   amplifier: ["amplifiers", "amplifier"],
 };
 
+const MANAGEMENT_UNIT_DEFAULTS = {
+  aps: { serverPrice: 265000, armPrice: 138000 },
+  soue: { serverPrice: 228000, armPrice: 132000 },
+  sots: { serverPrice: 214000, armPrice: 126000 },
+  sot: { serverPrice: 325000, armPrice: 152000 },
+  ssoi: { serverPrice: 460000, armPrice: 168000 },
+  skud: { serverPrice: 208000, armPrice: 128000 },
+};
+
 function repairCatalogNode(value) {
   if (Array.isArray(value)) {
     return value.map((item) => repairCatalogNode(item));
@@ -250,6 +259,20 @@ function minHddTbPerCamera(resolutionMp) {
   return perCameraPerDayTb * 30;
 }
 
+function weightedMedian(entries = []) {
+  const sorted = [...entries].sort((left, right) => left.ratio - right.ratio);
+  const totalWeight = sorted.reduce((sum, item) => sum + item.weight, 0);
+  if (totalWeight <= 0) return 1;
+
+  let cumulative = 0;
+  for (const item of sorted) {
+    cumulative += item.weight;
+    if (cumulative >= totalWeight / 2) return item.ratio;
+  }
+
+  return sorted[sorted.length - 1]?.ratio || 1;
+}
+
 function buildMarketRatioMap(marketEntries = []) {
   const grouped = new Map();
 
@@ -259,16 +282,26 @@ function buildMarketRatioMap(marketEntries = []) {
     const price = toNumber(entry?.price, 0);
     if (!equipmentKey || fallback <= 0 || price <= 0) continue;
 
-    const ratio = clamp(price / fallback, 0.65, 1.8);
+    const confidence = clamp(toNumber(entry?.priceConfidence, 0.55), 0.15, 1);
+    const hasManufacturerMatch = Array.isArray(entry?.matchedSourceHosts) && entry.matchedSourceHosts.length > 0;
+    const weakEvidence = Boolean(entry?.recheckRequired) || toNumber(entry?.sourceCount, 0) < 2 || confidence < 0.45;
+    if (weakEvidence && !hasManufacturerMatch) continue;
+
+    const ratio = clamp(price / fallback, hasManufacturerMatch ? 0.45 : 0.72, hasManufacturerMatch ? 2.2 : 1.45);
+    const weight = confidence * (hasManufacturerMatch ? 1.35 : 1) * (entry?.recheckRequired ? 0.55 : 1);
     if (!grouped.has(equipmentKey)) grouped.set(equipmentKey, []);
-    grouped.get(equipmentKey).push(ratio);
+    grouped.get(equipmentKey).push({ ratio, weight });
   }
 
   const map = new Map();
   grouped.forEach((values, key) => {
     if (!values.length) return;
-    const avg = values.reduce((sum, value) => sum + value, 0) / values.length;
-    map.set(key, clamp(avg, 0.65, 1.8));
+    const median = weightedMedian(values);
+    const filtered = values.filter((item) => Math.abs(item.ratio - median) <= Math.max(median * 0.18, 0.12));
+    const weightedAverage =
+      filtered.reduce((sum, item) => sum + item.ratio * item.weight, 0) /
+      Math.max(filtered.reduce((sum, item) => sum + item.weight, 0), 0.0001);
+    map.set(key, clamp(weightedAverage, 0.72, 1.45));
   });
 
   return map;
@@ -285,6 +318,49 @@ function resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, aliasKeys,
   const ratio = pickMarketRatio(marketRatios, aliasKeys);
   const reference = toNumber(basePrice, 0) || toNumber(fallbackUnitPrice, 0);
   return Math.max(reference * ratio * Math.max(toNumber(priceMultiplier, 1), 0.01), 0);
+}
+
+function resolveManagementUnitPrice(systemType, unitType, marketRatios, priceMultiplier = 1) {
+  const defaults = MANAGEMENT_UNIT_DEFAULTS[systemType] || MANAGEMENT_UNIT_DEFAULTS.ssoi;
+  const basePrice = unitType === "server" ? defaults.serverPrice : defaults.armPrice;
+  const aliasKeys = unitType === "server" ? MARKET_KEY_ALIASES.recorder : MARKET_KEY_ALIASES.controller;
+  return resolveUnitPrice(basePrice, basePrice, marketRatios, aliasKeys, priceMultiplier);
+}
+
+function appendManagementInfrastructure(details, systemType, quantityContext, marketRatios, priceMultiplier) {
+  const managementPlan = quantityContext?.secondary?.managementPlan;
+  if (!managementPlan) return;
+
+  const serverQty = Math.max(toNumber(managementPlan.serverCount, quantityContext?.secondary?.servers), 0);
+  const armQty = Math.max(toNumber(managementPlan.armCount, quantityContext?.secondary?.arms), 0);
+  const tierMultiplier =
+    managementPlan.modelTier === "enterprise" ? 1.28 : managementPlan.modelTier === "rack" ? 1.14 : managementPlan.modelTier === "compact" ? 0.9 : 1;
+
+  if (serverQty > 0) {
+    const unitPrice = resolveManagementUnitPrice(systemType, "server", marketRatios, priceMultiplier * tierMultiplier);
+    pushItem(details, {
+      code: "SRV",
+      name: `Сервер управления ${systemType.toUpperCase()}`,
+      qty: serverQty,
+      unitPrice,
+      total: serverQty * unitPrice,
+      isKey: true,
+      basis: managementPlan.reason || "Выбран выделенный сервер управления по масштабу объекта и нагрузке системы.",
+    });
+  }
+
+  if (armQty > 0) {
+    const unitPrice = resolveManagementUnitPrice(systemType, "arm", marketRatios, priceMultiplier);
+    pushItem(details, {
+      code: "ARM",
+      name: `АРМ оператора ${systemType.toUpperCase()}`,
+      qty: armQty,
+      unitPrice,
+      total: armQty * unitPrice,
+      isKey: false,
+      basis: managementPlan.reason || "Добавлено рабочее место оператора для локального или дежурного управления системой.",
+    });
+  }
 }
 
 export function getConcreteModel(systemType, vendor, itemType, optionKey) {
@@ -543,6 +619,8 @@ export function calculateEquipment(
       basis: "РЈСЃРёР»РёС‚РµР»Рё СѓРІСЏР·Р°РЅС‹ СЃ СЂР°СЃС‡С‘С‚РЅС‹Рј РєРѕР»РёС‡РµСЃС‚РІРѕРј РѕРїРѕРІРµС‰Р°С‚РµР»РµР№ Рё Р·РѕРЅ РѕРїРѕРІРµС‰РµРЅРёСЏ.",
     });
   }
+
+  appendManagementInfrastructure(details, system.type, quantityContext, marketRatios, priceMultiplier);
 
   if (!details.length) {
     return {

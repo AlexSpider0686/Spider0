@@ -310,3 +310,85 @@ test("concrete equipment catalog labels are sanitized before display", () => {
 
   assert.equal(model, "DS-2CD2143G2-IU");
 });
+test("small local SKUD object uses ARM-only management topology", () => {
+  const result = estimateSystemQuantities({
+    systemType: "skud",
+    zoneContexts: [
+      {
+        id: "lobby",
+        zoneType: "lobby",
+        zoneName: "Лобби",
+        areaM2: 900,
+        floors: 1,
+        occupancyDensity: 0.15,
+        densityCoefficient: 1,
+        systemRule: {
+          mandatory: true,
+          saturationCoefficient: 1,
+          securityIntensityCoefficient: 1,
+          engineeringDensityCoefficient: 1,
+          installationComplexityCoefficient: 1,
+          routeComplexityCoefficient: 1,
+        },
+      },
+    ],
+    objectClassification: {
+      objectType: "residential",
+      totalAreaM2: 900,
+      totalFloors: 1,
+      aboveGroundFloors: 1,
+      undergroundFloors: 0,
+      architectureComplexityIndex: 1,
+      engineeringSaturationIndex: 1,
+      securityIntensityIndex: 1,
+      integrationDemandIndex: 1,
+      distributedArchitecture: false,
+    },
+    activeSystemTypes: ["skud"],
+  });
+
+  assert.equal(result.secondary.managementPlan.deploymentMode, "arm");
+  assert.equal(result.secondary.managementPlan.serverCount, 0);
+  assert.ok(result.secondary.managementPlan.armCount >= 1);
+});
+
+test("large distributed SSOI object requires dedicated management servers", () => {
+  const result = estimateSystemQuantities({
+    systemType: "ssoi",
+    zoneContexts: [
+      {
+        id: "zone-1",
+        zoneType: "office",
+        zoneName: "Офис",
+        areaM2: 18000,
+        floors: 8,
+        occupancyDensity: 0.08,
+        densityCoefficient: 1.2,
+        systemRule: {
+          mandatory: true,
+          saturationCoefficient: 1.1,
+          securityIntensityCoefficient: 1.1,
+          engineeringDensityCoefficient: 1.1,
+          installationComplexityCoefficient: 1.08,
+          routeComplexityCoefficient: 1.08,
+        },
+      },
+    ],
+    objectClassification: {
+      objectType: "transport",
+      totalAreaM2: 18000,
+      totalFloors: 8,
+      aboveGroundFloors: 8,
+      undergroundFloors: 0,
+      architectureComplexityIndex: 1.16,
+      engineeringSaturationIndex: 1.18,
+      securityIntensityIndex: 1.12,
+      integrationDemandIndex: 1.4,
+      distributedArchitecture: true,
+    },
+    activeSystemTypes: ["aps", "soue", "sot", "ssoi", "skud"],
+  });
+
+  assert.equal(result.secondary.managementPlan.deploymentMode, "server");
+  assert.ok(result.secondary.managementPlan.serverCount >= 1);
+});
