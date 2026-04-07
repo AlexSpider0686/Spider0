@@ -195,7 +195,6 @@ export function HomePage() {
       <section className="hero">
         <HeroVideo variant="legacy" />
         <div className="container hero__content">
-          <div className="hero-greeting">ПРИВЕТ</div>
           <div className="hero__badge">Presale / Budget Intelligence / Security Systems</div>
           <h1 className="hero__brand-title">
             <img className="hero__brand-mark" src={projectCoreMarkUrl} alt="" aria-hidden="true" />
