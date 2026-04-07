@@ -1,4 +1,4 @@
-﻿import { SYSTEM_DRIVER_CONFIG } from "../config/costModelConfig";
+import { SYSTEM_DRIVER_CONFIG } from "../config/costModelConfig";
 import { toNumber } from "./estimate";
 import { repairUtf8Cp1251Mojibake } from "./textEncoding";
 
@@ -408,27 +408,44 @@ function buildManagementPlan({
     integrationPoints / Math.max(profile.operatorIntegrationCapacity, 1),
     distributedZoneLoad / Math.max(profile.operatorZoneCapacity, 1)
   );
+  const heavyLoad =
+    normalizedServerLoad >= 1.18 ||
+    primaryUnits >= profile.primaryCapacityPerServer * 0.78 ||
+    controllerUnits >= profile.controllerCapacityPerServer * 0.82 ||
+    integrationPoints >= profile.integrationCapacityPerServer * 0.75 ||
+    distributedZoneLoad >= profile.zoneCapacityPerServer * 0.82;
 
   let serverCount = 0;
   if (!mayUseArmOnly) {
-    serverCount = Math.max(1, Math.ceil(Math.max(normalizedServerLoad - 0.12, 0)));
+    serverCount = 1;
 
     const redundancyRequired =
-      serverCount > 0 &&
-      ((lifeSafetySystem && (distributedArchitecture || totalAreaM2 >= 28000 || totalFloors >= 8)) ||
-        (systemType === "ssoi" && (integrationPoints >= 30 || activeSystemTypes.length >= 5)) ||
-        (systemType === "sot" && primaryUnits >= 220) ||
-        (systemType === "skud" && (primaryUnits >= 110 || distributedArchitecture)));
+      (lifeSafetySystem && (distributedArchitecture || totalAreaM2 >= 28000 || totalFloors >= 8 || heavyLoad)) ||
+      (integratedSecuritySystem && (distributedArchitecture || heavyLoad) && activeSystemTypes.length >= 4) ||
+      totalAreaM2 >= profile.serverRequiredArea * 2.2 ||
+      totalFloors >= profile.serverRequiredFloors + 3 ||
+      integrationPoints >= profile.armIntegrationLimit * 3;
+
+    const multiServerClusterRequired =
+      systemType === "ssoi" &&
+      distributedArchitecture &&
+      (normalizedServerLoad >= 2.35 || integrationPoints >= profile.integrationCapacityPerServer * 1.8);
 
     if (redundancyRequired) {
-      serverCount += 1;
+      serverCount = 2;
+    }
+    if (multiServerClusterRequired) {
+      serverCount = Math.max(serverCount, 3);
     }
 
     serverCount = clamp(serverCount, 1, profile.maxServers);
   }
 
-  let armCount = Math.max(safeCeil(normalizedOperatorLoad, 1), serverCount > 0 ? 1 : 0);
-  if (serverCount > 0 && (distributedArchitecture || normalizedOperatorLoad > 1.2 || activeSystemTypes.length >= 5)) {
+  let armCount = Math.max(mayUseArmOnly ? safeCeil(normalizedOperatorLoad, 1) : 1, serverCount > 0 ? 1 : 0);
+  if (
+    (mayUseArmOnly && normalizedOperatorLoad > 1.05) ||
+    (serverCount > 0 && (distributedArchitecture || normalizedOperatorLoad > 1.2 || activeSystemTypes.length >= 5 || heavyLoad))
+  ) {
     armCount += 1;
   }
   armCount = clamp(armCount, 1, profile.maxArms);

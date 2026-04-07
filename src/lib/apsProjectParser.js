@@ -66,6 +66,12 @@ const CATEGORY_KEYWORDS = {
 
 const CABLE_KEYWORDS = /(\u043a\u0430\u0431\u0435\u043b|\u043f\u0440\u043e\u0432\u043e\u0434|utp|ftp|sftp|cat\d|rg-?\d|coax|\u043a\u043f\u0441|\u0432\u0432\u0433|\u043f\u0432\u0441|wire|cable)/iu;
 const FASTENER_KEYWORDS = /(\u043a\u0440\u0435\u043f\u0435\u0436|\u0434\u044e\u0431\u0435\u043b|\u0441\u0430\u043c\u043e\u0440\u0435\u0437|\u0441\u043a\u043e\u0431|\u0445\u043e\u043c\u0443\u0442|\u0430\u043d\u043a\u0435\u0440|\u0448\u043f\u0438\u043b\u044c\u043a|\u0437\u0430\u0436\u0438\u043c|\u043c\u0435\u0442\u0438\u0437|fastener|anchor|clamp|screw)/iu;
+const SERVER_KEYWORDS =
+  /(\u0441\u0435\u0440\u0432\u0435\u0440|\u0432\u0438\u0434\u0435\u043e\u0441\u0435\u0440\u0432\u0435\u0440|server|workstation|nvr|dvr|\u0440\u0435\u0433\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440|\u0438\u0441\u0442\u043e\u0447\u043d\u0438\u043a \u0434\u0430\u043d\u043d\u044b\u0445)/iu;
+const OPERATOR_ARM_KEYWORDS =
+  /(\u0430\u0440\u043c|\u0440\u0430\u0431\u043e\u0447\u0435\u0435 \u043c\u0435\u0441\u0442\u043e|\u043e\u043f\u0435\u0440\u0430\u0442\u043e\u0440\u0441\u043a\u0430\u044f \u0441\u0442\u0430\u043d\u0446\u0438\u044f|operator station|client workstation)/iu;
+const CONTROL_KEYWORDS =
+  /(\u043a\u043e\u043d\u0442\u0440\u043e\u043b\u043b\u0435\u0440|\u043f\u0430\u043d\u0435\u043b|\u043f\u0440\u0438\u0431\u043e\u0440|\u0448\u043a\u0430\u0444|\u043a\u043e\u043c\u043c\u0443\u0442\u0430\u0442\u043e\u0440|\u0448\u043b\u044e\u0437|gateway|switch|\u0443\u0437\u0435\u043b|\u043c\u043e\u0434\u0443\u043b)/iu;
 const HEADER_HINT_REGEX =
   /(\u043f\u043e\u0437\u0438\u0446|\u043d\u0430\u0438\u043c\u0435\u043d|\u043c\u0430\u0440\u043a\u0430|\u043c\u043e\u0434\u0435\u043b|\u043e\u0431\u043e\u0437\u043d\u0430\u0447|\u0437\u0430\u0432\u043e\u0434|\u0435\u0434\.?\s*\u0438\u0437\u043c|\u043a\u043e\u043b-?\u0432\u043e|\u043f\u0440\u0438\u043c\u0435\u0447|\u0441\u043f\u0435\u0446\u0438\u0444\u0438\u043a)/iu;
 const SPEC_EQUIPMENT_HINT_REGEX =
@@ -132,6 +138,13 @@ async function ensurePdfWorker() {
   if (typeof window === "undefined") return;
   const workerModule = await import("pdfjs-dist/legacy/build/pdf.worker.min.mjs?url");
   GlobalWorkerOptions.workerSrc = workerModule.default;
+}
+
+export async function parseApsProjectPdf(file) {
+  return parseProjectSpecificationPdf(file, {
+    systemType: "aps",
+    applyAiRefinement: true,
+  });
 }
 
 function decodePseudoCyrillic(text) {
@@ -928,6 +941,25 @@ function buildMetrics(items) {
     const text = `${item.name || ""} ${item.model || ""} ${item.rawLine || ""}`;
     return FASTENER_KEYWORDS.test(text);
   };
+  const isServer = (item) => {
+    const text = `${item.name || ""} ${item.model || ""} ${item.rawLine || ""}`;
+    return item.kind === "equipment" && SERVER_KEYWORDS.test(text);
+  };
+  const isOperatorArm = (item) => {
+    const text = `${item.name || ""} ${item.model || ""} ${item.rawLine || ""}`;
+    return item.kind === "equipment" && OPERATOR_ARM_KEYWORDS.test(text);
+  };
+  const isControlEquipment = (item) => {
+    const text = `${item.name || ""} ${item.model || ""} ${item.rawLine || ""}`;
+    return (
+      item.kind === "equipment" &&
+      (item.category === "panel" ||
+        item.category === "power" ||
+        isServer(item) ||
+        isOperatorArm(item) ||
+        CONTROL_KEYWORDS.test(text))
+    );
+  };
   const cableLengthM = sumBy((item) => item.kind === "material" && item.unit === UNIT.meter && isCable(item));
   const fastenerQty = sumBy((item) => item.kind === "material" && isFastener(item));
 
@@ -936,16 +968,24 @@ function buildMetrics(items) {
     notificationQty: sumBy((item) => item.category === "notification"),
     panelQty: sumBy((item) => item.category === "panel"),
     powerQty: sumBy((item) => item.category === "power"),
+    controlQty: sumBy((item) => isControlEquipment(item)),
+    serverQty: sumBy((item) => isServer(item)),
+    operatorQty: sumBy((item) => isOperatorArm(item)),
     cableLengthM,
     cableLines: items.filter((item) => item.kind === "material" && isCable(item)).length,
     fastenerQty,
     fastenerLines: items.filter((item) => item.kind === "material" && isFastener(item)).length,
     materialLines: items.filter((item) => item.kind === "material").length,
+    equipmentLines: items.filter((item) => item.kind === "equipment").length,
     devicesQty: sumBy((item) => item.kind === "equipment"),
   };
 }
 
 export function buildApsProjectMetrics(items = []) {
+  return buildMetrics(items);
+}
+
+export function buildProjectPdfMetrics(items = []) {
   return buildMetrics(items);
 }
 
@@ -1466,8 +1506,10 @@ function buildParseQuality({ items = [], candidateRows = 0, unrecognizedRows = [
   };
 }
 
-export async function parseApsProjectPdf(file) {
+export async function parseProjectSpecificationPdf(file, options = {}) {
   if (!file) throw new Error("PDF-файл не выбран.");
+  const systemType = String(options?.systemType || "aps").toLowerCase();
+  const applyAiRefinement = options?.applyAiRefinement ?? systemType === "aps";
 
   await ensurePdfWorker();
   const data = await file.arrayBuffer();
@@ -1507,11 +1549,17 @@ export async function parseApsProjectPdf(file) {
     ),
     unrecognizedRows,
   });
-  const aiRefined = applyApsAiRefinement({
-    items: mergedItems,
-    unrecognizedRows,
-    parseQuality,
-  });
+  const aiRefined = applyAiRefinement
+    ? applyApsAiRefinement({
+        items: mergedItems,
+        unrecognizedRows,
+        parseQuality,
+      })
+    : {
+        items: mergedItems,
+        unrecognizedRows,
+        aiQuality: null,
+      };
   const finalParseQuality = buildParseQuality({
     items: aiRefined.items,
     candidateRows: parseQuality.candidateRows,
@@ -1525,6 +1573,7 @@ export async function parseApsProjectPdf(file) {
   return {
     fileName: file.name,
     parsedAt: new Date().toISOString(),
+    systemType,
     gostStandard: "ГОСТ 21.110-2013",
     pages: pdf.numPages,
     linesScanned: allRows.length,

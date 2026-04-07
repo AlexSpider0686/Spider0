@@ -75,7 +75,7 @@ export const DEFAULT_BUDGET = {
   finishCoef: 1.0,
   overheadPercent: 16,
   ppePercent: 3,
-  payrollTaxesPercent: 30,
+  payrollTaxesPercent: 43.2,
   utilizationPercent: 8,
   adminPercent: 12,
   profitabilityPercent: 18,
