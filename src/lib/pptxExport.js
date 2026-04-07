@@ -1,6 +1,7 @@
 import PptxGenJS from "pptxgenjs";
 import { buildProjectTimeline } from "./projectTimeline";
 import { repairUtf8Cp1251Mojibake } from "./textEncoding";
+import { buildProjectCrewPlan } from "./crewPlan";
 
 const OBJECT_TYPE_COVER_IMAGES = {
   production: "/assets/object-types/production.jpg",
@@ -178,6 +179,13 @@ function buildForcesAndMeans(systemResults = []) {
     ["Пиковая монтажная бригада", `${num(peakExecutionTeam, 0)} чел.`],
     ["Пиковая проектная группа", `${num(peakDesignTeam, 0)} чел.`],
     ["Монтажный горизонт", `${num(executionMonths, 0)} мес.`],
+  ];
+}
+
+function buildCrewCompositionRows(crewPlan) {
+  return [
+    ...crewPlan.field.roles.map((item) => ["СМР / ПНР", item.label, `${num(item.count, 0)} чел.`, `${num(item.sharePercent, 0)}% состава`, `Загрузка ${num(crewPlan.field.loadPerPersonDay, 1)} ч/чел.-день`]),
+    ...crewPlan.design.roles.map((item) => ["Проектирование", item.label, `${num(item.count, 0)} чел.`, `${num(item.sharePercent, 0)}% состава`, `Загрузка ${num(crewPlan.design.loadPerPersonDay, 1)} ч/чел.-день`]),
   ];
 }
 
@@ -571,6 +579,7 @@ function buildTimeline(systemResults, objectData, totals) {
 function addGanttSlide(slide, systemResults, objectData, totals) {
   const { bars, totalMonths } = buildProjectTimeline(systemResults, objectData, totals);
   const forcesAndMeans = buildForcesAndMeans(systemResults);
+  const crewPlan = buildProjectCrewPlan(systemResults, objectData, totals);
   const chartX = 3.1;
   const chartY = 1.65;
   const chartW = 8.6;
@@ -684,6 +693,18 @@ function addGanttSlide(slide, systemResults, objectData, totals) {
     fontSize: 8,
     headerFill: "D9E9F8",
   });
+  drawTable(slide, {
+    x: 5.75,
+    y: 5.42,
+    w: 2.95,
+    headers: ["Роль", "Состав"],
+    widths: [0.64, 0.36],
+    rows: buildCrewCompositionRows(crewPlan).slice(0, 5).map((row) => [row[1], row[2]]),
+    maxRows: 5,
+    rowH: 0.27,
+    fontSize: 8,
+    headerFill: "D9E9F8",
+  });
 }
 
 export async function exportEstimatePptx({ objectData, budget, systemResults, totals, apsProjectExports = [], projectRisks = [], vendorComparisons = [] }) {
@@ -739,14 +760,21 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
       ["Материалы", rub(safeTotals.totalMaterials)],
       ["СМР + ПНР", rub(safeTotals.totalWork)],
       ["Проектирование", rub(safeTotals.totalDesign)],
-      ["Накладные и начисления", rub(safeTotals.totalOverhead)],
-      ["Прибыль", rub(safeTotals.totalProfit)],
-      ["НДС", rub(safeTotals.totalVat)],
       ["Итог бюджета проекта", rub(safeTotals.total)],
     ],
-    maxRows: 8,
+    maxRows: 5,
     rowH: 0.43,
     fontSize: 10,
+  });
+  slide1.addText("Все цены указаны с НДС 22%.", {
+    x: 0.62,
+    y: 4.72,
+    w: 5.4,
+    h: 0.18,
+    fontFace: "Calibri",
+    fontSize: 9.5,
+    bold: true,
+    color: COLORS.accentDark,
   });
 
   drawTable(slide1, {
@@ -833,6 +861,7 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
     headerFill: "D9E9F8",
   });
 
+  if (false) {
   const slide3 = pptx.addSlide();
   addSlideFrame(slide3, "Характеристики бюджета", "Коэффициенты и параметры, влияющие на стоимость работ.", 3);
 
@@ -868,6 +897,7 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
     rowH: 0.31,
     fontSize: 8,
   });
+  }
 
   const slide4 = pptx.addSlide();
   addSlideFrame(slide4, "Стоимость проекта по системам", "Разложение стоимости по каждой системе отдельно.", 4);
@@ -919,7 +949,7 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
       slide,
       `Сравнение цен по вендорам${titleSuffix}`,
       "Текущий вендор и две альтернативы по каждой системе с пересчетом стоимости оборудования, материалов и работ.",
-      6 + chunkIndex
+      5 + chunkIndex
     );
     drawTable(slide, {
       x: 0.55,
@@ -947,7 +977,7 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
       slide,
       `Спецификация оборудования и материалов${titleSuffix}`,
       "Единый перечень по всем системам: оборудование, материалы, количество, цена, сумма, ссылка и позиция из проекта.",
-      6 + comparisonChunks.length + chunkIndex
+      5 + comparisonChunks.length + chunkIndex
     );
     drawTable(slide, {
       x: 0.55,
@@ -968,7 +998,7 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
     riskSlide,
     "AI-риски проекта",
     "До пяти самых критичных индивидуальных рисков по текущему объекту: монтаж, спецификация, закупка, координация и сроки.",
-    6 + comparisonChunks.length + specificationChunks.length
+    5 + comparisonChunks.length + specificationChunks.length
   );
   drawTable(riskSlide, {
     x: 0.55,
@@ -989,7 +1019,7 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
     slide6,
     "График реализации проекта",
     "Ориентировочные сроки проектирования, поставки, СМР, ПНР и интеграции.",
-    7 + comparisonChunks.length + specificationChunks.length
+    6 + comparisonChunks.length + specificationChunks.length
   );
   addGanttSlide(slide6, safeSystems, safeObject, safeTotals);
 

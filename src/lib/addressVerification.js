@@ -12,7 +12,7 @@ function normalizeName(value) {
     .toLowerCase()
     .replace(/ё/g, "е")
     .replace(/[«»"]/g, "")
-    .replace(/\b(ул|улица|пр-кт|проспект|просп|д|дом|корп|корпус|стр|строение|лит|литера)\b/gu, " ")
+    .replace(/[^\p{L}\p{N}/-]+/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -22,6 +22,20 @@ function tokenizeAddress(value) {
     .split(/[,\s]+/u)
     .map((item) => item.trim())
     .filter((item) => item.length >= 2);
+}
+
+function extractQueryPart(query, regexp) {
+  const match = sanitizeAddress(query).replace(/ё/g, "е").match(regexp);
+  return match?.[1]?.trim() || "";
+}
+
+function extractQueryAddressParts(query) {
+  return {
+    house: extractQueryPart(query, /(?:^|[\s,])(?:д(?:ом)?\.?\s*)([\dа-яa-z/-]+)/iu),
+    corpus: extractQueryPart(query, /(?:^|[\s,])(?:к(?:орп(?:ус)?)?\.?\s*)([\dа-яa-z/-]+)/iu),
+    building: extractQueryPart(query, /(?:^|[\s,])(?:стр(?:оение)?\.?\s*)([\dа-яa-z/-]+)/iu),
+    letter: extractQueryPart(query, /(?:^|[\s,])(?:лит(?:ера)?\.?\s*)([\dа-яa-z/-]+)/iu),
+  };
 }
 
 function findRegionByStateName(stateName) {
@@ -42,6 +56,8 @@ function scoreAddressResult(item, queryTokens) {
     item?.display_name || "",
     address.road || "",
     address.house_number || "",
+    address.block || address.block_number || "",
+    address.building || address.construction || "",
     address.city || address.town || address.village || "",
     address.state || "",
   ].join(" ");
@@ -51,6 +67,8 @@ function scoreAddressResult(item, queryTokens) {
 
   let score = Number(item?.importance || 0);
   if (address.house_number) score += 0.45;
+  if (address.block || address.block_number) score += 0.2;
+  if (address.building || address.construction) score += 0.14;
   if (address.road) score += 0.25;
   if (address.city || address.town || address.village) score += 0.18;
   if (address.state) score += 0.12;
@@ -78,9 +96,30 @@ function buildDistrictLabel(address = {}) {
   );
 }
 
-function buildVerifiedLabel(item) {
+function collectHouseParts(address = {}, queryParts = {}) {
+  const parts = [];
+  const pushUnique = (value, prefix = "") => {
+    const normalized = String(value || "").trim();
+    if (!normalized) return;
+    const label = prefix ? `${prefix} ${normalized}` : normalized;
+    if (!parts.some((item) => normalizeName(item) === normalizeName(label))) {
+      parts.push(label);
+    }
+  };
+
+  pushUnique(address.house_number || queryParts.house);
+  pushUnique(address.block || address.block_number || queryParts.corpus, "корп.");
+  pushUnique(address.building || address.construction || queryParts.building, "стр.");
+  pushUnique(address.unit || address.door || queryParts.letter, "лит.");
+
+  return parts.join(", ");
+}
+
+function buildVerifiedLabel(item, query) {
+  const queryParts = extractQueryAddressParts(query);
+  const houseLabel = collectHouseParts(item?.address || {}, queryParts);
   const parts = [
-    item?.address?.road && item?.address?.house_number ? `${item.address.road}, ${item.address.house_number}` : item?.address?.road || "",
+    item?.address?.road && houseLabel ? `${item.address.road}, ${houseLabel}` : item?.address?.road || houseLabel || "",
     item?.address?.suburb || item?.address?.city_district || item?.address?.neighbourhood || "",
     item?.address?.city || item?.address?.town || item?.address?.village || "",
     item?.address?.state || "",
@@ -139,12 +178,12 @@ export async function verifyObjectAddress(addressLine) {
   }
 
   if (!results.length) {
-    throw new Error("Адрес не найден. Уточните дом, улицу или населенный пункт.");
+    throw new Error("Адрес не найден. Уточните улицу, дом, корпус или строение.");
   }
 
   const bestResult = pickBestAddressResult(results, queryTokens);
   if (!bestResult) {
-    throw new Error("Адрес не найден. Уточните дом, улицу или населенный пункт.");
+    throw new Error("Адрес не найден. Уточните улицу, дом, корпус или строение.");
   }
 
   const matchedRegion = findRegionByStateName(bestResult.address?.state);
@@ -152,7 +191,7 @@ export async function verifyObjectAddress(addressLine) {
 
   return {
     query: normalizedQuery,
-    verifiedLabel: buildVerifiedLabel(bestResult),
+    verifiedLabel: buildVerifiedLabel(bestResult, normalizedQuery),
     displayName: bestResult.display_name || normalizedQuery,
     district: buildDistrictLabel(bestResult.address),
     regionName: matchedRegion?.name || bestResult.address?.state || "",

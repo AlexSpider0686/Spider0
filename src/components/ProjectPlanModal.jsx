@@ -44,11 +44,7 @@ export default function ProjectPlanModal({ open, onClose, onSelectFormat }) {
             type="button"
             onClick={() => !mppDisabled && onSelectFormat("mpp")}
             disabled={mppDisabled}
-            title={
-              mppDisabled
-                ? "В web-версии без Windows и Microsoft Project формат .mpp недоступен."
-                : "Сформировать план проекта в формате Microsoft Project"
-            }
+            title={mppDisabled ? "Формат .mpp доступен только в локальном Windows-контуре." : "Сформировать план проекта в формате Microsoft Project"}
           >
             <span className="project-plan-option__icon">
               <FileSpreadsheet size={20} />
@@ -58,7 +54,7 @@ export default function ProjectPlanModal({ open, onClose, onSelectFormat }) {
             {mppDisabled ? (
               <span className="project-plan-option__warning">
                 <AlertCircle size={14} />
-                В web-версии этот формат недоступен. Экспорт работает в локальном Windows-контуре с установленным Microsoft Project.
+                Формат .mpp доступен в локальном Windows-контуре с установленным Microsoft Project.
               </span>
             ) : null}
           </button>

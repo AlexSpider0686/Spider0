@@ -1,4 +1,5 @@
 import { buildProjectTimeline } from "./projectTimeline.js";
+import { buildProjectCrewPlan } from "./crewPlan.js";
 
 const RUB = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
 
@@ -45,6 +46,7 @@ function buildSystemRows(systemResults, timeline) {
 export function buildProjectPlan(payload = {}) {
   const { objectData = {}, systemResults = [], totals = {}, projectRisks = [], apsProjectExports = [] } = payload;
   const timeline = buildProjectTimeline(systemResults, objectData, totals);
+  const crewPlan = buildProjectCrewPlan(systemResults, objectData, totals, timeline);
   const phaseMap = timeline.phaseMap;
   const tasks = [];
   let order = 1;
@@ -100,6 +102,7 @@ export function buildProjectPlan(payload = {}) {
 
   return {
     timeline,
+    crewPlan,
     tasks,
     systemRows,
     cost,
@@ -113,6 +116,7 @@ export function buildProjectPlan(payload = {}) {
       `Активных систем: ${timeline.systemsCount}.`,
       apsProjectExports?.length ? `По ${apsProjectExports.length} системам использована проектная PDF-спецификация.` : "План собран по параметрической модели платформы.",
       "Единица измерения сроков: рабочие дни.",
+      `Пиковая монтажная бригада: ${crewPlan.field.peakHeadcount} чел.; проектная группа: ${crewPlan.design.peakHeadcount} чел.`,
     ],
     summary: {
       generatedAt: new Date().toLocaleDateString("ru-RU"),
@@ -122,6 +126,8 @@ export function buildProjectPlan(payload = {}) {
       systemsCount: timeline.systemsCount,
       totalDays: timeline.totalDays,
       totalBudget: n(totals?.total, 0),
+      peakFieldTeam: crewPlan.field.peakHeadcount,
+      peakDesignTeam: crewPlan.design.peakHeadcount,
     },
     disclaimer:
       "Сроки указаны в рабочих днях и носят предварительный характер. Финальный календарный график уточняется после подтверждения РД, поставок, доступа на объект и подрядного ресурса.",
@@ -139,12 +145,25 @@ function toProjectDate(day) {
 }
 
 export function buildMsProjectXml(plan) {
+  const summaryTask = `
+    <Task>
+      <UID>1</UID>
+      <ID>1</ID>
+      <Name>${xmlEscape(`Сводный план проекта: ${plan.summary.projectName}`)}</Name>
+      <OutlineLevel>1</OutlineLevel>
+      <Start>${toProjectDate(1)}</Start>
+      <Finish>${toProjectDate(plan.summary.totalDays + 1)}</Finish>
+      <Duration>P${Math.max(Math.round(plan.summary.totalDays), 1)}D</Duration>
+      <DurationFormat>7</DurationFormat>
+      <Summary>1</Summary>
+      <Notes>${xmlEscape(plan.disclaimer)}</Notes>
+    </Task>`;
   const tasks = plan.tasks.map((task, i) => `
     <Task>
-      <UID>${i + 1}</UID>
-      <ID>${i + 1}</ID>
+      <UID>${i + 2}</UID>
+      <ID>${i + 2}</ID>
       <Name>${xmlEscape(task.name)}</Name>
-      <OutlineLevel>${task.phase === "smr" || task.phase === "pnr" ? 2 : 1}</OutlineLevel>
+      <OutlineLevel>${task.phase === "smr" || task.phase === "pnr" ? 3 : 2}</OutlineLevel>
       <Start>${toProjectDate(task.start)}</Start>
       <Finish>${toProjectDate(task.finish + 1)}</Finish>
       <Duration>P${Math.max(Math.round(task.duration), 1)}D</Duration>
@@ -168,7 +187,7 @@ export function buildMsProjectXml(plan) {
   <DaysPerMonth>22</DaysPerMonth>
   <DefaultStartTime>08:00:00</DefaultStartTime>
   <DefaultFinishTime>17:00:00</DefaultFinishTime>
-  <Tasks>${tasks}
+  <Tasks>${summaryTask}${tasks}
   </Tasks>
 </Project>`;
 }

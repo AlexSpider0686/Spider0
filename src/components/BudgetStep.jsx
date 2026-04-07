@@ -6,6 +6,7 @@ import { num, rub, toNumber } from "../lib/estimate";
 import { buildCoefficientLayer } from "../lib/coefficient-engine";
 import { buildRiskGuardInsight, getCoefficientShareLabel, getCoefficientSharePercent } from "../lib/budget-risk-guard";
 import { repairTextTree } from "../lib/textEncoding";
+import { buildProjectCrewPlan } from "../lib/crewPlan";
 
 const sliderFields = [
   { key: "cableCoef", min: 0.7, max: 1.5, step: 0.01 },
@@ -312,6 +313,7 @@ export default function BudgetStep({ budget, updateBudget, objectData, effective
 
   const profitabilityRub = toNumber(totals.totalProfit, 0);
   const vatRub = toNumber(totals.totalVat, 0);
+  const crewPlan = useMemo(() => buildProjectCrewPlan(systemResults, calcObjectData, totals), [systemResults, calcObjectData, totals]);
 
   return (
     <section className="panel">
@@ -409,6 +411,78 @@ export default function BudgetStep({ budget, updateBudget, objectData, effective
           <small className="hint-inline">
             Вклад регионального коэффициента в работах: {rub(toNumber(aggregateWork.workTotal, 0) - toNumber(aggregateWork.workTotalBeforeRegion, 0))}.
           </small>
+        </div>
+      </div>
+
+      <div className="calc-explain" style={{ marginTop: 18 }}>
+        <h3>Характеристика бюджета</h3>
+        <p className="hint-inline">{crewPlan.methodology}</p>
+
+        <div className="grid-two" style={{ marginTop: 12 }}>
+          <div className="input-card">
+            <label>Монтажная бригада и ПНР</label>
+            <div className="ai-summary-list" style={{ marginTop: 10 }}>
+              {crewPlan.summaryLines.slice(0, 3).map((line) => (
+                <div key={line}>
+                  <span>{line}</span>
+                </div>
+              ))}
+            </div>
+            <small className="hint-inline">
+              Фаза СМР: {num(crewPlan.field.durationDays, 0)} раб. дн., средняя загрузка {num(crewPlan.field.loadPerPersonDay, 1)} продуктивных ч/чел. в день.
+            </small>
+          </div>
+
+          <div className="input-card">
+            <label>Проектная группа</label>
+            <div className="ai-summary-list" style={{ marginTop: 10 }}>
+              {crewPlan.summaryLines.slice(3).map((line) => (
+                <div key={line}>
+                  <span>{line}</span>
+                </div>
+              ))}
+            </div>
+            <small className="hint-inline">
+              Фаза проектирования: {num(crewPlan.design.durationDays, 0)} раб. дн., средняя загрузка {num(crewPlan.design.loadPerPersonDay, 1)} продуктивных ч/чел. в день.
+            </small>
+          </div>
+        </div>
+
+        <div className="grid-two" style={{ marginTop: 12 }}>
+          <div className="input-card">
+            <label>Состав монтажного ресурса</label>
+            <div className="ai-detection-list" style={{ marginTop: 10 }}>
+              {crewPlan.field.roles.map((role) => (
+                <span className="pricing-source-chip ok" key={role.role}>
+                  {role.label}: {role.count} чел. ({num(role.sharePercent, 0)}%)
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className="input-card">
+            <label>Состав проектного ресурса</label>
+            <div className="ai-detection-list" style={{ marginTop: 10 }}>
+              {crewPlan.design.roles.map((role) => (
+                <span className="pricing-source-chip ok" key={role.role}>
+                  {role.label}: {role.count} чел. ({num(role.sharePercent, 0)}%)
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="input-card" style={{ marginTop: 12 }}>
+          <label>Распределение по системам</label>
+          <div className="ai-summary-list" style={{ marginTop: 10 }}>
+            {crewPlan.systemCrewRows.slice(0, 6).map((row) => (
+              <div key={row.systemName}>
+                <span>
+                  {row.systemName}: пик {row.peakCrew} чел., {row.durationDays} раб. дн., состав {row.leadRoles}. {row.complexityNote}.
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </section>

@@ -29,8 +29,8 @@ try {
   $app = New-Object -ComObject MSProject.Application
   $app.Visible = $false
   $app.DisplayAlerts = 0
-  $app.FileOpen($xmlPath)
-  $app.FileSaveAs($mppPath)
+  $null = $app.FileOpen($xmlPath)
+  $null = $app.FileSaveAs($mppPath)
   $app.FileCloseAllEx(0)
 } finally {
   if ($app -ne $null) {
