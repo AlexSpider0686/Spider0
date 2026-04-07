@@ -1,4 +1,4 @@
-import { SYSTEM_DRIVER_CONFIG } from "../config/costModelConfig";
+﻿import { SYSTEM_DRIVER_CONFIG } from "../config/costModelConfig";
 import { toNumber } from "./estimate";
 import { repairUtf8Cp1251Mojibake } from "./textEncoding";
 
@@ -233,6 +233,129 @@ function sumMandatoryZoneFloors(zoneContexts = []) {
   }, 0);
 }
 
+const MANAGEMENT_CAPACITY_PROFILES = {
+  aps: {
+    armAreaLimit: 4500,
+    armFloorsLimit: 2,
+    armPrimaryLimit: 900,
+    armControllerLimit: 18,
+    armIntegrationLimit: 8,
+    armZoneLimit: 10,
+    serverRequiredArea: 6000,
+    serverRequiredFloors: 4,
+    primaryCapacityPerServer: 4800,
+    controllerCapacityPerServer: 36,
+    integrationCapacityPerServer: 42,
+    zoneCapacityPerServer: 72,
+    operatorPrimaryCapacity: 2200,
+    operatorControllerCapacity: 22,
+    operatorIntegrationCapacity: 18,
+    operatorZoneCapacity: 28,
+    maxServers: 2,
+    maxArms: 2,
+  },
+  soue: {
+    armAreaLimit: 4200,
+    armFloorsLimit: 2,
+    armPrimaryLimit: 240,
+    armControllerLimit: 12,
+    armIntegrationLimit: 8,
+    armZoneLimit: 8,
+    serverRequiredArea: 5500,
+    serverRequiredFloors: 4,
+    primaryCapacityPerServer: 900,
+    controllerCapacityPerServer: 28,
+    integrationCapacityPerServer: 36,
+    zoneCapacityPerServer: 48,
+    operatorPrimaryCapacity: 420,
+    operatorControllerCapacity: 18,
+    operatorIntegrationCapacity: 18,
+    operatorZoneCapacity: 18,
+    maxServers: 2,
+    maxArms: 2,
+  },
+  sots: {
+    armAreaLimit: 3500,
+    armFloorsLimit: 2,
+    armPrimaryLimit: 260,
+    armControllerLimit: 14,
+    armIntegrationLimit: 10,
+    armZoneLimit: 12,
+    serverRequiredArea: 8000,
+    serverRequiredFloors: 4,
+    primaryCapacityPerServer: 1600,
+    controllerCapacityPerServer: 28,
+    integrationCapacityPerServer: 44,
+    zoneCapacityPerServer: 34,
+    operatorPrimaryCapacity: 700,
+    operatorControllerCapacity: 16,
+    operatorIntegrationCapacity: 20,
+    operatorZoneCapacity: 18,
+    maxServers: 2,
+    maxArms: 2,
+  },
+  sot: {
+    armAreaLimit: 2500,
+    armFloorsLimit: 2,
+    armPrimaryLimit: 64,
+    armControllerLimit: 6,
+    armIntegrationLimit: 10,
+    armZoneLimit: 8,
+    serverRequiredArea: 5000,
+    serverRequiredFloors: 3,
+    primaryCapacityPerServer: 320,
+    controllerCapacityPerServer: 14,
+    integrationCapacityPerServer: 48,
+    zoneCapacityPerServer: 20,
+    operatorPrimaryCapacity: 140,
+    operatorControllerCapacity: 8,
+    operatorIntegrationCapacity: 24,
+    operatorZoneCapacity: 12,
+    maxServers: 3,
+    maxArms: 3,
+  },
+  ssoi: {
+    armAreaLimit: 2200,
+    armFloorsLimit: 2,
+    armPrimaryLimit: 14,
+    armControllerLimit: 6,
+    armIntegrationLimit: 16,
+    armZoneLimit: 8,
+    serverRequiredArea: 3500,
+    serverRequiredFloors: 3,
+    primaryCapacityPerServer: 52,
+    controllerCapacityPerServer: 16,
+    integrationCapacityPerServer: 52,
+    zoneCapacityPerServer: 24,
+    operatorPrimaryCapacity: 22,
+    operatorControllerCapacity: 8,
+    operatorIntegrationCapacity: 24,
+    operatorZoneCapacity: 12,
+    maxServers: 4,
+    maxArms: 3,
+  },
+  skud: {
+    armAreaLimit: 2600,
+    armFloorsLimit: 2,
+    armPrimaryLimit: 18,
+    armControllerLimit: 10,
+    armIntegrationLimit: 10,
+    armZoneLimit: 8,
+    serverRequiredArea: 6500,
+    serverRequiredFloors: 4,
+    primaryCapacityPerServer: 140,
+    controllerCapacityPerServer: 18,
+    integrationCapacityPerServer: 28,
+    zoneCapacityPerServer: 16,
+    operatorPrimaryCapacity: 48,
+    operatorControllerCapacity: 10,
+    operatorIntegrationCapacity: 14,
+    operatorZoneCapacity: 10,
+    maxServers: 2,
+    maxArms: 2,
+  },
+};
+
 function buildManagementPlan({
   systemType,
   objectClassification = {},
@@ -244,6 +367,7 @@ function buildManagementPlan({
   distributedZoneLoad = 0,
   activeSystemTypes = [],
 }) {
+  const profile = MANAGEMENT_CAPACITY_PROFILES[systemType] || MANAGEMENT_CAPACITY_PROFILES.sot;
   const totalAreaM2 = Math.max(toNumber(objectClassification.totalAreaM2, 0), 0);
   const totalFloors = Math.max(toNumber(objectClassification.totalFloors, 0), 0);
   const integrationDemand = Math.max(toNumber(objectClassification.integrationDemandIndex, 1), 1);
@@ -251,47 +375,83 @@ function buildManagementPlan({
   const distributedArchitecture = Boolean(objectClassification.distributedArchitecture);
   const publicCriticalObject = ["public", "transport", "production", "energy"].includes(objectType);
   const lifeSafetySystem = ["aps", "soue"].includes(systemType);
-  const integrationHeavySystem = ["ssoi", "sot", "skud"].includes(systemType);
-  const legislationDriven = lifeSafetySystem || (publicCriticalObject && integrationHeavySystem);
+  const integratedSecuritySystem = ["ssoi", "sot", "skud", "sots"].includes(systemType);
+  const legislationDriven = lifeSafetySystem || (publicCriticalObject && integratedSecuritySystem);
   const mustUseDedicatedServer =
     legislationDriven ||
     distributedArchitecture ||
-    totalAreaM2 >= 12000 ||
-    totalFloors >= 4 ||
-    integrationPoints >= 10 ||
+    totalAreaM2 >= profile.serverRequiredArea ||
+    totalFloors >= profile.serverRequiredFloors ||
+    integrationPoints >= profile.armIntegrationLimit * 2 ||
     activeSystemTypes.length >= 4;
   const mayUseArmOnly =
     !mustUseDedicatedServer &&
-    totalAreaM2 <= 3200 &&
-    totalFloors <= 2 &&
-    primaryUnits <= 180 &&
-    controllerUnits <= 18 &&
-    integrationPoints <= 6;
+    totalAreaM2 <= profile.armAreaLimit &&
+    totalFloors <= profile.armFloorsLimit &&
+    primaryUnits <= profile.armPrimaryLimit &&
+    controllerUnits <= profile.armControllerLimit &&
+    integrationPoints <= profile.armIntegrationLimit &&
+    distributedZoneLoad <= profile.armZoneLimit;
 
   const normalizedServerLoad =
     Math.max(
       toNumber(baseServerLoad, 0),
-      primaryUnits / 260,
-      controllerUnits / 18,
-      integrationPoints / 10,
-      distributedZoneLoad / 14
-    ) * integrationDemand;
-  const normalizedOperatorLoad = Math.max(toNumber(operatorLoad, 0), integrationPoints / 14, controllerUnits / 24, primaryUnits / 420);
+      primaryUnits / Math.max(profile.primaryCapacityPerServer, 1),
+      controllerUnits / Math.max(profile.controllerCapacityPerServer, 1),
+      integrationPoints / Math.max(profile.integrationCapacityPerServer, 1),
+      distributedZoneLoad / Math.max(profile.zoneCapacityPerServer, 1)
+    ) * clamp(1 + Math.max(integrationDemand - 1, 0) * 0.18 + (distributedArchitecture ? 0.12 : 0), 1, 1.42);
+  const normalizedOperatorLoad = Math.max(
+    toNumber(operatorLoad, 0),
+    primaryUnits / Math.max(profile.operatorPrimaryCapacity, 1),
+    controllerUnits / Math.max(profile.operatorControllerCapacity, 1),
+    integrationPoints / Math.max(profile.operatorIntegrationCapacity, 1),
+    distributedZoneLoad / Math.max(profile.operatorZoneCapacity, 1)
+  );
 
-  const serverCount = mayUseArmOnly ? 0 : Math.max(safeCeil(normalizedServerLoad, mustUseDedicatedServer ? 1 : 0), 0);
-  const armCount = Math.max(safeCeil(normalizedOperatorLoad, mayUseArmOnly ? 1 : 0), serverCount > 0 ? 1 : 0);
+  let serverCount = 0;
+  if (!mayUseArmOnly) {
+    serverCount = Math.max(1, Math.ceil(Math.max(normalizedServerLoad - 0.12, 0)));
+
+    const redundancyRequired =
+      serverCount > 0 &&
+      ((lifeSafetySystem && (distributedArchitecture || totalAreaM2 >= 28000 || totalFloors >= 8)) ||
+        (systemType === "ssoi" && (integrationPoints >= 30 || activeSystemTypes.length >= 5)) ||
+        (systemType === "sot" && primaryUnits >= 220) ||
+        (systemType === "skud" && (primaryUnits >= 110 || distributedArchitecture)));
+
+    if (redundancyRequired) {
+      serverCount += 1;
+    }
+
+    serverCount = clamp(serverCount, 1, profile.maxServers);
+  }
+
+  let armCount = Math.max(safeCeil(normalizedOperatorLoad, 1), serverCount > 0 ? 1 : 0);
+  if (serverCount > 0 && (distributedArchitecture || normalizedOperatorLoad > 1.2 || activeSystemTypes.length >= 5)) {
+    armCount += 1;
+  }
+  armCount = clamp(armCount, 1, profile.maxArms);
   const deploymentMode = serverCount > 0 ? "server" : "arm";
   const modelTier =
-    normalizedServerLoad >= 2.4 || integrationPoints >= 24
+    serverCount >= 3 || normalizedServerLoad >= 2.4 || integrationPoints >= 28
       ? "enterprise"
-      : normalizedServerLoad >= 1.35 || totalAreaM2 >= 18000
+      : serverCount >= 2 || normalizedServerLoad >= 1.35 || totalAreaM2 >= 24000
         ? "rack"
         : mayUseArmOnly
           ? "compact"
           : "standard";
-  const reason = serverCount > 0
-    ? "Выделенный сервер требуется по масштабу объекта, нагрузке системы и условиям непрерывного управления."
-    : "Допускается АРМ вместо сервера: объект локальный, без распределенной архитектуры и без обязательной серверной инфраструктуры.";
+  const reasonDrivers = [];
+  if (lifeSafetySystem) reasonDrivers.push("непрерывный диспетчерский контур");
+  if (distributedArchitecture) reasonDrivers.push("распределенная архитектура");
+  if (totalAreaM2 >= profile.serverRequiredArea) reasonDrivers.push(`площадь ${Math.round(totalAreaM2)} м²`);
+  if (totalFloors >= profile.serverRequiredFloors) reasonDrivers.push(`этажность ${totalFloors}`);
+  if (integrationPoints >= profile.armIntegrationLimit * 2) reasonDrivers.push(`интеграции ${integrationPoints}`);
+  if (controllerUnits >= profile.controllerCapacityPerServer) reasonDrivers.push(`контроллеры/узлы ${controllerUnits}`);
+  const reason =
+    serverCount > 0
+      ? `Выделенный сервер управления выбран по архитектуре объекта и нагрузке системы: ${reasonDrivers.join(", ") || "масштаб объекта"}.`
+      : "Допускается АРМ вместо сервера: локальный объект без распределенной архитектуры и без обязательного серверного контура.";
 
   return {
     serverCount,
@@ -301,9 +461,14 @@ function buildManagementPlan({
     reason,
     normalizedServerLoad: Number(normalizedServerLoad.toFixed(2)),
     normalizedOperatorLoad: Number(normalizedOperatorLoad.toFixed(2)),
+    capacityProfile: {
+      primaryCapacityPerServer: profile.primaryCapacityPerServer,
+      controllerCapacityPerServer: profile.controllerCapacityPerServer,
+      integrationCapacityPerServer: profile.integrationCapacityPerServer,
+      zoneCapacityPerServer: profile.zoneCapacityPerServer,
+    },
   };
 }
-
 function estimateAps(context) {
   const { driver, zoneDemand, zoneContexts, objectClassification } = context;
   const detectors = safeCeil(
@@ -815,3 +980,4 @@ export function estimateSystemQuantities({
     secondary: adjustedRaw.secondary || {},
   };
 }
+

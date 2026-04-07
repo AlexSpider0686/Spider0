@@ -215,6 +215,7 @@ export const DEFAULT_SYSTEM = (id, type = "sot") => ({
   hasWorkingDocs: false,
   equipmentProfiles: getDefaultEquipmentProfiles(type),
   selectedEquipmentParams: {},
+  designTeamOverride: null,
   note: "",
 });
 

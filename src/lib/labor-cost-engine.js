@@ -68,12 +68,30 @@ function estimateExecutionSchedule(executionHours) {
   return { crewSize, executionDays, executionMonths };
 }
 
-function estimateDesignSchedule(designHours) {
+function buildDesignStaffingPlan(designHours, designTeamOverride = null) {
   const hours = Math.max(toNumber(designHours, 0), 0);
-  const teamSize = clamp(Math.ceil(hours / 150), 1, 6);
-  const designMonths = Math.max(1, Math.ceil(hours / Math.max(teamSize * 150, 1)));
+  const recommendedTeamSize = clamp(Math.ceil(hours / 150), 1, 6);
+  const hasExplicitOverride =
+    designTeamOverride !== null &&
+    designTeamOverride !== undefined &&
+    designTeamOverride !== "" &&
+    Number.isFinite(Number(designTeamOverride));
+  const teamSize = clamp(hasExplicitOverride ? Math.round(Number(designTeamOverride)) : recommendedTeamSize, 1, 8);
+  const teamRatio = teamSize / Math.max(recommendedTeamSize, 1);
+  const coordinationFactor = teamRatio > 1 ? clamp(1 + (teamRatio - 1) * 0.12, 1, 1.2) : clamp(1 - (1 - teamRatio) * 0.08, 0.88, 1);
+  const throughputFactor =
+    teamRatio > 1 ? clamp(1 - (teamRatio - 1) * 0.08, 0.82, 1) : clamp(1 - (1 - teamRatio) * 0.14, 0.72, 1);
+  const effectiveMonthlyCapacity = Math.max(teamSize * 150 * throughputFactor, 75);
+  const designMonths = Math.max(1, Math.ceil(hours / effectiveMonthlyCapacity));
 
-  return { teamSize, designMonths };
+  return {
+    recommendedTeamSize,
+    teamSize,
+    designMonths,
+    teamRatio,
+    coordinationFactor,
+    throughputFactor,
+  };
 }
 
 export function calculateLaborCost({
@@ -88,6 +106,7 @@ export function calculateLaborCost({
   workBaseOverride = null,
   executionHoursOverride = null,
   designHoursOverride = null,
+  designTeamOverride = null,
   projectMode = false,
   skipDesignPricing = false,
 }) {
@@ -170,11 +189,15 @@ export function calculateLaborCost({
   const designRate = toNumber(rates.designHour, 2100);
   const designNormativeComplexity =
     1 +
-    Math.max(toNumber(designComplexityFactor, 1) - 1, 0) * 0.75 +
-    Math.max(managementServerCount - 1, 0) * 0.08 +
-    Math.max(integrationPoints - 4, 0) * 0.012 +
-    Math.max(controllerUnits / Math.max(markerUnits, 1) - 0.12, 0) * 0.18;
-  const designBase = skipDesignPricing ? 0 : safeDesignHours * designRate * Math.max(designNormativeComplexity, 0.9);
+    Math.max(toNumber(designComplexityFactor, 1) - 1, 0) * 0.62 +
+    Math.max(managementServerCount - 1, 0) * 0.035 +
+    Math.max(integrationPoints - 4, 0) * 0.008 +
+    Math.max(controllerUnits / Math.max(markerUnits, 1) - 0.12, 0) * 0.12;
+  const designStaffingPlan = skipDesignPricing ? buildDesignStaffingPlan(0, 0) : buildDesignStaffingPlan(safeDesignHours, designTeamOverride);
+  const designBase =
+    skipDesignPricing
+      ? 0
+      : safeDesignHours * designRate * Math.max(designNormativeComplexity, 0.88) * designStaffingPlan.coordinationFactor;
   const designAfterConditions = designBase;
   const designChargesBeforeRegion = skipDesignPricing ? calcDesignCharges(0, budget) : calcDesignCharges(designBase, budget);
   const designTotalBeforeRegion = skipDesignPricing ? 0 : designBase + designChargesBeforeRegion.total;
@@ -187,7 +210,16 @@ export function calculateLaborCost({
       ? Math.max(computedExecutionHours, 0)
       : Math.max(toNumber(executionHoursOverride, computedExecutionHours), 0);
   const workSchedule = estimateExecutionSchedule(safeExecutionHours);
-  const designSchedule = skipDesignPricing ? { teamSize: 0, designMonths: 0 } : estimateDesignSchedule(safeDesignHours);
+  const designSchedule = skipDesignPricing
+    ? {
+        recommendedTeamSize: 0,
+        teamSize: 0,
+        designMonths: 0,
+        teamRatio: 0,
+        coordinationFactor: 0,
+        throughputFactor: 0,
+      }
+    : designStaffingPlan;
 
   const markerCostPerUnit = workTotal / markerUnits;
 
@@ -259,6 +291,10 @@ export function calculateLaborCost({
     designChargesBeforeRegion,
     designTotalBeforeRegion,
     designTotal,
+    designRecommendedTeamSize: designSchedule.recommendedTeamSize,
+    designStaffingRatio: designSchedule.teamRatio,
+    designCoordinationFactor: designSchedule.coordinationFactor,
+    designThroughputFactor: designSchedule.throughputFactor,
     markerUnits,
     markerCostPerUnit,
     executionHours: safeExecutionHours,
