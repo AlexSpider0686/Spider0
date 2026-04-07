@@ -1,5 +1,6 @@
 import PptxGenJS from "pptxgenjs";
 import { buildProjectTimeline } from "./projectTimeline";
+import { repairUtf8Cp1251Mojibake } from "./textEncoding";
 
 const OBJECT_TYPE_COVER_IMAGES = {
   production: "/assets/object-types/production.jpg",
@@ -43,7 +44,7 @@ function num(value, digits = 1) {
 }
 
 function sanitizeText(value) {
-  return String(value ?? "")
+  return repairUtf8Cp1251Mojibake(String(value ?? ""))
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
     .trim();
 }
@@ -172,7 +173,7 @@ function buildForcesAndMeans(systemResults = []) {
   const executionMonths = Math.max(...systemResults.map((row) => safeNum(row?.executionDurationMonths, 0)), 0);
 
   return [
-    ["Трудоемкость СМР+ПНР", `${num(executionHours, 0)} ч`],
+    ["Трудоемкость СМР + ПНР", `${num(executionHours, 0)} ч`],
     ["Трудоемкость проектирования", `${num(designHours, 0)} ч`],
     ["Пиковая монтажная бригада", `${num(peakExecutionTeam, 0)} чел.`],
     ["Пиковая проектная группа", `${num(peakDesignTeam, 0)} чел.`],
@@ -242,8 +243,6 @@ function addCoverSlide(slide, objectData, totals, coverImageData) {
     color: COLORS.muted,
     fit: "shrink",
   });
-
-  addSlideFrame(slide4, "РЎС‚РѕРёРјРѕСЃС‚СЊ РїСЂРѕРµРєС‚Р° РїРѕ СЃРёСЃС‚РµРјР°Рј", "Р Р°Р·Р»РѕР¶РµРЅРёРµ СЃС‚РѕРёРјРѕСЃС‚Рё РїРѕ РєР°Р¶РґРѕР№ СЃРёСЃС‚РµРјРµ РѕС‚РґРµР»СЊРЅРѕ.", 5);
   addMetricCards(
     slide,
     [
@@ -656,7 +655,7 @@ function addGanttSlide(slide, systemResults, objectData, totals) {
 
   slide.addText(
     `Алгоритм сроков: площадь ${num(safeNum(objectData?.totalArea, 0), 0)} м², ` +
-      `${systemResults.length} систем, объём оборудования ${rub(safeNum(totals?.totalEquipment, 0))}.`,
+      `${systemResults.length} систем, объем оборудования ${rub(safeNum(totals?.totalEquipment, 0))}.`,
     {
       x: 0.8,
       y: 6.35,
@@ -671,7 +670,7 @@ function addGanttSlide(slide, systemResults, objectData, totals) {
     x: 0.78,
     y: 5.42,
     w: 4.8,
-    headers: ["РЎРёР»С‹ Рё СЃСЂРµРґСЃС‚РІР°", "Р—РЅР°С‡РµРЅРёРµ"],
+    headers: ["Силы и средства", "Значение"],
     widths: [0.68, 0.32],
     rows: forcesAndMeans,
     maxRows: 5,
@@ -692,10 +691,10 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
 
   const pptx = new PptxGenJS();
   pptx.layout = "LAYOUT_WIDE";
-  pptx.author = "Project.Core™";
-  pptx.company = "Project.Core™";
+  pptx.author = "Project.Core";
+  pptx.company = "Project.Core";
   pptx.subject = "Предварительный расчет бюджета систем безопасности";
-  pptx.title = "Project.Core™ — Экспорт ТКП";
+  pptx.title = "Project.Core - Экспорт ТКП";
   pptx.lang = "ru-RU";
 
   const coverImageData = await loadImageData(OBJECT_TYPE_COVER_IMAGES[safeObject.objectType]);

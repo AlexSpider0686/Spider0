@@ -533,10 +533,13 @@ export function calculateSystemWithBreakdown(
   const designBase = projectInPlace ? 0 : laborModel.designAfterConditions * regionalCoef;
   const designTotal = projectInPlace ? 0 : laborModel.designTotal;
   const designCharges = projectInPlace ? 0 : Math.max(designTotal - designBase, 0);
-
-  const directCost = materialsBase + workTotal + designTotal;
+  const designOverhead = projectInPlace ? 0 : laborModel.designChargesBeforeRegion.overhead * regionalCoef;
+  const designPayrollTaxes = projectInPlace ? 0 : laborModel.designChargesBeforeRegion.payrollTaxes * regionalCoef;
+  const designAdmin = projectInPlace ? 0 : laborModel.designChargesBeforeRegion.admin * regionalCoef;
+  const designProfitability = projectInPlace ? 0 : laborModel.designChargesBeforeRegion.profitability * regionalCoef;
+  const directCost = materialsBase + workTotal + designBase + designOverhead + designPayrollTaxes + designAdmin;
   const profit = directCost * (toNumber(normalizedInput.budget.profitabilityPercent, 0) / 100);
-  const subtotal = directCost + profit;
+  const subtotal = directCost + designProfitability + profit;
   const vat = normalizedInput.budget.taxMode === "osno" ? subtotal * (toNumber(normalizedInput.budget.vatPercent, 0) / 100) : 0;
   const total = subtotal + vat;
 
@@ -666,11 +669,12 @@ export function calculateSystemWithBreakdown(
     payrollTaxes: laborModel.workChargesBeforeRegion.payrollTaxes * regionalCoef,
     utilization: laborModel.workChargesBeforeRegion.utilization * regionalCoef,
     admin: laborModel.workChargesBeforeRegion.admin * regionalCoef,
-    designOverhead: projectInPlace ? 0 : laborModel.designChargesBeforeRegion.overhead * regionalCoef,
+    designOverhead,
     designPpe: projectInPlace ? 0 : laborModel.designChargesBeforeRegion.ppe * regionalCoef,
-    designPayrollTaxes: projectInPlace ? 0 : laborModel.designChargesBeforeRegion.payrollTaxes * regionalCoef,
+    designPayrollTaxes,
     designUtilization: projectInPlace ? 0 : laborModel.designChargesBeforeRegion.utilization * regionalCoef,
-    designAdmin: projectInPlace ? 0 : laborModel.designChargesBeforeRegion.admin * regionalCoef,
+    designAdmin,
+    designProfitability,
     profit,
     vat,
     total,

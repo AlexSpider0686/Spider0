@@ -28,6 +28,23 @@ function calcCharges(baseValue, budget) {
   };
 }
 
+function calcDesignCharges(baseValue, budget) {
+  const overhead = baseValue * pct(budget.overheadPercent);
+  const admin = overhead * pct(budget.adminPercent);
+  const payrollTaxes = overhead * pct(budget.payrollTaxesPercent);
+  const profitability = baseValue * pct(budget.profitabilityPercent);
+
+  return {
+    overhead,
+    payrollTaxes,
+    utilization: 0,
+    ppe: 0,
+    admin,
+    profitability,
+    total: overhead + admin + payrollTaxes + profitability,
+  };
+}
+
 function calculateWorkTotals(baseValue, conditionFactor, exploitedFactor, regionalFactor, budget) {
   const workAfterConditions = baseValue * conditionFactor * exploitedFactor;
   const workChargesBeforeRegion = calcCharges(workAfterConditions, budget);
@@ -151,11 +168,16 @@ export function calculateLaborCost({
       ? Math.max(toNumber(designHours, 0), 0)
       : Math.max(toNumber(designHoursOverride, designHours), 0);
   const designRate = toNumber(rates.designHour, 2100);
-  const designConditionFactor = 1 + (conditionFactor - 1) * 0.35;
-  const designBase = skipDesignPricing ? 0 : safeDesignHours * designRate * Math.max(toNumber(designComplexityFactor, 1), 0.8);
-  const designAfterConditions = skipDesignPricing ? 0 : designBase * designConditionFactor * exploitedFactor;
-  const designChargesBeforeRegion = skipDesignPricing ? calcCharges(0, budget) : calcCharges(designAfterConditions, budget);
-  const designTotalBeforeRegion = skipDesignPricing ? 0 : designAfterConditions + designChargesBeforeRegion.total;
+  const designNormativeComplexity =
+    1 +
+    Math.max(toNumber(designComplexityFactor, 1) - 1, 0) * 0.75 +
+    Math.max(managementServerCount - 1, 0) * 0.08 +
+    Math.max(integrationPoints - 4, 0) * 0.012 +
+    Math.max(controllerUnits / Math.max(markerUnits, 1) - 0.12, 0) * 0.18;
+  const designBase = skipDesignPricing ? 0 : safeDesignHours * designRate * Math.max(designNormativeComplexity, 0.9);
+  const designAfterConditions = designBase;
+  const designChargesBeforeRegion = skipDesignPricing ? calcDesignCharges(0, budget) : calcDesignCharges(designBase, budget);
+  const designTotalBeforeRegion = skipDesignPricing ? 0 : designBase + designChargesBeforeRegion.total;
   const designTotal = skipDesignPricing ? 0 : designTotalBeforeRegion * regionalFactor;
 
   const computedExecutionHours =
