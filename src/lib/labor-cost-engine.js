@@ -82,26 +82,23 @@ function buildDesignStaffingPlan(designHours, designTeamOverride = null) {
     Number.isFinite(Number(designTeamOverride));
   const teamSize = clamp(hasExplicitOverride ? Math.round(Number(designTeamOverride)) : recommendedTeamSize, 1, 8);
   const teamRatio = teamSize / Math.max(recommendedTeamSize, 1);
-  const coordinationFactor =
-    teamSize === 1
-      ? 0.96
-      : clamp(
-          1 +
-            Math.max(teamSize - 1, 0) * 0.055 +
-            Math.max(teamSize - recommendedTeamSize, 0) * 0.03 -
-            Math.max(recommendedTeamSize - teamSize, 0) * 0.015,
-          0.94,
-          1.24
-        );
+  const coordinationFactor = clamp(
+    0.92 +
+      Math.max(teamSize - 1, 0) * 0.05 +
+      Math.max(teamSize - recommendedTeamSize, 0) * 0.045 -
+      Math.max(recommendedTeamSize - teamSize, 0) * 0.018,
+    0.88,
+    1.26
+  );
   const throughputFactor =
     teamSize === 1
-      ? 0.9
+      ? 0.84
       : clamp(
           1 -
-            Math.max(teamSize - 1, 0) * 0.045 -
-            Math.max(teamSize - recommendedTeamSize, 0) * 0.02 -
-            Math.max(recommendedTeamSize - teamSize, 0) * 0.03,
-          0.7,
+            Math.max(teamSize - 1, 0) * 0.04 -
+            Math.max(teamSize - recommendedTeamSize, 0) * 0.018 -
+            Math.max(recommendedTeamSize - teamSize, 0) * 0.035,
+          0.68,
           1
         );
   const effectiveMonthlyCapacity = Math.max(teamSize * designerMonthCapacity * throughputFactor, 68);
@@ -221,15 +218,28 @@ export function calculateLaborCost({
     Math.max(integrationPoints - 4, 0) * 0.008 +
     Math.max(controllerUnits / Math.max(markerUnits, 1) - 0.12, 0) * 0.12;
   const designStaffingPlan = skipDesignPricing ? buildDesignStaffingPlan(0, 0) : buildDesignStaffingPlan(safeDesignHours, designTeamOverride);
-  const normalizedDesignRate = designRate * 0.96;
+  const normalizedDesignRate = designRate * 0.91;
+  const staffingCompressionFactor = skipDesignPricing
+    ? 1
+    : clamp(
+        0.96 +
+          Math.max(designStaffingPlan.teamSize - 1, 0) * 0.025 +
+          Math.max(designStaffingPlan.teamSize - designStaffingPlan.recommendedTeamSize, 0) * 0.03,
+        0.94,
+        1.18
+      );
   const designDurationFactor =
     skipDesignPricing || designStaffingPlan.designMonthsExact <= 0
       ? 1
-      : clamp(0.88 + designStaffingPlan.designMonthsExact * 0.08 + designStaffingPlan.teamSize * 0.03, 0.9, 1.28);
+      : clamp(0.9 + designStaffingPlan.designMonthsExact * 0.07 + designStaffingPlan.teamSize * 0.02, 0.92, 1.24);
   const designBase =
     skipDesignPricing
       ? 0
-      : safeDesignHours * normalizedDesignRate * Math.max(designNormativeComplexity, 0.88) * designStaffingPlan.coordinationFactor;
+      : safeDesignHours *
+        normalizedDesignRate *
+        Math.max(designNormativeComplexity, 0.88) *
+        designStaffingPlan.coordinationFactor *
+        staffingCompressionFactor;
   const designAfterConditions = designBase;
   const designChargesBeforeRegion = skipDesignPricing
     ? calcDesignCharges(0, budget)

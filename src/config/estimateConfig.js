@@ -79,7 +79,7 @@ export const DEFAULT_BUDGET = {
   utilizationPercent: 8,
   adminPercent: 12,
   profitabilityPercent: 18,
-  vatPercent: 22,
+  vatPercent: 20,
   taxMode: "osno",
 };
 

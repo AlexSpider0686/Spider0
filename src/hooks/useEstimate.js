@@ -388,7 +388,7 @@ export default function useEstimate() {
 
   const updateSystem = (id, key, value) => {
     setVendorComparisonsBySystem((prev) => removeById(prev, id));
-    if (key === "type" && value !== "aps") {
+    if (key === "type") {
       const task = apsImportTasksRef.current.get(id);
       if (task?.controller) {
         task.controller.abort();
@@ -495,14 +495,16 @@ export default function useEstimate() {
   const resolveApsProjectPricing = async ({
     parsedProject,
     fileName,
+    systemType,
     vendorName,
     signal,
     onProgress,
     buildApsProjectPriceRequests,
     buildApsProjectSnapshot,
   }) => {
+    const normalizedSystemType = String(systemType || parsedProject?.systemType || "aps").toLowerCase();
     const runForVendor = async (currentVendorName, progressPrefix = "") => {
-      const requests = buildApsProjectPriceRequests(parsedProject.items, currentVendorName);
+      const requests = buildApsProjectPriceRequests(parsedProject.items, currentVendorName, normalizedSystemType);
       const { priceSnapshot, fallbackNotice } = await loadApsProjectPrices(requests, {
         signal,
         onProgress: onProgress
@@ -520,13 +522,14 @@ export default function useEstimate() {
         priceSnapshot,
         objectData,
         vendorName: currentVendorName,
+        systemType: normalizedSystemType,
       });
       return { requests, priceSnapshot, fallbackNotice, snapshot };
     };
 
     const initialResult = await runForVendor(vendorName);
     const detectedVendor = initialResult.snapshot?.detectedVendor || initialResult.snapshot?.vendorName || vendorName;
-    if (!detectedVendor || detectedVendor === vendorName) {
+    if (normalizedSystemType !== "aps" || !detectedVendor || detectedVendor === vendorName) {
       return initialResult;
     }
 
@@ -579,7 +582,7 @@ export default function useEstimate() {
   const refreshVendorPricing = async (system) => {
     const apsSnapshot = apsProjectSnapshots?.[system?.id];
     setVendorComparisonsBySystem((prev) => removeById(prev, system?.id));
-      if (system?.type === "aps" && apsSnapshot?.active) {
+      if (apsSnapshot?.active) {
         setApsImportStatuses((prev) => ({
           ...prev,
           [system.id]: buildApsImportStatus("loading", "Идет повторный опрос источников цен по позициям проекта...", {
@@ -601,12 +604,17 @@ export default function useEstimate() {
           unrecognizedRows: apsSnapshot.unrecognizedRows || [],
           parseQuality: apsSnapshot.parseQuality || {},
           aiQuality: apsSnapshot.aiQuality || null,
+          systemType: apsSnapshot.systemType || system.type,
         };
-        const preferredVendor = inferApsProjectVendor(parsedProject.items, system.vendor) || system.vendor;
+        const preferredVendor =
+          (parsedProject.systemType || system.type) === "aps"
+            ? inferApsProjectVendor(parsedProject.items, system.vendor) || system.vendor
+            : system.vendor;
 
         const { priceSnapshot, fallbackNotice, snapshot: resolvedSnapshot } = await resolveApsProjectPricing({
           parsedProject,
           fileName: apsSnapshot.fileName || "aps-project.pdf",
+          systemType: parsedProject.systemType || system.type,
           vendorName: preferredVendor,
           buildApsProjectPriceRequests,
           buildApsProjectSnapshot,
@@ -670,8 +678,8 @@ export default function useEstimate() {
 
   const importApsProjectPdf = async (systemId, file) => {
     const system = systems.find((item) => item.id === systemId);
-    if (!system || system.type !== "aps") {
-      throw new Error("Импорт PDF доступен только для системы АПС.");
+    if (!system) {
+      throw new Error("Система для импорта PDF не найдена.");
     }
     if (!file) return;
     const taskToken = startApsImportTask(systemId);
@@ -686,12 +694,16 @@ export default function useEstimate() {
     }));
 
     try {
-      const [{ parseApsProjectPdf }, { buildApsProjectPriceRequests, buildApsProjectSnapshot, inferApsProjectVendor }] = await Promise.all([
+      const [{ parseProjectSpecificationPdf }, { buildApsProjectPriceRequests, buildApsProjectSnapshot, inferApsProjectVendor }] =
+        await Promise.all([
         import("../lib/apsProjectParser"),
         import("../lib/apsProjectEstimate"),
       ]);
 
-      const parsedProject = await parseApsProjectPdf(file);
+      const parsedProject = await parseProjectSpecificationPdf(file, {
+        systemType: system.type,
+        applyAiRefinement: system.type === "aps",
+      });
       if (isApsImportTaskCancelled(systemId, taskToken)) return;
       setApsImportStatuses((prev) => ({
         ...prev,
@@ -701,8 +713,13 @@ export default function useEstimate() {
           startedAt: prev?.[systemId]?.startedAt || new Date().toISOString(),
         }),
       }));
-      const preferredVendor = inferApsProjectVendor(parsedProject.items, system.vendor) || system.vendor;
-      const initialRequests = buildApsProjectPriceRequests(parsedProject.items, preferredVendor);
+      const preferredVendor =
+        parsedProject.systemType === "aps" ? inferApsProjectVendor(parsedProject.items, system.vendor) || system.vendor : system.vendor;
+      const initialRequests = buildApsProjectPriceRequests(
+        parsedProject.items,
+        preferredVendor,
+        parsedProject.systemType || system.type
+      );
       const { priceSnapshot, fallbackNotice } = await loadApsProjectPrices(initialRequests, {
         signal: taskSignal,
         onProgress: (progress) => {
@@ -733,14 +750,19 @@ export default function useEstimate() {
         priceSnapshot,
         objectData,
         vendorName: preferredVendor,
+        systemType: parsedProject.systemType || system.type,
       });
 
       let resolvedSnapshot = initialSnapshot;
       let resolvedFallbackNotice = fallbackNotice;
       const resolvedVendor = initialSnapshot.detectedVendor || initialSnapshot.vendorName || preferredVendor;
 
-      if (resolvedVendor && resolvedVendor !== preferredVendor) {
-        const vendorRequests = buildApsProjectPriceRequests(parsedProject.items, resolvedVendor);
+      if ((parsedProject.systemType || system.type) === "aps" && resolvedVendor && resolvedVendor !== preferredVendor) {
+        const vendorRequests = buildApsProjectPriceRequests(
+          parsedProject.items,
+          resolvedVendor,
+          parsedProject.systemType || system.type
+        );
         const vendorPricing = await loadApsProjectPrices(vendorRequests, {
           signal: taskSignal,
           onProgress: (progress) => {
@@ -772,6 +794,7 @@ export default function useEstimate() {
           priceSnapshot: vendorPricing.priceSnapshot,
           objectData,
           vendorName: resolvedVendor,
+          systemType: parsedProject.systemType || system.type,
         });
       }
 
@@ -1013,7 +1036,7 @@ export default function useEstimate() {
     try {
       const snapshots = await Promise.all(
         candidateVendors.map(async (vendor) => {
-          if (system.type === "aps" && apsSnapshot?.active) {
+          if (apsSnapshot?.active) {
             const originalItems =
               Array.isArray(apsSnapshot.originalItems) && apsSnapshot.originalItems.length ? apsSnapshot.originalItems : apsSnapshot.items || [];
             const parsedProject = {
@@ -1026,8 +1049,9 @@ export default function useEstimate() {
               unrecognizedRows: apsSnapshot.unrecognizedRows || [],
               parseQuality: apsSnapshot.parseQuality || {},
               aiQuality: apsSnapshot.aiQuality || null,
+              systemType: apsSnapshot.systemType || system.type,
             };
-            const requests = buildApsProjectPriceRequests(originalItems, vendor);
+            const requests = buildApsProjectPriceRequests(originalItems, vendor, parsedProject.systemType || system.type);
             const priceSnapshot = await fetchPricesByRequests(requests);
             let vendorSpecificApsSnapshot = buildApsProjectSnapshot({
               fileName: apsSnapshot.fileName || "aps-project.pdf",
@@ -1036,6 +1060,7 @@ export default function useEstimate() {
               priceSnapshot,
               objectData,
               vendorName: vendor,
+              systemType: parsedProject.systemType || system.type,
             });
 
             if (apsSnapshot.itemOverrides && Object.keys(apsSnapshot.itemOverrides).length) {

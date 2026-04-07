@@ -12,14 +12,14 @@ function normalizeName(value) {
     .toLowerCase()
     .replace(/ё/g, "е")
     .replace(/[«»"]/g, "")
-    .replace(/\b(ул|улица|пр-кт|проспект|д|дом|корп|корпус|стр|строение)\b/g, " ")
+    .replace(/\b(ул|улица|пр-кт|проспект|просп|д|дом|корп|корпус|стр|строение|лит|литера)\b/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
 function tokenizeAddress(value) {
   return normalizeName(value)
-    .split(/[,\s]+/)
+    .split(/[,\s]+/u)
     .map((item) => item.trim())
     .filter((item) => item.length >= 2);
 }
@@ -105,11 +105,7 @@ async function fetchJson(url, message) {
 }
 
 function buildSearchVariants(normalizedQuery) {
-  return [
-    normalizedQuery,
-    `${normalizedQuery}, Россия`,
-    normalizedQuery.replace(/[«»"]/g, ""),
-  ].filter(Boolean);
+  return [...new Set([normalizedQuery, `${normalizedQuery}, Россия`, normalizedQuery.replace(/[«»"]/g, "")].filter(Boolean))];
 }
 
 export async function verifyObjectAddress(addressLine) {

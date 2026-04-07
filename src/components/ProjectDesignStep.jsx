@@ -1,26 +1,31 @@
 import React from "react";
 import { num, rub } from "../lib/estimate";
+import { repairReactTextTree } from "../lib/repairReactTree";
 
 function sum(array, getter) {
-  return array.reduce((acc, item) => acc + getter(item), 0);
+  return (array || []).reduce((acc, item) => acc + getter(item), 0);
 }
 
-export default function ProjectDesignStep({ systemResults, totals }) {
+function resolveSliderMax(result) {
+  return Math.max((result?.designRecommendedTeamSize || 1) + 3, 6);
+}
+
+export default function ProjectDesignStep({ systems = [], updateSystem, systemResults = [], totals = {} }) {
+  const resultById = new Map(systemResults.map((item) => [item.systemId, item]));
   const calculatedSystems = systemResults.filter((item) => !item.designSkipped);
   const skippedSystems = systemResults.filter((item) => item.designSkipped);
   const totalDesignHours = sum(calculatedSystems, (item) => item.designHours || 0);
   const totalDesignMonths = Math.max(...calculatedSystems.map((item) => item.designDurationMonths || 1), calculatedSystems.length ? 1 : 0);
   const avgTeamSize = calculatedSystems.length ? sum(calculatedSystems, (item) => item.designTeamSize || 1) / calculatedSystems.length : 0;
 
-  return (
+  const content = (
     <section className="panel">
       <div className="panel-header">
         <div>
           <h2>Проектирование</h2>
           <p>
-            Стоимость и сроки проектирования считаются по каждой системе с учетом параметров объекта,
-            нормативных требований и данных AI-обследования. Если по системе проект уже есть, стоимость
-            проектирования по ней не начисляется.
+            Для систем без загруженного проекта стоимость проектирования считается по трудоемкости, сложности объекта и составу проектной
+            группы. Если по системе загружен PDF-проект или отмечено наличие РД, стоимость проектирования по ней не начисляется.
           </p>
         </div>
       </div>
@@ -31,11 +36,15 @@ export default function ProjectDesignStep({ systemResults, totals }) {
           <strong>{num(totalDesignHours, 1)} ч</strong>
         </div>
         <div className="metric-card">
-          <span>Стоимость проектирования</span>
+          <span>Базовая стоимость проектирования</span>
+          <strong>{rub(sum(calculatedSystems, (item) => item.designBase || 0))}</strong>
+        </div>
+        <div className="metric-card">
+          <span>Итого проектирование</span>
           <strong>{rub(totals.totalDesign || 0)}</strong>
         </div>
         <div className="metric-card">
-          <span>Срок проектирования (макс.)</span>
+          <span>Срок проектирования</span>
           <strong>{num(totalDesignMonths, 0)} мес.</strong>
         </div>
         <div className="metric-card total">
@@ -43,8 +52,8 @@ export default function ProjectDesignStep({ systemResults, totals }) {
           <strong>{num(avgTeamSize, 1)} чел.</strong>
         </div>
         <div className="metric-card">
-          <span>Не рассчитывается</span>
-          <strong>{num(skippedSystems.length, 0)} сист.</strong>
+          <span>Системы с готовым проектом</span>
+          <strong>{num(skippedSystems.length, 0)}</strong>
         </div>
       </div>
 
@@ -53,48 +62,101 @@ export default function ProjectDesignStep({ systemResults, totals }) {
           <thead>
             <tr>
               <th>Система</th>
-              <th>Часы проектирования</th>
+              <th>Часы</th>
+              <th>Рекомендуемо</th>
+              <th>Выбрано</th>
               <th>Срок</th>
-              <th>Группа</th>
               <th>База, ₽</th>
               <th>Начисления, ₽</th>
-              <th>Итого проектирование, ₽</th>
+              <th>Итого, ₽</th>
             </tr>
           </thead>
           <tbody>
-            {systemResults.map((item, index) => (
-              <tr key={`${item.systemType}-design-${index}`}>
-                <td>{item.systemName}</td>
-                <td>{item.designSkipped ? "Не рассчитывается" : `${num(item.designHours || 0, 1)} ч`}</td>
-                <td>{item.designSkipped ? "Проект в наличии" : `${num(item.designDurationMonths || 1, 0)} мес.`}</td>
-                <td>{item.designSkipped ? "—" : num(item.designTeamSize || 1, 0)}</td>
-                <td>{item.designSkipped ? "—" : rub(item.designBase || 0)}</td>
-                <td>{item.designSkipped ? "—" : rub(item.designCharges || 0)}</td>
-                <td>{item.designSkipped ? "Стоимость не рассчитывается" : rub(item.designTotal || 0)}</td>
-              </tr>
-            ))}
+            {systems.map((system) => {
+              const result = resultById.get(system.id);
+              if (!result) return null;
+              const currentTeam = result.designSkipped
+                ? 0
+                : Number(system.designTeamOverride ?? result.designTeamSize ?? result.designRecommendedTeamSize ?? 1);
+
+              return (
+                <tr key={`design-${system.id}`}>
+                  <td>{result.systemName}</td>
+                  <td>{result.designSkipped ? "Не рассчитывается" : `${num(result.designHours || 0, 1)} ч`}</td>
+                  <td>{result.designSkipped ? "—" : num(result.designRecommendedTeamSize || 1, 0)}</td>
+                  <td>{result.designSkipped ? "—" : num(currentTeam, 0)}</td>
+                  <td>{result.designSkipped ? "Проект загружен" : `${num(result.designDurationMonths || 1, 0)} мес.`}</td>
+                  <td>{result.designSkipped ? "—" : rub(result.designBase || 0)}</td>
+                  <td>{result.designSkipped ? "—" : rub(result.designCharges || 0)}</td>
+                  <td>{result.designSkipped ? "Не начисляется" : rub(result.designTotal || 0)}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
 
-      {skippedSystems.length ? (
-        <div className="calc-explain design-note">
-          <h4>Системы с проектом</h4>
-          {skippedSystems.map((item) => (
-            <p key={`${item.systemType}-${item.systemName}`}>
-              {item.systemName}: {item.designStatusNote}
-            </p>
-          ))}
-        </div>
-      ) : null}
+      <div className="logic-grid" style={{ marginTop: 18 }}>
+        {systems.map((system) => {
+          const result = resultById.get(system.id);
+          if (!result) return null;
+          const currentTeam = result.designSkipped
+            ? 0
+            : Number(system.designTeamOverride ?? result.designTeamSize ?? result.designRecommendedTeamSize ?? 1);
+          const sliderMax = resolveSliderMax(result);
 
-      <div className="calc-explain design-note">
-        <h4>Алгоритм расчета проектирования</h4>
-        <p>1. Для каждой системы рассчитываются проектные часы по составу системы, площади, этажности, серверной архитектуре, интеграциям и нормативным требованиям по объекту.</p>
-        <p>2. Базовая стоимость проектирования считается по проектным часам и ставке проектирования с нормативной поправкой на сложность. Коэффициенты из вкладки "Бюджет" в цену проектирования не включаются.</p>
-        <p>3. В начисления по проектированию входят только ОПР, АХР от ОПР, отчисления ФОТ от ОПР и рентабельность от базовой стоимости проектирования.</p>
-        <p>4. После этого к проектированию применяется только региональный коэффициент. Если проект по системе уже есть или загружен рабочий проект, стоимость проектирования по этой системе не рассчитывается.</p>
+          return (
+            <article className="logic-card" key={`design-staffing-${system.id}`}>
+              <h3>{result.systemName}</h3>
+              {result.designSkipped ? (
+                <p>{result.designStatusNote}</p>
+              ) : (
+                <>
+                  <p>
+                    Рекомендуемый состав группы: <strong>{num(result.designRecommendedTeamSize || 1, 0)} чел.</strong>. Сейчас выбрано{" "}
+                    <strong>{num(currentTeam, 0)} чел.</strong>, срок составляет <strong>{num(result.designDurationMonths || 1, 0)} мес.</strong>,
+                    базовая стоимость <strong>{rub(result.designBase || 0)}</strong>.
+                  </p>
+                  <div className="input-card" style={{ marginTop: 12 }}>
+                    <label>Проектировщики - срок</label>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 88px auto", gap: 10, alignItems: "center" }}>
+                      <input
+                        type="range"
+                        min="1"
+                        max={sliderMax}
+                        step="1"
+                        value={currentTeam}
+                        onChange={(event) => updateSystem?.(system.id, "designTeamOverride", Number(event.target.value))}
+                      />
+                      <input
+                        type="number"
+                        min="1"
+                        max={sliderMax}
+                        step="1"
+                        value={currentTeam}
+                        onChange={(event) => updateSystem?.(system.id, "designTeamOverride", Number(event.target.value))}
+                      />
+                      <button className="ghost-btn" type="button" onClick={() => updateSystem?.(system.id, "designTeamOverride", null)}>
+                        Авто
+                      </button>
+                    </div>
+                    <small className="hint-inline">
+                      Меньше проектировщиков: дольше срок и ниже базовый ФОТ. Больше проектировщиков: короче срок, но выше стоимость из-за
+                      параллельной загрузки и координации.
+                    </small>
+                    <small className="hint-inline">
+                      Проектирование в итоге не облагается дополнительным НДС: эта стоимость считается как условно сметная, уже в составе
+                      проектной цены.
+                    </small>
+                  </div>
+                </>
+              )}
+            </article>
+          );
+        })}
       </div>
     </section>
   );
+
+  return repairReactTextTree(content);
 }

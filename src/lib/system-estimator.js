@@ -303,12 +303,12 @@ const MANAGEMENT_CAPACITY_PROFILES = {
     armZoneLimit: 8,
     serverRequiredArea: 5000,
     serverRequiredFloors: 3,
-    primaryCapacityPerServer: 320,
-    controllerCapacityPerServer: 14,
+    primaryCapacityPerServer: 960,
+    controllerCapacityPerServer: 24,
     integrationCapacityPerServer: 48,
-    zoneCapacityPerServer: 20,
-    operatorPrimaryCapacity: 140,
-    operatorControllerCapacity: 8,
+    zoneCapacityPerServer: 36,
+    operatorPrimaryCapacity: 220,
+    operatorControllerCapacity: 10,
     operatorIntegrationCapacity: 24,
     operatorZoneCapacity: 12,
     maxServers: 3,
@@ -417,7 +417,8 @@ function buildManagementPlan({
 
   let serverCount = 0;
   if (!mayUseArmOnly) {
-    serverCount = 1;
+    const demandServerCount = Math.max(safeCeil(normalizedServerLoad, 1), heavyLoad ? 1 : 0);
+    serverCount = Math.max(demandServerCount, 1);
 
     const redundancyRequired =
       (lifeSafetySystem && (distributedArchitecture || totalAreaM2 >= 28000 || totalFloors >= 8 || heavyLoad)) ||
@@ -432,7 +433,7 @@ function buildManagementPlan({
       (normalizedServerLoad >= 2.35 || integrationPoints >= profile.integrationCapacityPerServer * 1.8);
 
     if (redundancyRequired) {
-      serverCount = 2;
+      serverCount = Math.max(serverCount, 2);
     }
     if (multiServerClusterRequired) {
       serverCount = Math.max(serverCount, 3);

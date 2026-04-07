@@ -392,3 +392,57 @@ test("large distributed SSOI object requires dedicated management servers", () =
   assert.equal(result.secondary.managementPlan.deploymentMode, "server");
   assert.ok(result.secondary.managementPlan.serverCount >= 1);
 });
+
+test("public CCTV object does not overprovision management servers", () => {
+  const result = estimateSystemQuantities({
+    systemType: "sot",
+    zoneContexts: [
+      {
+        id: "zone-1",
+        zoneType: "office",
+        zoneName: "Офис",
+        areaM2: 12000,
+        floors: 5,
+        occupancyDensity: 0.08,
+        densityCoefficient: 1,
+        systemRule: {
+          mandatory: true,
+          saturationCoefficient: 1,
+          securityIntensityCoefficient: 1,
+          engineeringDensityCoefficient: 1,
+          installationComplexityCoefficient: 1,
+          routeComplexityCoefficient: 1,
+        },
+      },
+    ],
+    objectClassification: {
+      objectType: "public",
+      totalAreaM2: 12000,
+      totalFloors: 5,
+      aboveGroundFloors: 5,
+      undergroundFloors: 0,
+      architectureComplexityIndex: 1,
+      engineeringSaturationIndex: 1,
+      securityIntensityIndex: 1,
+      integrationDemandIndex: 1,
+      distributedArchitecture: false,
+    },
+    activeSystemTypes: ["sot"],
+  });
+
+  assert.equal(result.secondary.managementPlan.deploymentMode, "server");
+  assert.ok(result.secondary.managementPlan.serverCount <= 2);
+});
+
+test("VAT is not applied to design total", () => {
+  const { zones, baseBudget, system, objectData } = createFixture();
+  const detailed = calculateSystemWithBreakdown(system, zones, baseBudget, objectData);
+  const vatBreakdownTotal =
+    (detailed.vatBreakdown?.equipment || 0) +
+    (detailed.vatBreakdown?.materials || 0) +
+    (detailed.vatBreakdown?.works || 0) +
+    (detailed.vatBreakdown?.design || 0);
+
+  assert.equal(detailed.vatBreakdown?.design || 0, 0);
+  assert.ok(Math.abs(vatBreakdownTotal - (detailed.vat || 0)) < 0.01);
+});

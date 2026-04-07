@@ -189,7 +189,49 @@ function buildResourceRowsWithLabor(resourceRows, quantities, cableModel) {
   });
 }
 
-function resolveApsProjectOverrides(projectSnapshot, quantities, cableModel, knsModel) {
+function buildProjectResourceRows(projectSnapshot, fallbackRows = []) {
+  const items = Array.isArray(projectSnapshot?.items) ? projectSnapshot.items : [];
+  if (!items.length) return fallbackRows;
+
+  const labelByKey = {
+    detector: "Извещатели / датчики",
+    notification: "Оповещатели / исполнительные устройства",
+    panel: "Контроллеры / панели / шкафы",
+    power: "Питание и резерв",
+    material: "Материалы и кабельные изделия",
+    equipment: "Оборудование системы",
+  };
+  const grouped = new Map();
+  let totalCost = 0;
+
+  items.forEach((item) => {
+    const key = item.kind === "material" ? "material" : item.category || "equipment";
+    const qty = Math.max(toNumber(item.qty, 0), 0);
+    const total = Math.max(toNumber(item.total, 0), 0);
+    if (qty <= 0 && total <= 0) return;
+    totalCost += total;
+    const current = grouped.get(key) || {
+      key,
+      label: labelByKey[key] || "Позиции спецификации",
+      qty: 0,
+      total: 0,
+    };
+    current.qty += qty;
+    current.total += total;
+    grouped.set(key, current);
+  });
+
+  const rows = Array.from(grouped.values()).map((row) => ({
+    key: row.key,
+    label: row.label,
+    qty: row.qty,
+    priceShare: totalCost > 0 ? row.total / totalCost : undefined,
+  }));
+
+  return rows.length ? rows : fallbackRows;
+}
+
+function resolveProjectOverrides(projectSnapshot, quantities, cableModel, knsModel) {
   if (!projectSnapshot?.active) {
     return {
       quantities,
@@ -203,29 +245,37 @@ function resolveApsProjectOverrides(projectSnapshot, quantities, cableModel, kns
 
   const metrics = projectSnapshot.metrics || {};
   const labor = projectSnapshot.labor || {};
-  const detectorQty = Math.max(toNumber(metrics.detectorsQty, quantities.primaryUnits), 0);
+  const equipmentQty = Math.max(toNumber(metrics.devicesQty, 0), 0);
+  const controlQty = Math.max(toNumber(metrics.controlQty, 0), toNumber(metrics.panelQty, 0) + toNumber(metrics.powerQty, 0));
+  const detectorQty = equipmentQty > 0 ? Math.max(equipmentQty - controlQty, 1) : Math.max(toNumber(metrics.detectorsQty, quantities.primaryUnits), 0);
   const panelQty = Math.max(toNumber(metrics.panelQty, quantities.secondary?.panels), 0);
   const powerQty = Math.max(toNumber(metrics.powerQty, quantities.secondary?.powerUnits), 0);
-  const serverQty = Math.max(toNumber(metrics.serverQty, quantities.secondary?.servers), 1);
+  const serverQty = Math.max(toNumber(metrics.serverQty, 0), 0);
+  const operatorQty = Math.max(toNumber(metrics.operatorQty, 0), 0);
   const notificationQty = Math.max(toNumber(metrics.notificationQty, 0), 0);
   const cableLengthM = Math.max(toNumber(metrics.cableLengthM, cableModel.cableLengthM), 0);
   const integrationPoints = Math.max(toNumber(quantities.integrationPoints, 1), 1);
+  const controlUnits = equipmentQty > 0 ? Math.max(controlQty, panelQty + powerQty + serverQty + operatorQty) : quantities.controllerUnits;
+  const activeElements = equipmentQty > 0 ? equipmentQty : Math.max(detectorQty + controlUnits + notificationQty, quantities.activeElements);
+  const projectResourceRows = buildProjectResourceRows(projectSnapshot, quantities.resourceRows);
 
   const overriddenQuantities = {
     ...quantities,
     primaryUnits: detectorQty,
     markerUnits: detectorQty,
-    controllerUnits: panelQty + powerQty + serverQty,
-    activeElements: detectorQty + panelQty + powerQty + serverQty + notificationQty,
+    controllerUnits: controlUnits,
+    activeElements,
     integrationPoints,
     designHoursBase: Math.max(toNumber(labor.designHoursBase, quantities.designHoursBase), quantities.designHoursBase),
-    resourceRows: [
+    resourceRows: projectResourceRows,
+    /*
       { key: "detector", label: "Пожарные извещатели", qty: detectorQty, priceShare: 0.46 },
       { key: "module", label: "ППКП и модули", qty: Math.max(panelQty, 1), priceShare: 0.24 },
       { key: "notification", label: "Оповещатели и табло", qty: Math.max(notificationQty, 1), priceShare: 0.16 },
       { key: "power", label: "Питание и АКБ", qty: Math.max(powerQty, 1), priceShare: 0.1 },
       { key: "server", label: "Сервер / АРМ АПС", qty: serverQty, priceShare: 0.04 },
     ],
+    */
     secondary: {
       ...(quantities.secondary || {}),
       zksps: Math.max(toNumber(metrics.zkspsQty, quantities.secondary?.zksps), quantities.secondary?.zksps || 1),
@@ -233,6 +283,14 @@ function resolveApsProjectOverrides(projectSnapshot, quantities, cableModel, kns
       powerUnits: powerQty,
       notification: notificationQty,
       servers: serverQty,
+      arms: operatorQty,
+      managementPlan: {
+        ...(quantities.secondary?.managementPlan || {}),
+        serverCount: serverQty,
+        armCount: operatorQty,
+        deploymentMode: serverQty > 0 ? "server" : operatorQty > 0 ? "arm" : "project_pdf",
+        reason: "Количество серверов и АРМ принято по загруженной спецификации PDF, без пересчета по модельным нормативам.",
+      },
     },
   };
 
@@ -272,6 +330,7 @@ function resolveApsProjectOverrides(projectSnapshot, quantities, cableModel, kns
       details: projectSnapshot.items || [],
       marketEntries: projectSnapshot.priceEntries || [],
       fileName: projectSnapshot.fileName || "",
+      systemType: projectSnapshot.systemType || "",
     },
     projectMode: true,
   };
@@ -461,8 +520,8 @@ export function calculateSystemWithBreakdown(
     projectMode: false,
   };
 
-  if (system.type === "aps") {
-    projectOverrides = resolveApsProjectOverrides(projectSnapshot, quantities, cableModel, knsModel);
+  if (projectSnapshot?.active) {
+    projectOverrides = resolveProjectOverrides(projectSnapshot, quantities, cableModel, knsModel);
     quantities = projectOverrides.quantities;
     cableModel = projectOverrides.cableModel;
     knsModel = projectOverrides.knsModel;
@@ -495,6 +554,7 @@ export function calculateSystemWithBreakdown(
     designComplexityFactor: projectInPlace
       ? 1
       : objectClassification.designComplexityIndex * designAdjustment.complexityMultiplier,
+    designTeamOverride: system.designTeamOverride,
     projectMode: projectOverrides.projectMode,
     skipDesignPricing: projectInPlace,
     ...projectOverrides.laborOverride,
@@ -537,11 +597,19 @@ export function calculateSystemWithBreakdown(
   const designPayrollTaxes = projectInPlace ? 0 : laborModel.designChargesBeforeRegion.payrollTaxes * regionalCoef;
   const designAdmin = projectInPlace ? 0 : laborModel.designChargesBeforeRegion.admin * regionalCoef;
   const designProfitability = projectInPlace ? 0 : laborModel.designChargesBeforeRegion.profitability * regionalCoef;
-  const directCost = materialsBase + workTotal + designBase + designOverhead + designPayrollTaxes + designAdmin;
-  const profit = directCost * (toNumber(normalizedInput.budget.profitabilityPercent, 0) / 100);
-  const subtotal = directCost + designProfitability + profit;
-  const vat = normalizedInput.budget.taxMode === "osno" ? subtotal * (toNumber(normalizedInput.budget.vatPercent, 0) / 100) : 0;
+  const taxableBase = equipmentCost + materialCost + workTotal;
+  const profit = taxableBase * (toNumber(normalizedInput.budget.profitabilityPercent, 0) / 100);
+  const subtotal = taxableBase + designTotal + profit;
+  const vat = normalizedInput.budget.taxMode === "osno" ? (taxableBase + profit) * (toNumber(normalizedInput.budget.vatPercent, 0) / 100) : 0;
   const total = subtotal + vat;
+  const vatRatio = normalizedInput.budget.taxMode === "osno" ? toNumber(normalizedInput.budget.vatPercent, 0) / 100 : 0;
+  const profitShareBase = Math.max(taxableBase, 0.0001);
+  const vatBreakdown = {
+    equipment: (equipmentCost + profit * (equipmentCost / profitShareBase)) * vatRatio,
+    materials: (materialCost + profit * (materialCost / profitShareBase)) * vatRatio,
+    works: (workTotal + profit * (workTotal / profitShareBase)) * vatRatio,
+    design: 0,
+  };
 
   const laborBreakdown = laborModel.workBreakdown || {};
   const effectiveMarkerCostPerUnit = workTotal / Math.max(toNumber(quantities.markerUnits, 0), 1);
@@ -575,7 +643,7 @@ export function calculateSystemWithBreakdown(
 
   const bom = projectOverrides.projectMode
     ? (projectOverrides.equipmentOverride.details || []).map((item, index) => ({
-        code: `APS-PDF-${index + 1}`,
+        code: `${(projectOverrides.equipmentOverride.systemType || system.type || "pdf").toUpperCase()}-PDF-${index + 1}`,
         name: item.model ? `${item.name} (${item.model})` : item.name,
         qty: Math.max(toNumber(item.qty, 0), 0),
         unitPrice: toNumber(item.unitPrice, 0),
@@ -610,6 +678,7 @@ export function calculateSystemWithBreakdown(
   };
 
   const systemResult = {
+    systemId: system.id,
     systemType: system.type,
     systemName: getSystemName(system.type),
     vendor: system.vendor,
@@ -652,12 +721,17 @@ export function calculateSystemWithBreakdown(
       marketGuard: laborModel.marketGuard,
       neuralCheck: laborModel.neuralCheck,
       routingWorkCost,
+      designMonthsExact: laborModel.designMonthsExact,
+      designEffectiveMonthlyCapacity: laborModel.designEffectiveMonthlyCapacity,
     },
     designBase,
     designCharges,
     designTotal,
     designDurationMonths: projectInPlace ? 0 : laborModel.designMonths,
     designTeamSize: projectInPlace ? 0 : laborModel.teamSize,
+    designRecommendedTeamSize: projectInPlace ? 0 : laborModel.designRecommendedTeamSize,
+    designMonthsExact: projectInPlace ? 0 : laborModel.designMonthsExact,
+    designDurationFactor: projectInPlace ? 0 : laborModel.designDurationFactor,
     unitWorkMarker: {
       key: quantities.primaryUnitKey,
       label: quantities.markerLabel || "Стоимость 1 единицы",
@@ -677,6 +751,7 @@ export function calculateSystemWithBreakdown(
     designProfitability,
     profit,
     vat,
+    vatBreakdown,
     total,
     equipmentData,
     bom,

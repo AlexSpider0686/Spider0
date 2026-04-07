@@ -503,7 +503,16 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
-export function buildApsProjectPriceRequests(items = [], defaultVendor = "\u0411\u0430\u0437\u043e\u0432\u044b\u0439") {
+function normalizeProjectSystemType(systemType) {
+  return String(systemType || "aps").toLowerCase();
+}
+
+export function buildApsProjectPriceRequests(
+  items = [],
+  defaultVendor = "\u0411\u0430\u0437\u043e\u0432\u044b\u0439",
+  systemType = "aps"
+) {
+  const normalizedSystemType = normalizeProjectSystemType(systemType);
   return items.map((item, index) => {
     const primaryArticleToken = extractPrimaryArticleToken(`${item.model || ""} ${item.rawLine || ""} ${item.name || ""}`);
     const modelTokens = extractModelLikeTokens(`${item.model || ""} ${item.rawLine || ""} ${item.name || ""}`);
@@ -511,7 +520,7 @@ export function buildApsProjectPriceRequests(items = [], defaultVendor = "\u0411
     const queries = buildSearchQueries(item, defaultVendor);
     const searchQuery = queries[0] || shortenSearchText(item.name || item.model || "", 72);
     const manufacturerName = item.mark || item.brand || defaultVendor;
-    const source = getManufacturerSource("aps", manufacturerName);
+    const source = getManufacturerSource(normalizedSystemType, manufacturerName);
     const sourceUrls = buildSourceUrls(source, queries, item);
 
     return {
@@ -531,6 +540,10 @@ export function buildApsProjectPriceRequests(items = [], defaultVendor = "\u0411
       itemId: item.id,
     };
   });
+}
+
+export function buildProjectPriceRequests(items = [], defaultVendor = "\u0411\u0430\u0437\u043e\u0432\u044b\u0439", systemType = "aps") {
+  return buildApsProjectPriceRequests(items, defaultVendor, systemType);
 }
 
 function estimateLaborByProjectItems(items = [], metrics = {}, objectData = {}) {
@@ -706,6 +719,7 @@ export function buildApsProjectSnapshot({
   priceSnapshot,
   objectData,
   vendorName = "\u0411\u0430\u0437\u043e\u0432\u044b\u0439",
+  systemType = "aps",
 }) {
   const baseItems = Array.isArray(parsedProject?.items) ? parsedProject.items : [];
   const pricedItems = mapPricesToItems(baseItems, requests, priceSnapshot, {});
@@ -717,8 +731,13 @@ export function buildApsProjectSnapshot({
     priceSnapshot,
     objectData,
     vendorName,
+    systemType,
     itemOverrides: {},
   });
+}
+
+export function buildProjectSnapshot(options = {}) {
+  return buildApsProjectSnapshot(options);
 }
 
 function buildSnapshotPayload({
@@ -729,8 +748,10 @@ function buildSnapshotPayload({
   priceSnapshot,
   objectData,
   vendorName = "\u0411\u0430\u0437\u043e\u0432\u044b\u0439",
+  systemType = "aps",
   itemOverrides = {},
 }) {
+  const normalizedSystemType = normalizeProjectSystemType(systemType || parsedProject?.systemType || "aps");
   const totals = splitTotals(pricedItems);
   const metrics = computeLiveMetrics(pricedItems, parsedProject?.metrics || {});
   const labor = estimateLaborByProjectItems(pricedItems, metrics, objectData);
@@ -747,13 +768,13 @@ function buildSnapshotPayload({
   };
   const unitMatch = buildUnitMatchSummary(pricedItems);
   const aiQuality = parsedProject?.aiQuality || null;
-  const detectedVendor = inferApsVendor(pricedItems, vendorName);
+  const detectedVendor = normalizedSystemType === "aps" ? inferApsVendor(pricedItems, vendorName) : vendorName;
   const resolvedVendorName = detectedVendor || vendorName;
 
   return {
     active: true,
     source: "project_pdf",
-    systemType: "aps",
+    systemType: normalizedSystemType,
     vendorName: resolvedVendorName,
     detectedVendor: resolvedVendorName,
     fileName,
@@ -791,7 +812,7 @@ function buildSnapshotPayload({
       aiLowConfidenceItems: toSafeQty(aiQuality?.lowConfidenceItems),
     },
     priceEntries: pricedItems.map((item, index) => ({
-      key: `aps-pdf-price-${index + 1}`,
+      key: `${normalizedSystemType}-pdf-price-${index + 1}`,
       equipmentLabel: item.model ? `${item.name} (${item.model})` : item.name,
       price: item.unitPrice,
       fallbackPrice: fallbackPriceForItem(item),
@@ -814,6 +835,7 @@ function buildParsedProjectFromSnapshot(snapshot) {
   return {
     parsedAt: snapshot.parsedAt,
     gostStandard: snapshot.gostStandard,
+    systemType: snapshot.systemType || "aps",
     linesScanned: snapshot.linesScanned,
     pages: snapshot.pages,
     metrics: snapshot.metrics,
@@ -834,6 +856,7 @@ function rebuildSnapshotFromState(snapshot, { originalItems, requests, itemOverr
     priceSnapshot: snapshot.priceSnapshot || {},
     objectData,
     vendorName: snapshot.vendorName,
+    systemType: snapshot.systemType || "aps",
     itemOverrides,
   });
 }
