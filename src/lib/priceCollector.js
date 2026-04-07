@@ -264,8 +264,11 @@ function buildApiEndpoints() {
   const isBrowser = typeof window !== "undefined";
   const endpoints = [fromEnv, isBrowser ? "/api/vendor-prices" : ""];
 
-  if (isBrowser && /localhost|127\.0\.0\.1/i.test(window.location.hostname)) {
-    endpoints.push("https://spider0.vercel.app/api/vendor-prices");
+  if (isBrowser) {
+    const currentHost = String(window.location.hostname || "").toLowerCase();
+    if (currentHost !== "spider0.vercel.app") {
+      endpoints.push("https://spider0.vercel.app/api/vendor-prices");
+    }
   }
 
   return [...new Set(endpoints.map((item) => String(item || "").trim()).filter(Boolean))];
@@ -566,10 +569,11 @@ export async function fetchPricesByRequests(requests = [], options = {}) {
 
 export async function fetchVendorPrices(systemType, vendorName, options = {}) {
   const requests = buildPriceRequests(systemType, vendorName);
+  const isAlarmSystem = systemType === "sots" || systemType === "aps" || systemType === "soue";
   const snapshot = await fetchPricesByRequests(requests, {
     ...options,
-    timeoutMs: Number(options?.timeoutMs) || 90000,
-    batchSize: Number(options?.batchSize) || Math.min(requests.length || 1, 3),
+    timeoutMs: Number(options?.timeoutMs) || (isAlarmSystem ? 120000 : 90000),
+    batchSize: Number(options?.batchSize) || Math.min(requests.length || 1, isAlarmSystem ? 2 : 3),
   });
   return {
     ...snapshot,

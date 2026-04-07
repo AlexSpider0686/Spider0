@@ -112,6 +112,15 @@ function formatSelectionStrategy(strategy) {
   return "алгоритм по умолчанию";
 }
 
+function formatPricingWarning(snapshot) {
+  const warning = String(snapshot?.warning || "").trim();
+  if (!warning) return "";
+  if (warning === "price_collection_unavailable_fallback_mode") {
+    return "Сервис сбора цен временно недоступен. Использован резервный режим и fallback-логика.";
+  }
+  return warning;
+}
+
 const APS_MANUAL_UNIT_OPTIONS = ["шт", "компл", "м", "м2", "кг", "л", "уп", "лист"];
 
 function defaultManualDraft() {
@@ -703,7 +712,8 @@ export default function SystemsStep({
                       </span>
                     </span>
                   </div>
-                  {snapshot.error ? <span className="warn-inline"> Ошибка API: {snapshot.error}</span> : null}
+                  {snapshot.warning ? <span className="warn-inline"> {formatPricingWarning(snapshot)}</span> : null}
+                  {!snapshot.warning && snapshot.error ? <span className="warn-inline"> Ошибка API: {snapshot.error}</span> : null}
                 </div>
               ) : null}
 

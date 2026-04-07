@@ -16,6 +16,13 @@ function getSystemLabel(systemType) {
   return SYSTEM_TYPES.find((item) => item.code === systemType)?.name || systemType;
 }
 
+function formatDesignDurationExact(monthsExact) {
+  const safeMonths = toNumber(monthsExact, 0);
+  if (safeMonths <= 0) return "0 мес.";
+  if (safeMonths < 1) return `${num(Math.max(safeMonths * 22, 1), 0)} раб. дн.`;
+  return `${num(safeMonths, 1)} мес.`;
+}
+
 function summarizeAiGuard(systemResults) {
   const rows = systemResults
     .map((row) => row?.laborDetails)
@@ -51,7 +58,7 @@ export default function CalculationLogicStep({ objectData, effectiveObjectData, 
     calculatedDesignRows.length > 0
       ? calculatedDesignRows.reduce((sum, row) => sum + toNumber(row.designTeamSize, 1), 0) / calculatedDesignRows.length
       : 0;
-  const maxDesignMonths = Math.max(...calculatedDesignRows.map((row) => row.designDurationMonths || 1), calculatedDesignRows.length ? 1 : 0);
+  const maxDesignMonths = Math.max(...calculatedDesignRows.map((row) => row.designMonthsExact || row.designDurationMonths || 0), 0);
 
   const totalWorkBase = systemResults.reduce((sum, row) => sum + toNumber(row.workBase, 0), 0);
   const totalWorkWithCharges = systemResults.reduce((sum, row) => sum + toNumber(row.workTotal, 0), 0);
@@ -294,7 +301,7 @@ export default function CalculationLogicStep({ objectData, effectiveObjectData, 
           <h3>9. Проектирование</h3>
           <p>Проектирование считается отдельно по каждой системе от расчетного объема и сложности. Данные объекта и AI-обследования корректируют трудоемкость: учитываются трассы, высоты, отделка, интеграции, координация по зонам и существующая инфраструктура.</p>
           <p>Если по системе есть проект или он загружен во вкладке «Системы», стоимость проектирования по этой системе не рассчитывается, а на вкладке «Проектирование» выводится пометка «стоимость не рассчитывается, проект в наличии».</p>
-          <p>Суммарно по рассчитываемым системам: <strong>{num(totalDesignHours, 1)} ч</strong>, средняя группа <strong>{num(avgDesignTeam, 1)} чел.</strong>, максимальный срок <strong>{num(maxDesignMonths, 0)} мес.</strong>, стоимость <strong>{rub(totalDesign)}</strong>.</p>
+          <p>Суммарно по рассчитываемым системам: <strong>{num(totalDesignHours, 1)} ч</strong>, средняя группа <strong>{num(avgDesignTeam, 1)} чел.</strong>, максимальный срок <strong>{formatDesignDurationExact(maxDesignMonths)}</strong>, стоимость <strong>{rub(totalDesign)}</strong>.</p>
         </article>
 
         <article className="logic-card">

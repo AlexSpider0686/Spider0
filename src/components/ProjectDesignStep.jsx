@@ -10,12 +10,19 @@ function resolveSliderMax(result) {
   return Math.max((result?.designRecommendedTeamSize || 1) + 3, 6);
 }
 
+function formatDesignDuration(result) {
+  const exactMonths = Number(result?.designMonthsExact ?? result?.designDurationMonths ?? 0);
+  if (!Number.isFinite(exactMonths) || exactMonths <= 0) return "0 мес.";
+  if (exactMonths < 1) return `${num(Math.max(exactMonths * 22, 1), 0)} раб. дн.`;
+  return `${num(exactMonths, 1)} мес.`;
+}
+
 export default function ProjectDesignStep({ systems = [], updateSystem, systemResults = [], totals = {} }) {
   const resultById = new Map(systemResults.map((item) => [item.systemId, item]));
   const calculatedSystems = systemResults.filter((item) => !item.designSkipped);
   const skippedSystems = systemResults.filter((item) => item.designSkipped);
   const totalDesignHours = sum(calculatedSystems, (item) => item.designHours || 0);
-  const totalDesignMonths = Math.max(...calculatedSystems.map((item) => item.designDurationMonths || 1), calculatedSystems.length ? 1 : 0);
+  const totalDesignMonths = Math.max(...calculatedSystems.map((item) => item.designMonthsExact || item.designDurationMonths || 0), 0);
   const avgTeamSize = calculatedSystems.length ? sum(calculatedSystems, (item) => item.designTeamSize || 1) / calculatedSystems.length : 0;
 
   const content = (
@@ -45,7 +52,7 @@ export default function ProjectDesignStep({ systems = [], updateSystem, systemRe
         </div>
         <div className="metric-card">
           <span>Срок проектирования</span>
-          <strong>{num(totalDesignMonths, 0)} мес.</strong>
+          <strong>{totalDesignMonths < 1 ? `${num(Math.max(totalDesignMonths * 22, 1), 0)} раб. дн.` : `${num(totalDesignMonths, 1)} мес.`}</strong>
         </div>
         <div className="metric-card total">
           <span>Средний состав группы</span>
@@ -85,7 +92,7 @@ export default function ProjectDesignStep({ systems = [], updateSystem, systemRe
                   <td>{result.designSkipped ? "Не рассчитывается" : `${num(result.designHours || 0, 1)} ч`}</td>
                   <td>{result.designSkipped ? "—" : num(result.designRecommendedTeamSize || 1, 0)}</td>
                   <td>{result.designSkipped ? "—" : num(currentTeam, 0)}</td>
-                  <td>{result.designSkipped ? "Проект загружен" : `${num(result.designDurationMonths || 1, 0)} мес.`}</td>
+                  <td>{result.designSkipped ? "Проект загружен" : formatDesignDuration(result)}</td>
                   <td>{result.designSkipped ? "—" : rub(result.designBase || 0)}</td>
                   <td>{result.designSkipped ? "—" : rub(result.designCharges || 0)}</td>
                   <td>{result.designSkipped ? "Не начисляется" : rub(result.designTotal || 0)}</td>
@@ -114,7 +121,7 @@ export default function ProjectDesignStep({ systems = [], updateSystem, systemRe
                 <>
                   <p>
                     Рекомендуемый состав группы: <strong>{num(result.designRecommendedTeamSize || 1, 0)} чел.</strong>. Сейчас выбрано{" "}
-                    <strong>{num(currentTeam, 0)} чел.</strong>, срок составляет <strong>{num(result.designDurationMonths || 1, 0)} мес.</strong>,
+                    <strong>{num(currentTeam, 0)} чел.</strong>, срок составляет <strong>{formatDesignDuration(result)}</strong>,
                     базовая стоимость <strong>{rub(result.designBase || 0)}</strong>.
                   </p>
                   <div className="input-card" style={{ marginTop: 12 }}>

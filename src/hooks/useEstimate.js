@@ -58,6 +58,19 @@ function buildFallbackPriceSnapshot() {
   };
 }
 
+function buildVendorPricingFallbackSnapshot(previousSnapshot = null, error = null) {
+  return {
+    ...(previousSnapshot || {}),
+    fetchedAt: new Date().toISOString(),
+    entries: Array.isArray(previousSnapshot?.entries) ? previousSnapshot.entries : [],
+    warning:
+      error?.message ||
+      "Сервис сбора цен временно недоступен. Использован резервный режим с сохранением текущих данных и fallback-логики.",
+    error: "",
+    stale: true,
+  };
+}
+
 function buildApsImportStatus(state, message, extra = {}) {
   return {
     state,
@@ -667,11 +680,7 @@ export default function useEstimate() {
     } catch (error) {
       setVendorPriceSnapshots((prev) => ({
         ...prev,
-        [system.id]: {
-          fetchedAt: new Date().toISOString(),
-          entries: [],
-          error: error.message,
-        },
+        [system.id]: buildVendorPricingFallbackSnapshot(prev?.[system.id], error),
       }));
     }
   };
@@ -980,11 +989,7 @@ export default function useEstimate() {
             if (cancelled) return;
             setVendorPriceSnapshots((prev) => ({
               ...prev,
-              [system.id]: {
-                fetchedAt: new Date().toISOString(),
-                entries: [],
-                error: error.message,
-              },
+              [system.id]: buildVendorPricingFallbackSnapshot(prev?.[system.id], error),
             }));
           }
         })

@@ -477,13 +477,13 @@ export function calculateEquipment(
     const qty = resolveQuantity(system.type, "camera", quantityContext, Math.round(areaUnits * 6.5));
     pushItem(details, {
       code: "CAM",
-      name: makeDisplayName(`РљР°РјРµСЂС‹ (${placement}, ${resolution} РњРї)`, model),
+      name: makeDisplayName(`Камера (${placement}, ${resolution} Мп)`, model),
       model,
       qty,
       unitPrice,
       total: qty * unitPrice,
       isKey: true,
-      basis: "РљРѕР»РёС‡РµСЃС‚РІРѕ РєР°РјРµСЂ Р±РµСЂРµС‚СЃСЏ РёР· СЂР°СЃС‡С‘С‚РЅРѕР№ РїР»РѕС‚РЅРѕСЃС‚Рё Рё Р·РѕРЅР°Р»СЊРЅРѕР№ СЃС‚СЂСѓРєС‚СѓСЂС‹ СЃРёСЃС‚РµРјС‹.",
+      basis: "Количество камер берется из расчетной плотности и зональной структуры системы.",
     });
   }
 
@@ -496,13 +496,13 @@ export function calculateEquipment(
     const qty = resolveQuantity(system.type, "recorder", quantityContext, Math.ceil(cameraQty / Math.max(channels, 1)));
     pushItem(details, {
       code: "NVR",
-      name: makeDisplayName(`Р РµРіРёСЃС‚СЂР°С‚РѕСЂ (${channels} РєР°РЅР°Р»РѕРІ)`, model),
+      name: makeDisplayName(`Регистратор (${channels} каналов)`, model),
       model,
       qty,
       unitPrice,
       total: qty * unitPrice,
       isKey: true,
-      basis: "РљРѕР»РёС‡РµСЃС‚РІРѕ РІС‹С‡РёСЃР»СЏРµС‚СЃСЏ РѕС‚ С‡РёСЃР»Р° РєР°РјРµСЂ/СЃРµСЂРІРµСЂРЅС‹С… РєР°РЅР°Р»РѕРІ РїРѕ СЂР°СЃС‡С‘С‚РЅРѕРјСѓ РѕР±СЉС‘РјСѓ СЃРёСЃС‚РµРјС‹.",
+      basis: "Количество вычисляется от числа камер и серверных каналов по расчетному объему системы.",
     });
   }
 
@@ -517,12 +517,12 @@ export function calculateEquipment(
     const qty = Math.max(Math.ceil(minTb / Math.max(hddTb, 1)), recorderQty * 2);
     pushItem(details, {
       code: "HDD",
-      name: `HDD ${hddTb} РўР‘ (Р°СЂС…РёРІ 30 РґРЅРµР№)`,
+      name: `HDD ${hddTb} ТБ (архив 30 дней)`,
       qty,
       unitPrice,
       total: qty * unitPrice,
       isKey: true,
-      basis: `РњРёРЅРёРјР°Р»СЊРЅР°СЏ РµРјРєРѕСЃС‚СЊ Р°СЂС…РёРІР° 30 РґРЅРµР№: ${Math.ceil(minTb)} РўР‘.`,
+      basis: `Минимальная емкость архива 30 дней: ${Math.ceil(minTb)} ТБ.`,
     });
   }
 
@@ -537,13 +537,13 @@ export function calculateEquipment(
     const qty = resolveQuantity(system.type, "switch", quantityContext, Math.ceil(cameraQty / Math.max(ports, 1)));
     pushItem(details, {
       code: "SW",
-      name: makeDisplayName(`РљРѕРјРјСѓС‚Р°С‚РѕСЂ ${ports} РїРѕСЂС‚РѕРІ (${poe ? "PoE" : "Р±РµР· PoE"})`, model),
+      name: makeDisplayName(`Коммутатор ${ports} портов (${poe ? "PoE" : "без PoE"})`, model),
       model,
       qty,
       unitPrice,
       total: qty * unitPrice,
       isKey: true,
-      basis: "РљРѕР»РёС‡РµСЃС‚РІРѕ РєРѕРјРјСѓС‚Р°С‚РѕСЂРѕРІ СѓРІСЏР·Р°РЅРѕ СЃ СЂР°СЃС‡С‘С‚РЅС‹Рј РєРѕР»РёС‡РµСЃС‚РІРѕРј РїРѕР»РµРІС‹С… СѓСЃС‚СЂРѕР№СЃС‚РІ.",
+      basis: "Количество коммутаторов увязано с расчетным количеством полевых устройств.",
     });
   }
 
@@ -555,13 +555,13 @@ export function calculateEquipment(
     const qty = resolveQuantity(system.type, "controller", quantityContext, Math.round(areaUnits));
     pushItem(details, {
       code: "CTRL",
-      name: makeDisplayName(`РљРѕРЅС‚СЂРѕР»Р»РµСЂ РґРѕСЃС‚СѓРїР° (${channels} С‚РѕС‡РєРё)`, model),
+      name: makeDisplayName(`Контроллер доступа (${channels} точки)`, model),
       model,
       qty,
       unitPrice,
       total: qty * unitPrice,
       isKey: true,
-      basis: "РљРѕРЅС‚СЂРѕР»Р»РµСЂС‹ Р±РµСЂСѓС‚СЃСЏ РёР· СЂР°СЃС‡С‘С‚Р° С‚РѕС‡РµРє РїСЂРѕС…РѕРґР° Рё СЌС‚Р°Р¶РЅРѕСЃС‚Рё.",
+      basis: "Контроллеры берутся из расчета точек прохода и этажности.",
     });
   }
 
@@ -573,13 +573,13 @@ export function calculateEquipment(
     const qty = resolveQuantity(system.type, "sensor", quantityContext, Math.round(areaUnits * 9));
     pushItem(details, {
       code: "SEN",
-      name: makeDisplayName(`РћС…СЂР°РЅРЅС‹Р№ РґР°С‚С‡РёРє (${kind})`, model),
+      name: makeDisplayName(`Охранный датчик (${kind})`, model),
       model,
       qty,
       unitPrice,
       total: qty * unitPrice,
       isKey: true,
-      basis: "Р”Р°С‚С‡РёРєРё РѕС…СЂР°РЅС‹ РїСЂРёРІСЏР·Р°РЅС‹ Рє С‚РёРїСѓ Р·РѕРЅ, РѕР±СЉРµРєС‚Сѓ Рё Р·Р°РґР°РЅРЅРѕР№ РїР»РѕС‚РЅРѕСЃС‚Рё.",
+      basis: "Датчики охраны привязаны к типу зон, объекту и заданной плотности.",
     });
   }
 
@@ -591,13 +591,13 @@ export function calculateEquipment(
     const qty = resolveQuantity(system.type, "detector", quantityContext, Math.round(areaUnits * 24));
     pushItem(details, {
       code: "DET",
-      name: makeDisplayName(`РР·РІРµС‰Р°С‚РµР»СЊ (${kind})`, model),
+      name: makeDisplayName(`Извещатель (${kind})`, model),
       model,
       qty,
       unitPrice,
       total: qty * unitPrice,
       isKey: true,
-      basis: "РљРѕР»РёС‡РµСЃС‚РІРѕ РёР·РІРµС‰Р°С‚РµР»РµР№ Р±РµСЂС‘С‚СЃСЏ РёР· Р·РѕРЅР°Р»СЊРЅРѕРіРѕ Рё РѕР±СЉРµРєС‚РЅРѕРіРѕ СЂР°СЃС‡С‘С‚Р° APS.",
+      basis: "Количество извещателей берется из зонального и объектного расчета APS.",
     });
   }
 
@@ -611,13 +611,13 @@ export function calculateEquipment(
     const qty = resolveQuantity(system.type, "panel", quantityContext, Math.ceil(detectorsQty / Math.max(loops * 64, 1)));
     pushItem(details, {
       code: "PANEL",
-      name: makeDisplayName(`РџР°РЅРµР»СЊ / РџРџРљРџ (${loops} С€Р»РµР№С„Р°)`, model),
+      name: makeDisplayName(`Панель / ППКП (${loops} шлейфа)`, model),
       model,
       qty,
       unitPrice,
       total: qty * unitPrice,
       isKey: true,
-      basis: "РџР°РЅРµР»Рё Рё РџРџРљРџ СѓРІСЏР·Р°РЅС‹ СЃ СЂР°СЃС‡С‘С‚РЅС‹РјРё С€Р»РµР№С„Р°РјРё/Р·РѕРЅР°РјРё Рё РјРѕС‰РЅРѕСЃС‚СЊСЋ СЃРёСЃС‚РµРјС‹.",
+      basis: "Панели и ППКП увязаны с расчетными шлейфами, зонами и мощностью системы.",
     });
   }
 
@@ -629,13 +629,13 @@ export function calculateEquipment(
     const qty = resolveQuantity(system.type, "speaker", quantityContext, Math.round(areaUnits * 7));
     pushItem(details, {
       code: "SPK",
-      name: makeDisplayName(`РћРїРѕРІРµС‰Р°С‚РµР»СЊ РЎРћРЈР­ (${kind})`, model),
+      name: makeDisplayName(`Оповещатель СОУЭ (${kind})`, model),
       model,
       qty,
       unitPrice,
       total: qty * unitPrice,
       isKey: true,
-      basis: "РљРѕР»РёС‡РµСЃС‚РІРѕ РѕРїРѕРІРµС‰Р°С‚РµР»РµР№ Р±РµСЂС‘С‚СЃСЏ РёР· СЂР°СЃС‡С‘С‚РЅРѕР№ РїР»РѕС‚РЅРѕСЃС‚Рё Рё Р·РѕРЅ РѕРїРѕРІРµС‰РµРЅРёСЏ.",
+      basis: "Количество оповещателей берется из расчетной плотности и зон оповещения.",
     });
   }
 
@@ -648,13 +648,13 @@ export function calculateEquipment(
     const qty = resolveQuantity(system.type, "amplifier", quantityContext, Math.ceil(speakerQty / Math.max(channels * 8, 1)));
     pushItem(details, {
       code: "AMP",
-      name: makeDisplayName(`РЈСЃРёР»РёС‚РµР»СЊ РЎРћРЈР­ (${channels} РєР°РЅР°Р»Р°)`, model),
+      name: makeDisplayName(`Усилитель СОУЭ (${channels} канала)`, model),
       model,
       qty,
       unitPrice,
       total: qty * unitPrice,
       isKey: true,
-      basis: "РЈСЃРёР»РёС‚РµР»Рё СѓРІСЏР·Р°РЅС‹ СЃ СЂР°СЃС‡С‘С‚РЅС‹Рј РєРѕР»РёС‡РµСЃС‚РІРѕРј РѕРїРѕРІРµС‰Р°С‚РµР»РµР№ Рё Р·РѕРЅ РѕРїРѕРІРµС‰РµРЅРёСЏ.",
+      basis: "Усилители увязаны с расчетным количеством оповещателей и зон оповещения.",
     });
   }
 
