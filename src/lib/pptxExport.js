@@ -611,6 +611,12 @@ function addGanttSlide(slide, systemResults, objectData, totals) {
 
   bars.forEach((item, index) => {
     const y = chartY + index * rowH;
+    const startMonth = Math.max(safeNum(item.startMonth, 1), 1);
+    const durationMonths = Math.max(safeNum(item.durationMonths, 1), 1);
+    const barX = chartX + (startMonth - 1) * monthW + 0.02;
+    const maxBarWidth = Math.max(chartX + chartW - barX - 0.02, monthW * 0.35);
+    const barWidth = Math.min(Math.max(durationMonths * monthW - 0.04, monthW * 0.45), maxBarWidth);
+
     slide.addText(item.label, {
       x: 0.78,
       y: y + 0.17,
@@ -622,9 +628,9 @@ function addGanttSlide(slide, systemResults, objectData, totals) {
       color: COLORS.title,
     });
     slide.addShape("roundRect", {
-      x: chartX + (item.start - 1) * monthW + 0.02,
+      x: barX,
       y: y + 0.1,
-      w: Math.max(item.duration * monthW - 0.04, monthW * 0.45),
+      w: barWidth,
       h: 0.34,
       rectRadius: 0.06,
       fill: { color: item.color },
