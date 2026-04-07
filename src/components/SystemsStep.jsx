@@ -4,6 +4,7 @@ import { SYSTEM_TYPES, VENDORS } from "../config/estimateConfig";
 import { getManufacturerSource, getVendorByName } from "../config/vendorsConfig";
 import { num, rub, toNumber } from "../lib/estimate";
 import { summarizePriceSnapshot } from "../lib/priceCollector";
+import { repairReactTextTree } from "../lib/repairReactTree";
 import VendorConfigurator from "./VendorConfigurator";
 
 function renderApsImportStatus(status) {
@@ -368,7 +369,7 @@ export default function SystemsStep({
     }
   };
 
-  return (
+  const content = (
     <section className="panel">
       <div className="panel-header">
         <div>
@@ -1302,5 +1303,7 @@ export default function SystemsStep({
       </div>
     </section>
   );
+
+  return repairReactTextTree(content);
 }
 
