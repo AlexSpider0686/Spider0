@@ -1,0 +1,53 @@
+name: Deploy To Amvera
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-amvera-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mirror-to-amvera:
+    name: Mirror main to Amvera master
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Prepare Amvera credentials
+        env:
+          AMVERA_GIT_USERNAME: ${{ secrets.AMVERA_GIT_USERNAME }}
+          AMVERA_GIT_PASSWORD: ${{ secrets.AMVERA_GIT_PASSWORD }}
+        run: |
+          test -n "$AMVERA_GIT_USERNAME"
+          test -n "$AMVERA_GIT_PASSWORD"
+          cat > "$RUNNER_TEMP/amvera-askpass.sh" <<'EOF'
+          #!/usr/bin/env bash
+          case "$1" in
+            *Username*) printf '%s\n' "$AMVERA_GIT_USERNAME" ;;
+            *Password*) printf '%s\n' "$AMVERA_GIT_PASSWORD" ;;
+            *) printf '\n' ;;
+          esac
+          EOF
+          chmod +x "$RUNNER_TEMP/amvera-askpass.sh"
+
+      - name: Push main to Amvera master
+        env:
+          AMVERA_GIT_USERNAME: ${{ secrets.AMVERA_GIT_USERNAME }}
+          AMVERA_GIT_PASSWORD: ${{ secrets.AMVERA_GIT_PASSWORD }}
+          GIT_ASKPASS: ${{ runner.temp }}/amvera-askpass.sh
+        run: |
+          git remote add amvera-ci https://git.amvera.ru/spider0/spider0
+          git push --force-with-lease amvera-ci HEAD:master
