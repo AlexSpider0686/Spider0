@@ -181,6 +181,51 @@ export default function CalculationLogicStep({ objectData, effectiveObjectData, 
         };
       });
   }, [systemResults]);
+  const automaticVolumeRows = useMemo(
+    () =>
+      (systemResults || []).map((row) => {
+        const systemMeta = (systems || []).find((item) => item.id === row.systemId);
+        const systemLabel = row.systemName || getSystemLabel(row.systemType);
+        const units = num(row.units || 0, 0);
+        const cable = num(row.cable || 0, 1);
+        const controllers = num(row?.quantities?.secondaryUnits || row?.laborDetails?.workBreakdown?.controllers || 0, 0);
+        const managementMode = row?.laborDetails?.unitRates?.managementMode || row?.managementMode || "arm";
+
+        let principle =
+          `По объекту для системы «${systemLabel}» расчет ведется от защищаемых зон, профильного маркера системы и технического состава.`;
+
+        if (row.systemType === "aps") {
+          principle =
+            `ЗКСПС и пожарные зоны формируются по этажности, функциональным помещениям и защищаемой площади объекта. Для каждой зоны рассчитываются извещатели, панели/КДЛ, кабельные линии и резерв управления; при наличии PDF-проекта приоритет получает фактическая спецификация.`;
+        } else if (row.systemType === "soue") {
+          principle =
+            `Зоны оповещения формируются по сценариям эвакуации и составу общественных пространств. Затем рассчитываются оповещатели, усилители, линии связи и резерв мощности по объекту.`;
+        } else if (row.systemType === "sots") {
+          principle =
+            `Охранные зоны строятся по функциональным помещениям и периметру риска. По каждой зоне считаются датчики, приборы/панели, кабель и объем ПНР.`;
+        } else if (row.systemType === "sot") {
+          principle =
+            `Зоны видеоконтроля определяются по типам помещений, путям движения и периметру. Затем считаются камеры, регистраторы/серверы, коммутация, архив и трассы.`;
+        } else if (row.systemType === "skud") {
+          principle =
+            `Зоны доступа строятся от точек прохода, входных групп и режимных помещений. Дальше рассчитываются контроллеры, считыватели, исполнительные устройства и линии управления.`;
+        } else if (row.systemType === "ssoi") {
+          principle =
+            `Интеграционные зоны формируются по составу подключаемых подсистем и архитектуре объекта. Расчет определяет серверный контур, АРМ, точки интеграции и сетевую инфраструктуру.`;
+        }
+
+        return {
+          key: row.systemId || row.systemType,
+          title: systemLabel,
+          detail: principle,
+          metrics: `Основные устройства: ${units}; кабель: ${cable} м; работы: ${rub(row.workTotal || 0)}; проектирование: ${row.designSkipped ? "проект в наличии" : rub(row.designTotal || 0)}; режим управления: ${managementMode}.`,
+          vendor: systemMeta?.vendor || row.vendor || "Базовый",
+          marker: row?.unitWorkMarker?.label || "маркер системы",
+          extra: `Подбор оборудования и трудоемкости привязан к выбранному вендору «${systemMeta?.vendor || row.vendor || "Базовый"}», маркеру «${row?.unitWorkMarker?.label || "маркер системы"}» и расчетному количеству управляющих устройств ${controllers}.`,
+        };
+      }),
+    [systemResults, systems]
+  );
 
   return (
     <section className="panel">
@@ -202,6 +247,17 @@ export default function CalculationLogicStep({ objectData, effectiveObjectData, 
           <h3>2. Автоматическое определение объемов</h3>
           <p>Для каждой системы движок рассчитывает количество основных элементов, контроллеров, кабеля, КНС, объем ПНР и проектных часов. Основа расчета: профиль зон, насыщенность объекта, этажность, маршруты и тип эксплуатации.</p>
           <p>Если загружен PDF-проект АПС, система использует спецификацию проекта как приоритетный источник фактических объемов, а не только внутреннюю модель.</p>
+        </article>
+
+        <article className="logic-card">
+          <h3>2.1. Логика зон и состава оборудования по объекту</h3>
+          <div className="logic-equipment-list">
+            {automaticVolumeRows.map((item) => (
+              <p key={item.key}>
+                <strong>{item.title}:</strong> {item.detail} {item.metrics} {item.extra}
+              </p>
+            ))}
+          </div>
         </article>
 
         <article className="logic-card">

@@ -2,6 +2,7 @@ import PptxGenJS from "pptxgenjs";
 import { buildProjectTimeline } from "./projectTimeline";
 import { repairUtf8Cp1251Mojibake } from "./textEncoding";
 import { buildProjectCrewPlan } from "./crewPlan";
+import { getManufacturerSource } from "../config/vendorsConfig";
 
 const OBJECT_TYPE_COVER_IMAGES = {
   production: "/assets/object-types/production.jpg",
@@ -10,6 +11,15 @@ const OBJECT_TYPE_COVER_IMAGES = {
   residential: "/assets/object-types/residential.jpg",
   transport: "/assets/object-types/transport.jpg",
   energy: "/assets/object-types/energy.jpg",
+};
+
+const CONTEXT_IMAGES = {
+  budget: "/assets/object-types/public.jpg",
+  systems: "/assets/object-types/production.jpg",
+  costs: "/assets/object-types/warehouse.jpg",
+  specification: "/assets/object-types/transport.jpg",
+  risks: "/assets/background/development-lab.jpg",
+  schedule: "/assets/object-types/energy.jpg",
 };
 
 const COLORS = {
@@ -34,7 +44,7 @@ function safeNum(value, fallback = 0) {
 }
 
 function rub(value) {
-  return `${CURRENCY_FORMATTER.format(safeNum(value))} ₽`;
+  return `${CURRENCY_FORMATTER.format(safeNum(value)).replace(/\s/g, "\u00A0")} ₽`;
 }
 
 function num(value, digits = 1) {
@@ -88,6 +98,10 @@ function normalizeWidths(widths, totalWidth) {
 
 function addSlideFrame(slide, title, subtitle, pageNumber) {
   slide.background = { color: COLORS.bg };
+  if (slide._contextImageData) {
+    slide.addImage({ data: slide._contextImageData, x: 0, y: 0, w: 13.333, h: 7.5 });
+    slide.addShape("rect", { x: 0, y: 0, w: 13.333, h: 7.5, fill: { color: "F6FAFF", transparency: 20 }, line: { color: "F6FAFF", pt: 0 } });
+  }
   slide.addShape("rect", {
     x: 0.35,
     y: 0.2,
@@ -332,6 +346,7 @@ function drawTable(slide, options) {
         fontSize,
         color: COLORS.text,
         valign: "mid",
+        fit: "shrink",
       });
       currentX += cw;
     });
@@ -449,6 +464,8 @@ function buildUnifiedSpecificationRows(systemResults = [], apsProjectExports = [
     if (apsTypes.has(systemType)) continue;
 
     const systemName = sanitizeText(system?.systemName || system?.systemType || "—");
+    const vendorName = sanitizeText(system?.vendor || "Базовый");
+    const vendorSource = getManufacturerSource(system?.systemType, vendorName);
     const details = Array.isArray(system?.equipmentData?.details) ? system.equipmentData.details : [];
     const marketEntries = Array.isArray(system?.equipmentData?.marketEntries) ? system.equipmentData.marketEntries : [];
     const linkIndex = new Map();
@@ -474,6 +491,9 @@ function buildUnifiedSpecificationRows(systemResults = [], apsProjectExports = [
         const candidates = [fullName, itemName, itemModel].map((value) => sanitizeText(value).toLowerCase()).filter(Boolean);
         const found = candidates.find((candidate) => linkIndex.has(candidate));
         if (found) sourceLink = linkIndex.get(found) || "";
+      }
+      if (!sourceLink && vendorName && vendorName !== "Базовый") {
+        sourceLink = sanitizeText(vendorSource?.website || "");
       }
 
       rows.push([
@@ -725,10 +745,19 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
   pptx.lang = "ru-RU";
 
   const coverImageData = await loadImageData(OBJECT_TYPE_COVER_IMAGES[safeObject.objectType]);
+  const [budgetImageData, systemsImageData, costsImageData, specificationImageData, risksImageData, scheduleImageData] = await Promise.all([
+    loadImageData(CONTEXT_IMAGES.budget),
+    loadImageData(CONTEXT_IMAGES.systems),
+    loadImageData(CONTEXT_IMAGES.costs),
+    loadImageData(CONTEXT_IMAGES.specification),
+    loadImageData(CONTEXT_IMAGES.risks),
+    loadImageData(CONTEXT_IMAGES.schedule),
+  ]);
   const coverSlide = pptx.addSlide();
   addCoverSlide(coverSlide, safeObject, safeTotals, coverImageData);
 
   const slide1 = pptx.addSlide();
+  slide1._contextImageData = budgetImageData;
   addSlideFrame(
     slide1,
     "Общая бюджетная оценка проекта",
@@ -797,6 +826,7 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
   });
 
   const slide2 = pptx.addSlide();
+  slide2._contextImageData = systemsImageData;
   addSlideFrame(
     slide2,
     "Системы и ключевое оборудование",
@@ -900,6 +930,7 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
   }
 
   const slide4 = pptx.addSlide();
+  slide4._contextImageData = costsImageData;
   addSlideFrame(slide4, "Стоимость проекта по системам", "Разложение стоимости по каждой системе отдельно.", 4);
 
   addMetricCards(
@@ -944,6 +975,7 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
 
   comparisonChunks.forEach((rowsChunk, chunkIndex) => {
     const slide = pptx.addSlide();
+    slide._contextImageData = systemsImageData;
     const titleSuffix = comparisonChunks.length > 1 ? ` (${chunkIndex + 1}/${comparisonChunks.length})` : "";
     addSlideFrame(
       slide,
@@ -965,26 +997,37 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
   });
 
   const unifiedSpecificationRows = buildUnifiedSpecificationRows(safeSystems, safeApsProjects);
-  const specificationChunks = chunkArray(
-    unifiedSpecificationRows.length ? unifiedSpecificationRows : [["—", "Нет данных", "—", "—", "—", "—", "—"]],
-    12
-  );
+  const specificationIncludesSource =
+    safeSystems.some((system) => sanitizeText(system?.vendor || "Базовый") !== "Базовый") ||
+    safeApsProjects.some((project) =>
+      (Array.isArray(project?.items) ? project.items : []).some((item) => sanitizeText((item?.usedSources || [])[0] || ""))
+    );
+  const normalizedSpecificationRows = (unifiedSpecificationRows.length
+    ? unifiedSpecificationRows
+    : [["—", "Нет данных", "—", "—", "—", "—", "—"]])
+    .map((row) => (specificationIncludesSource ? row : [row[0], row[1], row[2], row[3], row[4], row[6]]));
+  const specificationChunks = chunkArray(normalizedSpecificationRows, 12);
 
   specificationChunks.forEach((rowsChunk, chunkIndex) => {
     const slide = pptx.addSlide();
+    slide._contextImageData = specificationImageData;
     const titleSuffix = specificationChunks.length > 1 ? ` (${chunkIndex + 1}/${specificationChunks.length})` : "";
     addSlideFrame(
       slide,
       `Спецификация оборудования и материалов${titleSuffix}`,
-      "Единый перечень по всем системам: оборудование, материалы, количество, цена, сумма, ссылка и позиция из проекта.",
+      specificationIncludesSource
+        ? "Единый перечень по всем системам: оборудование, материалы, количество, цена, сумма, ссылка и позиция из проекта."
+        : "Единый перечень по всем системам: оборудование, материалы, количество, цена, сумма и позиция из проекта.",
       5 + comparisonChunks.length + chunkIndex
     );
     drawTable(slide, {
       x: 0.55,
       y: 1.2,
       w: 12.2,
-      headers: ["Система", "Наименование", "Кол-во", "Цена за ед.", "Сумма", "Ссылка", "Поз. в файле"],
-      widths: [0.13, 0.24, 0.09, 0.1, 0.1, 0.26, 0.08],
+      headers: specificationIncludesSource
+        ? ["Система", "Наименование", "Кол-во", "Цена за ед.", "Сумма", "Ссылка", "Поз. в файле"]
+        : ["Система", "Наименование", "Кол-во", "Цена за ед.", "Сумма", "Поз. в файле"],
+      widths: specificationIncludesSource ? [0.13, 0.24, 0.09, 0.1, 0.1, 0.26, 0.08] : [0.14, 0.31, 0.1, 0.11, 0.11, 0.11],
       rows: rowsChunk,
       maxRows: 12,
       rowH: 0.45,
@@ -994,6 +1037,7 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
 
   const riskRows = buildProjectRiskRows(safeProjectRisks);
   const riskSlide = pptx.addSlide();
+  riskSlide._contextImageData = risksImageData;
   addSlideFrame(
     riskSlide,
     "AI-риски проекта",
@@ -1015,6 +1059,7 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
   });
 
   const slide6 = pptx.addSlide();
+  slide6._contextImageData = scheduleImageData;
   addSlideFrame(
     slide6,
     "График реализации проекта",

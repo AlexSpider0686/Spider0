@@ -158,6 +158,7 @@ export default function useEstimate() {
   const [zonePreset, setZonePreset] = useState("business_center");
   const [lockedZoneIds, setLockedZoneIds] = useState([]);
   const [vendorPriceSnapshots, setVendorPriceSnapshots] = useState({});
+  const [vendorPricingProgressBySystem, setVendorPricingProgressBySystem] = useState({});
   const [vendorComparisonsBySystem, setVendorComparisonsBySystem] = useState({});
   const [apsProjectSnapshots, setApsProjectSnapshots] = useState({});
   const [apsImportStatuses, setApsImportStatuses] = useState({});
@@ -595,6 +596,17 @@ export default function useEstimate() {
   const refreshVendorPricing = async (system) => {
     const apsSnapshot = apsProjectSnapshots?.[system?.id];
     setVendorComparisonsBySystem((prev) => removeById(prev, system?.id));
+    setVendorPricingProgressBySystem((prev) => ({
+      ...prev,
+      [system.id]: {
+        state: "loading",
+        processed: 0,
+        total: 0,
+        percent: 0,
+        message: "Идет обновление цен по поставщикам и сайту производителя...",
+        startedAt: new Date().toISOString(),
+      },
+    }));
       if (apsSnapshot?.active) {
         setApsImportStatuses((prev) => ({
           ...prev,
@@ -651,6 +663,19 @@ export default function useEstimate() {
         )
         );
         setVendorPriceSnapshots((prev) => ({ ...prev, [system.id]: priceSnapshot }));
+        setVendorPricingProgressBySystem((prev) => ({
+          ...prev,
+          [system.id]: {
+            state: fallbackNotice ? "warning" : "success",
+            processed: priceSnapshot?.entries?.length || 0,
+            total: priceSnapshot?.entries?.length || 0,
+            percent: 100,
+            message: fallbackNotice
+              ? "Цены обновлены в резервном режиме."
+              : "Цены по проектной спецификации обновлены.",
+            finishedAt: new Date().toISOString(),
+          },
+        }));
         setApsImportStatuses((prev) => ({
           ...prev,
           [system.id]: buildApsImportStatus(
@@ -664,6 +689,17 @@ export default function useEstimate() {
           ),
         }));
       } catch (error) {
+        setVendorPricingProgressBySystem((prev) => ({
+          ...prev,
+          [system.id]: {
+            state: "error",
+            processed: 0,
+            total: 0,
+            percent: 100,
+            message: error?.message || "Не удалось обновить цены по проектной спецификации.",
+            finishedAt: new Date().toISOString(),
+          },
+        }));
         setApsImportStatuses((prev) => ({
           ...prev,
           [system.id]: buildApsImportStatus("error", error?.message || "Не удалось обновить цены по позициям проекта.", {
@@ -675,12 +711,58 @@ export default function useEstimate() {
     }
 
     try {
-      const snapshot = await fetchVendorPrices(system.type, system.vendor);
+      const snapshot = await fetchVendorPrices(system.type, system.vendor, {
+        timeoutMs: 180000,
+        onProgress: (progress) => {
+          const processed = Number(progress?.processed || 0);
+          const total = Number(progress?.total || 0);
+          const ratio = total > 0 ? processed / total : 0;
+          setVendorPricingProgressBySystem((prev) => ({
+            ...prev,
+            [system.id]: {
+              state: "loading",
+              processed,
+              total,
+              percent: Math.max(5, Math.min(Math.round(ratio * 100), 95)),
+              message:
+                progress?.message ||
+                (total > 0
+                  ? `Проверено ${processed} из ${total} ключевых позиций.`
+                  : "Подготовка запросов к источникам цен..."),
+              startedAt: prev?.[system.id]?.startedAt || new Date().toISOString(),
+            },
+          }));
+        },
+      });
       setVendorPriceSnapshots((prev) => ({ ...prev, [system.id]: snapshot }));
+      setVendorPricingProgressBySystem((prev) => ({
+        ...prev,
+        [system.id]: {
+          state: snapshot?.warning ? "warning" : "success",
+          processed: snapshot?.entries?.length || prev?.[system.id]?.processed || 0,
+          total: snapshot?.entries?.length || prev?.[system.id]?.total || 0,
+          percent: 100,
+          message: snapshot?.warning
+            ? "Обновление завершено в резервном режиме."
+            : "Цены успешно обновлены.",
+          finishedAt: new Date().toISOString(),
+        },
+      }));
     } catch (error) {
       setVendorPriceSnapshots((prev) => ({
         ...prev,
         [system.id]: buildVendorPricingFallbackSnapshot(prev?.[system.id], error),
+      }));
+      setVendorPricingProgressBySystem((prev) => ({
+        ...prev,
+        [system.id]: {
+          state: "error",
+          processed: prev?.[system.id]?.processed || 0,
+          total: prev?.[system.id]?.total || 0,
+          percent: 100,
+          message: error?.message || "Не удалось обновить цены.",
+          finishedAt: new Date().toISOString(),
+        },
       }));
     }
   };
@@ -1565,6 +1647,7 @@ export default function useEstimate() {
     setZonePreset,
     lockedZoneIds,
     vendorPriceSnapshots,
+    vendorPricingProgressBySystem,
     vendorComparisonsBySystem,
     normativeProfile,
     normativeRequirementsApplied,

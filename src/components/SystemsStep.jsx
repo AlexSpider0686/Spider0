@@ -77,6 +77,32 @@ function renderApsImportProgress(status, elapsedSeconds = 0) {
   );
 }
 
+function renderVendorPricingProgress(progress) {
+  if (!progress) return null;
+  const percent = Math.max(0, Math.min(toNumber(progress.percent, 0), 100));
+  const tone =
+    progress.state === "error" ? "#E07A5F" : progress.state === "warning" ? "#E0A458" : progress.state === "success" ? "#219653" : "#1E9FC5";
+
+  return (
+    <div className="calc-explain" style={{ marginTop: 10 }}>
+      <div className="pricing-source-row" style={{ marginBottom: 8 }}>
+        <span className={`pricing-source-chip ${progress.state === "error" ? "warn" : progress.state === "warning" ? "muted" : "ok"}`}>
+          <strong>Обновление цен</strong>
+        </span>
+        {progress.total ? (
+          <span className="pricing-source-chip muted">
+            <strong>Позиции:</strong> {progress.processed || 0} / {progress.total}
+          </span>
+        ) : null}
+      </div>
+      <p className={progress.state === "error" ? "warn-inline" : "hint-inline"}>{progress.message}</p>
+      <div style={{ marginTop: 8, height: 8, background: "#E6ECE8", borderRadius: 999, overflow: "hidden" }}>
+        <div style={{ width: `${percent}%`, height: "100%", background: tone, transition: "width 0.3s ease" }} />
+      </div>
+    </div>
+  );
+}
+
 function toHost(url) {
   if (!url) return "";
   try {
@@ -110,6 +136,38 @@ function formatSelectionStrategy(strategy) {
   if (value.includes("manufacturer_source_bias")) return "приоритет источника производителя";
   if (value.includes("average_all_sources")) return "среднее по доступным источникам";
   return "алгоритм по умолчанию";
+}
+
+function buildSourceLinkIndex(result) {
+  const entries = Array.isArray(result?.equipmentData?.marketEntries) ? result.equipmentData.marketEntries : [];
+  const index = new Map();
+
+  entries.forEach((entry) => {
+    const sourceLink = String((entry?.usedSources || [])[0] || "").trim();
+    if (!sourceLink) return;
+    [entry?.equipmentLabel, entry?.equipmentKey].filter(Boolean).forEach((rawKey) => {
+      const key = String(rawKey).trim().toLowerCase();
+      if (key && !index.has(key)) {
+        index.set(key, sourceLink);
+      }
+    });
+  });
+
+  return index;
+}
+
+function resolveEquipmentSourceLink(item, result, system, manufacturerWebsite = "") {
+  const ownLink = String((item?.usedSources || [])[0] || item?.sourceUrl || "").trim();
+  if (ownLink) return ownLink;
+
+  const linkIndex = buildSourceLinkIndex(result);
+  const keys = [item?.name, item?.label, item?.model, item?.code]
+    .map((value) => String(value || "").trim().toLowerCase())
+    .filter(Boolean);
+  const matched = keys.find((key) => linkIndex.has(key));
+  if (matched) return linkIndex.get(matched) || "";
+
+  return system?.vendor && system.vendor !== "Базовый" ? manufacturerWebsite : "";
 }
 
 function formatPricingWarning(snapshot) {
@@ -305,6 +363,7 @@ export default function SystemsStep({
   compareVendorPrices,
   clearVendorComparison,
   vendorPriceSnapshots,
+  vendorPricingProgressBySystem,
   vendorComparisonsBySystem,
   canAddMoreSystems,
   importApsProjectPdf,
@@ -404,7 +463,7 @@ export default function SystemsStep({
           const projectBasedMode = Boolean(apsSnapshot?.active || result?.projectInPlace);
           const snapshot = projectBasedMode ? apsSnapshot?.priceSnapshot || vendorPriceSnapshots?.[system.id] : vendorPriceSnapshots?.[system.id];
           const unitAuditRows = (apsSnapshot?.items || []).filter((item) => (item?.unitAudit?.status || "unknown") !== "match");
-            const manufacturerSource = getManufacturerSource(system.type, system.vendor);
+          const manufacturerSource = getManufacturerSource(system.type, system.vendor);
             const manufacturerWebsite = manufacturerSource?.website || "";
             const manufacturerHost = toHost(manufacturerWebsite);
             const isRefreshing = Boolean(refreshingBySystem[system.id]);
@@ -418,6 +477,7 @@ export default function SystemsStep({
           const showUnitAudit = Boolean(showUnitAuditBySystem[system.id]);
           const showRecheck = Boolean(showRecheckBySystem[system.id]);
           const comparison = vendorComparisonsBySystem?.[system.id];
+          const pricingProgress = vendorPricingProgressBySystem?.[system.id];
 
           const marketMetrics = summarizePriceSnapshot(displaySnapshot);
           const pricedSourceCount = marketMetrics.pricedSourceCount;
@@ -586,6 +646,8 @@ export default function SystemsStep({
                   </div>
                 </div>
               </div>
+
+              {pricingProgress ? renderVendorPricingProgress(pricingProgress) : null}
 
               {comparison ? (
                 <div className="subpanel comparison-panel">
@@ -1189,6 +1251,25 @@ export default function SystemsStep({
                       </tbody>
                     </table>
                   </div>
+                  {system.vendor !== "Базовый" ? (
+                    <div className="equipment-principles">
+                      {keyEquipment.map((item) => {
+                        const sourceLink = resolveEquipmentSourceLink(item, result, system, manufacturerWebsite);
+                        return (
+                          <p key={`${system.id}-${item.code}-source`}>
+                            <strong>{item.name}:</strong>{" "}
+                            {sourceLink ? (
+                              <a href={sourceLink} target="_blank" rel="noreferrer">
+                                источник подобранной модели
+                              </a>
+                            ) : (
+                              <span className="warn-inline">ссылка на подобранную модель не найдена</span>
+                            )}
+                          </p>
+                        );
+                      })}
+                    </div>
+                  ) : null}
                   <div className="equipment-principles">
                     {keyEquipment.map((item) => (
                       <p key={`${system.id}-${item.code}-basis`}>
@@ -1296,6 +1377,25 @@ export default function SystemsStep({
                       </tbody>
                     </table>
                   </div>
+                  {system.vendor !== "Базовый" ? (
+                    <div className="equipment-principles">
+                      {(technicalRecommendation.specRows || []).map((row) => {
+                        const sourceLink = resolveEquipmentSourceLink(row, result, system, manufacturerWebsite);
+                        return (
+                          <p key={`${system.id}-${row.key}-spec-source`}>
+                            <strong>{row.name}:</strong>{" "}
+                            {sourceLink ? (
+                              <a href={sourceLink} target="_blank" rel="noreferrer">
+                                ссылка на источник позиции
+                              </a>
+                            ) : (
+                              <span className="warn-inline">нет ссылки на источник позиции</span>
+                            )}
+                          </p>
+                        );
+                      })}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
 

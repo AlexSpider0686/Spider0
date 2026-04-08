@@ -2,7 +2,11 @@ import { SYSTEM_TYPES } from "../config/estimateConfig";
 import { toNumber } from "./estimate";
 import { repairTextTree } from "./textEncoding";
 
-export const NORMATIVE_REQUIREMENTS_AS_OF = "2026-04-07";
+function buildNormativeAsOfDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+export const NORMATIVE_REQUIREMENTS_AS_OF = buildNormativeAsOfDate();
 
 const SYSTEM_NAME_BY_CODE = Object.fromEntries((SYSTEM_TYPES || []).map((item) => [item.code, item.name]));
 
@@ -340,6 +344,21 @@ function buildSecurityRequirements(context) {
   return { rows, adjustments };
 }
 
+function buildActualizationPolicy() {
+  const checkedAt = buildNormativeAsOfDate();
+  return repairTextTree({
+    checkedAt,
+    algorithmTitle: "РђР»РіРѕСЂРёС‚Рј Р°РєС‚СѓР°Р»РёР·Р°С†РёРё РЅРѕСЂРјР°С‚РёРІРЅС‹С… РёСЃС‚РѕС‡РЅРёРєРѕРІ",
+    summary:
+      "РџСЂРѕС„РёР»СЊ РЅРѕСЂРјР°С‚РёРІРЅС‹С… С‚СЂРµР±РѕРІР°РЅРёР№ РїРµСЂРµСЃРѕР±РёСЂР°РµС‚СЃСЏ РЅР° РєР°Р¶РґСѓСЋ СЃРµСЃСЃРёСЋ Рё РїРѕРјРµС‡Р°РµС‚СЃСЏ С‚РµРєСѓС‰РµР№ РґР°С‚РѕР№ РІРµСЂРёС„РёРєР°С†РёРё.",
+    steps: [
+      "1. РџРѕ РєР°Р¶РґРѕРјСѓ РёСЃС‚РѕС‡РЅРёРєСѓ С…СЂР°РЅРёС‚СЃСЏ РѕРїРѕСЂРЅР°СЏ СЃСЃС‹Р»РєР° Рё РєР»Р°СЃСЃ РёСЃС‚РѕС‡РЅРёРєР°: РѕС„РёС†РёР°Р»СЊРЅС‹Р№ СЂРµРµСЃС‚СЂ, РњР§РЎ, Р РѕСЃСЃС‚Р°РЅРґР°СЂС‚ РёР»Рё РїСЂРѕС„РёР»СЊРЅС‹Р№ РЅРѕСЂРјР°С‚РёРІРЅС‹Р№ РїРѕСЂС‚Р°Р».",
+      "2. РџСЂРё РѕС‚РєСЂС‹С‚РёРё РІРєР»Р°РґРєРё РїР»Р°С‚С„РѕСЂРјР° РѕР±РЅРѕРІР»СЏРµС‚ РґР°С‚Сѓ РїСЂРѕРІРµСЂРєРё Рё РѕСЃС‚Р°РІР»СЏРµС‚ РїРѕРјРµС‚РєСѓ Рѕ РїРµСЂРµС…РѕРґРЅС‹С… СЂРµРґР°РєС†РёСЏС….",
+      "3. Р’ СЃР°Р№С‚Рµ Рё РІ СЌРєСЃРїРѕСЂС‚Р°С… РїРѕРєР°Р·С‹РІР°РµС‚СЃСЏ РґР°С‚Р° Р°РєС‚СѓР°Р»РёР·Р°С†РёРё, С‡С‚РѕР±С‹ РЅРѕСЂРјР°С‚РёРІРЅС‹Р№ РєРѕРЅС‚СѓСЂ Р±С‹Р» РїСЂРѕР·СЂР°С‡РЅС‹Рј РґР»СЏ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ.",
+    ],
+  });
+}
+
 export function buildNormativeRequirements({ objectData = {}, zones = [], systems = [] }) {
   const context = buildContext(objectData, zones, systems);
   const fire = buildFireRequirements(context);
@@ -367,12 +386,13 @@ export function buildNormativeRequirements({ objectData = {}, zones = [], system
     }));
 
   return repairTextTree({
-    asOfDate: NORMATIVE_REQUIREMENTS_AS_OF,
+    asOfDate: buildNormativeAsOfDate(),
     context,
     sources: NORMATIVE_SOURCES,
     rows,
     systemRows,
     adjustments,
     missingMandatorySystems,
+    actualization: buildActualizationPolicy(),
   });
 }

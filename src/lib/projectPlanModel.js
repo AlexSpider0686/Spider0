@@ -10,6 +10,14 @@ const n = (v, f = 0) => {
 
 const txt = (v) => String(v ?? "").replace(/[\u0000-\u001F\u007F]/g, "").trim();
 
+function firstFinite(...values) {
+  for (const value of values) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return 0;
+}
+
 function splitDuration(total, rows) {
   const safeTotal = Math.max(n(total, 1), 1);
   const parts = rows.filter((r) => n(r.weight) > 0);
@@ -30,6 +38,12 @@ function buildSystemRows(systemResults, timeline) {
   return (Array.isArray(systemResults) ? systemResults : []).map((item, index) => {
     const smrDuration = Math.max(5, Math.min(Math.ceil(n(item?.executionDurationMonths, 1) * 22), smr.duration));
     const pnrDuration = Math.max(3, Math.min(Math.ceil(smrDuration * 0.35), pnr.duration));
+    const equipment = n(firstFinite(item?.equipmentTotal, item?.equipmentCost, item?.equipmentPriceTotal), 0);
+    const materials = n(firstFinite(item?.materialsTotal, item?.materialTotal, item?.materialCost), 0);
+    const works = n(firstFinite(item?.workTotal, item?.laborTotal, item?.smrPnrTotal), 0);
+    const design = n(firstFinite(item?.designTotal, item?.designCost, item?.projectCost), 0);
+    const total = n(firstFinite(item?.total, equipment + materials + works + design), 0);
+
     return {
       name: txt(item?.systemName || item?.systemType || `Система ${index + 1}`),
       vendor: txt(item?.vendor || "Не определен"),
@@ -38,7 +52,11 @@ function buildSystemRows(systemResults, timeline) {
       smrDuration,
       pnrStart: Math.max(pnr.start, pnr.finish - pnrDuration + 1),
       pnrDuration,
-      total: n(item?.total, 0),
+      equipment,
+      materials,
+      works,
+      design,
+      total,
     };
   });
 }
@@ -173,7 +191,7 @@ export function buildMsProjectXml(plan) {
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Project xmlns="http://schemas.microsoft.com/project">
-  <Name>${xmlEscape(`Project.Core план — ${plan.summary.projectName}`)}</Name>
+  <Name>${xmlEscape(`Project.Core план - ${plan.summary.projectName}`)}</Name>
   <Title>${xmlEscape(`План проекта ${plan.summary.projectName}`)}</Title>
   <Subject>${xmlEscape("Автоматически сформированный план проекта по системам безопасности")}</Subject>
   <Author>Project.Core™</Author>
@@ -193,5 +211,5 @@ export function buildMsProjectXml(plan) {
 }
 
 export function formatRub(value) {
-  return `${RUB.format(n(value))} ₽`;
+  return `${RUB.format(n(value)).replace(/\s/g, "\u00A0")} ₽`;
 }
