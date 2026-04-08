@@ -1,0 +1,2 @@
+Deploy pipeline verification marker.
+Created on 2026-04-09 to verify automatic GitHub -> Amvera sync.
