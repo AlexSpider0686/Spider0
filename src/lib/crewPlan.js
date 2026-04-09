@@ -1,4 +1,5 @@
 import { buildProjectTimeline } from "./projectTimeline.js";
+import { repairTextTree } from "./textEncoding.js";
 
 function n(value, fallback = 0) {
   const parsed = Number(value);
@@ -209,7 +210,7 @@ export function buildProjectCrewPlan(systemResults = [], objectData = {}, totals
   const designDurationDays = Math.max(n(timeline?.phaseMap?.design?.duration, 0), 1);
   const productiveHoursPerPersonDay = 6.8;
 
-  return {
+  return repairTextTree({
     methodology:
       "РЎРѕСЃС‚Р°РІ Р±СЂРёРіР°Рґ СЂР°СЃСЃС‡РёС‚Р°РЅ РїРѕ С‚СЂСѓРґРѕРµРјРєРѕСЃС‚Рё РЎРњР , РџРќР  Рё РїСЂРѕРµРєС‚РёСЂРѕРІР°РЅРёСЏ, РєР°Р»РµРЅРґР°СЂРЅРѕР№ РґР»РёС‚РµР»СЊРЅРѕСЃС‚Рё С„Р°Р·, РєР°Р±РµР»СЊРЅРѕР№ РЅР°СЃС‹С‰РµРЅРЅРѕСЃС‚Рё, РёРЅС‚РµРіСЂР°С†РёРѕРЅРЅС‹Рј С‚РѕС‡РєР°Рј Рё С‚СЂРµР±СѓРµРјРѕРјСѓ РїРёРєРѕРІРѕРјСѓ СЂРµСЃСѓСЂСЃСѓ. РџСЂРёРЅСЏС‚Р° РїСЂРѕРёР·РІРѕРґРёС‚РµР»СЊРЅР°СЏ СЃРјРµРЅР° 6,8 С‡/С‡РµР». РІ РґРµРЅСЊ СЃ СЂР°Р·РґРµР»РµРЅРёРµРј СЂРѕР»РµР№ РїРѕ РІРёРґР°Рј СЂР°Р±РѕС‚.",
     drivers: {
@@ -247,5 +248,5 @@ export function buildProjectCrewPlan(systemResults = [], objectData = {}, totals
       `РџСЂРѕРµРєС‚РЅС‹Р№ РєРѕРЅС‚СѓСЂ: ${designTeam.map((item) => `${item.label} ${item.count}`).join(", ") || "РЅРµ С‚СЂРµР±СѓРµС‚СЃСЏ"}.`,
       `Р”СЂР°Р№РІРµСЂС‹ СЂР°СЃС‡РµС‚Р°: ${systemCount} СЃРёСЃС‚РµРј, ${round1(objectArea)} Рј2, ${round1(cableLength)} Рј РєР°Р±РµР»СЏ, ${round1(integrationPoints)} С‚РѕС‡РµРє РёРЅС‚РµРіСЂР°С†РёРё.`,
     ],
-  };
+  });
 }
