@@ -1,4 +1,4 @@
-import { toNumber } from "./estimate";
+import { toNumber } from "./estimate.js";
 
 function n(value, fallback = 0) {
   const normalized = Number(value);
