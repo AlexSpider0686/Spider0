@@ -1,6 +1,6 @@
-import { toNumber } from "./estimate";
-import { resolveVendorEquipment } from "../config/vendorResolver";
-import { repairUtf8Cp1251Mojibake } from "./textEncoding";
+import { toNumber } from "./estimate.js";
+import { resolveVendorEquipment } from "../config/vendorResolver.js";
+import { repairUtf8Cp1251Mojibake } from "./textEncoding.js";
 
 const MARKET_KEY_ALIASES = {
   camera: ["cameras", "camera"],

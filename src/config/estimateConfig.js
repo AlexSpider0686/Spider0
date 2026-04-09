@@ -1,8 +1,8 @@
 import { Camera, Shield, Lock, Cpu, Bell, Siren } from "lucide-react";
-import vendors, { getVendorNames } from "./vendorsConfig";
-import { getDefaultEquipmentProfiles } from "./equipmentCatalog";
-import { APP_VERSION, SYSTEM_BUILD_NUMBER } from "./buildInfo";
-import { repairTextTree, repairUtf8Cp1251Mojibake } from "../lib/textEncoding";
+import vendors, { getVendorNames } from "./vendorsConfig.js";
+import { getDefaultEquipmentProfiles } from "./equipmentCatalog.js";
+import { APP_VERSION, SYSTEM_BUILD_NUMBER } from "./buildInfo.js";
+import { repairTextTree, repairUtf8Cp1251Mojibake } from "../lib/textEncoding.js";
 
 export const BUILD_NUMBER = SYSTEM_BUILD_NUMBER;
 export const APP_VERSION_LABEL = APP_VERSION;

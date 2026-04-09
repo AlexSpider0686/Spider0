@@ -1,4 +1,4 @@
-import { repairUtf8Cp1251Mojibake } from "../lib/textEncoding";
+import { repairUtf8Cp1251Mojibake } from "../lib/textEncoding.js";
 
 function repairCatalogNode(value) {
   if (Array.isArray(value)) {

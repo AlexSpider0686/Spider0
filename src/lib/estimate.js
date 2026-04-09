@@ -1,9 +1,9 @@
-import { BASE_RATES, OBJECT_TYPES, SYSTEM_TYPES } from "../config/estimateConfig";
-import { getVendorByName } from "../config/vendorsConfig";
-import { getEquipmentForSystem } from "../config/equipmentCatalog";
-import { getZoneRateProfile } from "../config/zonesConfig";
-import { calculateEquipment } from "./equipment";
-import { getRegionCoef } from "../config/regionsConfig";
+import { BASE_RATES, OBJECT_TYPES, SYSTEM_TYPES } from "../config/estimateConfig.js";
+import { getVendorByName } from "../config/vendorsConfig.js";
+import { getEquipmentForSystem } from "../config/equipmentCatalog.js";
+import { getZoneRateProfile } from "../config/zonesConfig.js";
+import { calculateEquipment } from "./equipment.js";
+import { getRegionCoef } from "../config/regionsConfig.js";
 
 export function toNumber(value, fallback = 0) {
   const parsed = Number(value);

@@ -1,4 +1,4 @@
-import { repairTextTree } from "../lib/textEncoding";
+import { repairTextTree } from "../lib/textEncoding.js";
 
 const vendors = repairTextTree({
   sot: [
