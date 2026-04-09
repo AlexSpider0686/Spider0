@@ -37,9 +37,7 @@ function splitHeadcount(roles, targetHeadcount) {
     if (remaining <= 0) return;
     const hardCap = Math.max(Math.round(n(role.maxCount, safeTarget || 1)), role.count);
     const suggested =
-      index === normalized.length - 1
-        ? remaining
-        : Math.max(0, Math.round((remaining * role.weight) / weightTotal));
+      index === normalized.length - 1 ? remaining : Math.max(0, Math.round((remaining * role.weight) / weightTotal));
     const extra = clamp(suggested, 0, Math.max(hardCap - role.count, 0));
     role.count += extra;
     remaining -= extra;
@@ -68,6 +66,29 @@ function splitHeadcount(roles, targetHeadcount) {
     }));
 }
 
+function buildFieldRolesFromResults(systemResults = []) {
+  const aggregated = new Map();
+
+  (Array.isArray(systemResults) ? systemResults : []).forEach((row) => {
+    (row?.executionRoles || []).forEach((role) => {
+      const current = aggregated.get(role.role) || { role: role.role, label: role.label, count: 0 };
+      current.count += Math.max(Math.round(n(role.count, 0)), 0);
+      aggregated.set(role.role, current);
+    });
+  });
+
+  const totalCount = Array.from(aggregated.values()).reduce((total, role) => total + role.count, 0);
+  if (!totalCount) return [];
+
+  return Array.from(aggregated.values())
+    .filter((role) => role.count > 0)
+    .sort((left, right) => right.count - left.count)
+    .map((role) => ({
+      ...role,
+      sharePercent: round1((role.count / Math.max(totalCount, 1)) * 100),
+    }));
+}
+
 function buildSystemCrewRows(systemResults = []) {
   return (Array.isArray(systemResults) ? systemResults : [])
     .map((row, index) => {
@@ -78,29 +99,36 @@ function buildSystemCrewRows(systemResults = []) {
       const primaryUnits = n(labor.primaryUnits, 0);
       const peakCrew = Math.max(Math.round(n(row?.executionTeamSize, 0)), 0);
       const durationDays = Math.max(Math.round(n(row?.executionDurationDays, 0)), 0);
-      const commissioningCount = peakCrew > 0 ? Math.max(1, Math.min(2, Math.ceil((integrationPoints + controllers) / 18))) : 0;
-      const foremen = peakCrew > 0 ? 1 : 0;
-      const installers = Math.max(peakCrew - foremen - commissioningCount, 0);
+      const roleMap = new Map((row?.executionRoles || []).map((item) => [item.role, Math.max(Math.round(n(item.count, 0)), 0)]));
+      const foremen = roleMap.get("foreman") ?? (peakCrew > 0 ? 1 : 0);
+      const leadInstaller = roleMap.get("leadInstaller") ?? 0;
+      const installers = (roleMap.get("installer") ?? Math.max(peakCrew - foremen, 0)) + leadInstaller;
+      const cableInstallers = roleMap.get("cableInstaller") ?? 0;
+      const commissioningCount =
+        roleMap.get("commissioning") ??
+        (peakCrew > 0 ? Math.max(1, Math.min(2, Math.ceil((integrationPoints + controllers) / 18))) : 0);
       const cableShare = cableLength > 0 && primaryUnits > 0 ? Math.min(100, Math.round((cableLength / Math.max(primaryUnits, 1)) * 3.5)) : 0;
+
       return {
-        systemName: String(row?.systemName || row?.systemType || `Система ${index + 1}`),
+        systemName: String(row?.systemName || row?.systemType || `РЎРёСЃС‚РµРјР° ${index + 1}`),
         peakCrew,
         durationDays,
         commissioningCount,
         leadRoles:
           peakCrew <= 0
-            ? "Ресурс не требуется"
+            ? "Р РµСЃСѓСЂСЃ РЅРµ С‚СЂРµР±СѓРµС‚СЃСЏ"
             : [
-                foremen ? `${foremen} прораб` : "",
-                installers ? `${installers} монтажн.` : "",
-                commissioningCount ? `${commissioningCount} инженер ПНР` : "",
+                foremen ? `${foremen} РїСЂРѕСЂР°Р±` : "",
+                installers ? `${installers} РјРѕРЅС‚Р°Р¶РЅ.` : "",
+                cableInstallers ? `${cableInstallers} РєР°Р±РµР»СЊС‰.` : "",
+                commissioningCount ? `${commissioningCount} РёРЅР¶РµРЅРµСЂ РџРќР ` : "",
               ]
                 .filter(Boolean)
                 .join(", "),
         complexityNote:
           integrationPoints > 0
-            ? `Интеграционных точек: ${integrationPoints}, кабельная насыщенность: ${cableShare}%`
-            : `Контроллеров: ${controllers}, извещателей/точек: ${primaryUnits}`,
+            ? `РРЅС‚РµРіСЂР°С†РёРѕРЅРЅС‹С… С‚РѕС‡РµРє: ${integrationPoints}, РєР°Р±РµР»СЊРЅР°СЏ РЅР°СЃС‹С‰РµРЅРЅРѕСЃС‚СЊ: ${cableShare}%`
+            : `РљРѕРЅС‚СЂРѕР»Р»РµСЂРѕРІ: ${controllers}, РёР·РІРµС‰Р°С‚РµР»РµР№/С‚РѕС‡РµРє: ${primaryUnits}`,
       };
     })
     .sort((left, right) => right.peakCrew - left.peakCrew || right.durationDays - left.durationDays);
@@ -142,16 +170,20 @@ export function buildProjectCrewPlan(systemResults = [], objectData = {}, totals
     commissioning: 0.9 + Math.min((integrationPoints + controllers) / 25, 1.7),
   };
 
-  const fieldTeam = splitHeadcount(
-    [
-      { role: "foreman", label: "Прораб", minCount: peakFieldTeam > 0 ? 1 : 0, maxCount: 2, weight: fieldRoleWeights.foreman },
-      { role: "leadInstaller", label: "Старший монтажник", minCount: peakFieldTeam >= 4 ? 1 : 0, maxCount: 2, weight: fieldRoleWeights.leadInstaller },
-      { role: "installer", label: "Монтажник", minCount: peakFieldTeam > 0 ? 1 : 0, maxCount: Math.max(peakFieldTeam, 1), weight: fieldRoleWeights.installer },
-      { role: "cableInstaller", label: "Кабельщик/трассировщик", minCount: peakFieldTeam >= 5 || cableLength > 1800 ? 1 : 0, maxCount: Math.max(Math.ceil(peakFieldTeam / 2), 1), weight: fieldRoleWeights.cableInstaller },
-      { role: "commissioning", label: "Инженер ПНР", minCount: executionHours > 0 ? 1 : 0, maxCount: 3, weight: fieldRoleWeights.commissioning },
-    ],
-    peakFieldTeam
-  );
+  const fieldRolesFromResults = buildFieldRolesFromResults(normalizedResults);
+  const fieldTeam =
+    fieldRolesFromResults.length > 0
+      ? fieldRolesFromResults
+      : splitHeadcount(
+      [
+        { role: "foreman", label: "РџСЂРѕСЂР°Р±", minCount: peakFieldTeam > 0 ? 1 : 0, maxCount: 2, weight: fieldRoleWeights.foreman },
+        { role: "leadInstaller", label: "РЎС‚Р°СЂС€РёР№ РјРѕРЅС‚Р°Р¶РЅРёРє", minCount: peakFieldTeam >= 4 ? 1 : 0, maxCount: 2, weight: fieldRoleWeights.leadInstaller },
+        { role: "installer", label: "РњРѕРЅС‚Р°Р¶РЅРёРє", minCount: peakFieldTeam > 0 ? 1 : 0, maxCount: Math.max(peakFieldTeam, 1), weight: fieldRoleWeights.installer },
+        { role: "cableInstaller", label: "РљР°Р±РµР»СЊС‰РёРє/С‚СЂР°СЃСЃРёСЂРѕРІС‰РёРє", minCount: peakFieldTeam >= 5 || cableLength > 1800 ? 1 : 0, maxCount: Math.max(Math.ceil(peakFieldTeam / 2), 1), weight: fieldRoleWeights.cableInstaller },
+        { role: "commissioning", label: "РРЅР¶РµРЅРµСЂ РџРќР ", minCount: executionHours > 0 ? 1 : 0, maxCount: 3, weight: fieldRoleWeights.commissioning },
+      ],
+      peakFieldTeam
+    );
 
   const designRoleWeights = {
     chief: 0.9 + Math.min(systemCount / 6, 0.5),
@@ -163,11 +195,11 @@ export function buildProjectCrewPlan(systemResults = [], objectData = {}, totals
 
   const designTeam = splitHeadcount(
     [
-      { role: "chief", label: "ГИП/ведущий инженер", minCount: designHours > 0 ? 1 : 0, maxCount: 2, weight: designRoleWeights.chief },
-      { role: "lead", label: "Ведущий проектировщик", minCount: designHours > 0 ? 1 : 0, maxCount: 2, weight: designRoleWeights.lead },
-      { role: "designer", label: "Инженер-проектировщик", minCount: designHours > 0 ? 1 : 0, maxCount: Math.max(peakDesignTeam, 1), weight: designRoleWeights.designer },
-      { role: "bim", label: "BIM/CAD специалист", minCount: peakDesignTeam >= 3 || objectArea > 12000 ? 1 : 0, maxCount: 2, weight: designRoleWeights.bim },
-      { role: "estimate", label: "Сметчик", minCount: designHours > 0 ? 1 : 0, maxCount: 1, weight: designRoleWeights.estimate },
+      { role: "chief", label: "Р“РРџ/РІРµРґСѓС‰РёР№ РёРЅР¶РµРЅРµСЂ", minCount: designHours > 0 ? 1 : 0, maxCount: 2, weight: designRoleWeights.chief },
+      { role: "lead", label: "Р’РµРґСѓС‰РёР№ РїСЂРѕРµРєС‚РёСЂРѕРІС‰РёРє", minCount: designHours > 0 ? 1 : 0, maxCount: 2, weight: designRoleWeights.lead },
+      { role: "designer", label: "РРЅР¶РµРЅРµСЂ-РїСЂРѕРµРєС‚РёСЂРѕРІС‰РёРє", minCount: designHours > 0 ? 1 : 0, maxCount: Math.max(peakDesignTeam, 1), weight: designRoleWeights.designer },
+      { role: "bim", label: "BIM/CAD СЃРїРµС†РёР°Р»РёСЃС‚", minCount: peakDesignTeam >= 3 || objectArea > 12000 ? 1 : 0, maxCount: 2, weight: designRoleWeights.bim },
+      { role: "estimate", label: "РЎРјРµС‚С‡РёРє", minCount: designHours > 0 ? 1 : 0, maxCount: 1, weight: designRoleWeights.estimate },
     ],
     peakDesignTeam
   );
@@ -179,7 +211,7 @@ export function buildProjectCrewPlan(systemResults = [], objectData = {}, totals
 
   return {
     methodology:
-      "Состав бригад рассчитан по трудоемкости СМР, ПНР и проектирования, календарной длительности фаз, кабельной насыщенности, интеграционным точкам и требуемому пиковому ресурсу. Принята производительная смена 6,8 ч/чел. в день с разделением ролей по видам работ.",
+      "РЎРѕСЃС‚Р°РІ Р±СЂРёРіР°Рґ СЂР°СЃСЃС‡РёС‚Р°РЅ РїРѕ С‚СЂСѓРґРѕРµРјРєРѕСЃС‚Рё РЎРњР , РџРќР  Рё РїСЂРѕРµРєС‚РёСЂРѕРІР°РЅРёСЏ, РєР°Р»РµРЅРґР°СЂРЅРѕР№ РґР»РёС‚РµР»СЊРЅРѕСЃС‚Рё С„Р°Р·, РєР°Р±РµР»СЊРЅРѕР№ РЅР°СЃС‹С‰РµРЅРЅРѕСЃС‚Рё, РёРЅС‚РµРіСЂР°С†РёРѕРЅРЅС‹Рј С‚РѕС‡РєР°Рј Рё С‚СЂРµР±СѓРµРјРѕРјСѓ РїРёРєРѕРІРѕРјСѓ СЂРµСЃСѓСЂСЃСѓ. РџСЂРёРЅСЏС‚Р° РїСЂРѕРёР·РІРѕРґРёС‚РµР»СЊРЅР°СЏ СЃРјРµРЅР° 6,8 С‡/С‡РµР». РІ РґРµРЅСЊ СЃ СЂР°Р·РґРµР»РµРЅРёРµРј СЂРѕР»РµР№ РїРѕ РІРёРґР°Рј СЂР°Р±РѕС‚.",
     drivers: {
       objectArea,
       systemCount,
@@ -209,11 +241,11 @@ export function buildProjectCrewPlan(systemResults = [], objectData = {}, totals
     },
     systemCrewRows: buildSystemCrewRows(normalizedResults),
     summaryLines: [
-      `Пиковая монтажная бригада: ${peakFieldTeam} чел. при среднем ресурсе ${avgExecutionTeam || peakFieldTeam || 0} чел. на фазе СМР.`,
-      `Состав монтажного ресурса: ${fieldTeam.map((item) => `${item.label} ${item.count}`).join(", ") || "не требуется"}.`,
-      `Контур ПНР: ${fieldTeam.filter((item) => item.role === "commissioning").map((item) => `${item.label} ${item.count}`).join(", ") || "инженер ПНР не требуется"}.`,
-      `Проектный контур: ${designTeam.map((item) => `${item.label} ${item.count}`).join(", ") || "не требуется"}.`,
-      `Драйверы расчета: ${systemCount} систем, ${round1(objectArea)} м2, ${round1(cableLength)} м кабеля, ${round1(integrationPoints)} точек интеграции.`,
+      `РџРёРєРѕРІР°СЏ РјРѕРЅС‚Р°Р¶РЅР°СЏ Р±СЂРёРіР°РґР°: ${peakFieldTeam} С‡РµР». РїСЂРё СЃСЂРµРґРЅРµРј СЂРµСЃСѓСЂСЃРµ ${avgExecutionTeam || peakFieldTeam || 0} С‡РµР». РЅР° С„Р°Р·Рµ РЎРњР .`,
+      `РЎРѕСЃС‚Р°РІ РјРѕРЅС‚Р°Р¶РЅРѕРіРѕ СЂРµСЃСѓСЂСЃР°: ${fieldTeam.map((item) => `${item.label} ${item.count}`).join(", ") || "РЅРµ С‚СЂРµР±СѓРµС‚СЃСЏ"}.`,
+      `РљРѕРЅС‚СѓСЂ РџРќР : ${fieldTeam.filter((item) => item.role === "commissioning").map((item) => `${item.label} ${item.count}`).join(", ") || "РёРЅР¶РµРЅРµСЂ РџРќР  РЅРµ С‚СЂРµР±СѓРµС‚СЃСЏ"}.`,
+      `РџСЂРѕРµРєС‚РЅС‹Р№ РєРѕРЅС‚СѓСЂ: ${designTeam.map((item) => `${item.label} ${item.count}`).join(", ") || "РЅРµ С‚СЂРµР±СѓРµС‚СЃСЏ"}.`,
+      `Р”СЂР°Р№РІРµСЂС‹ СЂР°СЃС‡РµС‚Р°: ${systemCount} СЃРёСЃС‚РµРј, ${round1(objectArea)} Рј2, ${round1(cableLength)} Рј РєР°Р±РµР»СЏ, ${round1(integrationPoints)} С‚РѕС‡РµРє РёРЅС‚РµРіСЂР°С†РёРё.`,
     ],
   };
 }

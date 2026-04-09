@@ -414,7 +414,7 @@ export default function BudgetStep({ budget, updateBudget, objectData, effective
         </div>
       </div>
 
-      <div className="calc-explain" style={{ marginTop: 18 }}>
+      {false ? <div className="calc-explain" style={{ marginTop: 18 }}>
         <h3>Характеристика бюджета</h3>
         <p className="hint-inline">{crewPlan.methodology}</p>
 
@@ -484,7 +484,7 @@ export default function BudgetStep({ budget, updateBudget, objectData, effective
             ))}
           </div>
         </div>
-      </div>
+      </div> : null}
     </section>
   );
 }

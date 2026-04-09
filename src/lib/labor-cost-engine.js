@@ -10,6 +10,10 @@ function pct(value) {
   return Math.max(toNumber(value, 0), 0) / 100;
 }
 
+function round1(value) {
+  return Number(toNumber(value, 0).toFixed(1));
+}
+
 function calcCharges(baseValue, budget) {
   const overhead = baseValue * pct(budget.overheadPercent);
   const payrollTaxes = baseValue * pct(budget.payrollTaxesPercent);
@@ -61,13 +65,212 @@ function calculateWorkTotals(baseValue, conditionFactor, exploitedFactor, region
   };
 }
 
-function estimateExecutionSchedule(executionHours) {
-  const hours = Math.max(toNumber(executionHours, 0), 0);
-  const crewSize = clamp(Math.ceil(hours / 180), 2, 18);
-  const executionDays = Math.max(1, Math.ceil(hours / Math.max(crewSize * 8, 1)));
-  const executionMonths = Math.max(1, Math.ceil(executionDays / 22));
+function splitHeadcount(roles, targetHeadcount) {
+  const activeRoles = roles.filter((item) => item.enabled !== false);
+  if (!activeRoles.length) return [];
 
-  return { crewSize, executionDays, executionMonths };
+  const safeTarget = Math.max(Math.round(toNumber(targetHeadcount, 0)), 0);
+  const minRequired = activeRoles.reduce((total, role) => total + Math.max(Math.round(toNumber(role.minCount, 0)), 0), 0);
+  let remaining = Math.max(safeTarget, minRequired) - minRequired;
+
+  const normalized = activeRoles.map((role) => ({
+    ...role,
+    count: Math.max(Math.round(toNumber(role.minCount, 0)), 0),
+    weight: Math.max(toNumber(role.weight, 0), 0),
+  }));
+
+  const weightTotal = normalized.reduce((total, role) => total + role.weight, 0) || 1;
+
+  normalized.forEach((role, index) => {
+    if (remaining <= 0) return;
+    const hardCap = Math.max(Math.round(toNumber(role.maxCount, safeTarget || 1)), role.count);
+    const suggested =
+      index === normalized.length - 1 ? remaining : Math.max(0, Math.round((remaining * role.weight) / weightTotal));
+    const extra = clamp(suggested, 0, Math.max(hardCap - role.count, 0));
+    role.count += extra;
+    remaining -= extra;
+  });
+
+  while (remaining > 0) {
+    const nextRole =
+      normalized
+        .filter((role) => role.count < Math.max(Math.round(toNumber(role.maxCount, safeTarget || 1)), role.count))
+        .sort((left, right) => right.weight - left.weight)[0] || null;
+    if (!nextRole) break;
+    nextRole.count += 1;
+    remaining -= 1;
+  }
+
+  return normalized.filter((role) => role.count > 0);
+}
+
+function buildExecutionStaffingPlan({
+  executionHours,
+  cableLengthM,
+  integrationPoints,
+  controllerUnits,
+  primaryUnits,
+  routeComplexity = 1,
+  executionRoleOverrides = {},
+}) {
+  const hours = Math.max(toNumber(executionHours, 0), 0);
+  if (hours <= 0) {
+    return {
+      recommendedTeamSize: 0,
+      teamSize: 0,
+      executionDaysExact: 0,
+      executionDays: 0,
+      executionMonths: 0,
+      teamRatio: 0,
+      throughputFactor: 0,
+      staffingCostFactor: 1,
+      weightedCostIndex: 0,
+      effectiveDailyCapacity: 0,
+      productiveHoursPerPersonDay: 0,
+      recommendedRoles: [],
+      roles: [],
+    };
+  }
+
+  const complexityFactor =
+    1 +
+    Math.max(toNumber(routeComplexity, 1) - 1, 0) * 0.18 +
+    Math.min(integrationPoints / 40, 0.2) +
+    Math.min(controllerUnits / 60, 0.16) +
+    Math.min(cableLengthM / 6000, 0.14);
+  const recommendedTeamSize = clamp(Math.ceil((hours / 165) * complexityFactor), 2, 18);
+
+  const roleDefinitions = [
+    {
+      role: "foreman",
+      label: "Прораб",
+      minCount: 1,
+      maxCount: 2,
+      weight: 1.05 + Math.min(integrationPoints / 40, 0.45),
+      productivity: 4.6,
+      costRate: 1.45,
+    },
+    {
+      role: "leadInstaller",
+      label: "Старший монтажник",
+      minCount: recommendedTeamSize >= 4 ? 1 : 0,
+      maxCount: 2,
+      weight: 0.9 + Math.min(primaryUnits / 300, 0.6),
+      productivity: 6,
+      costRate: 1.22,
+    },
+    {
+      role: "installer",
+      label: "Монтажник",
+      minCount: 1,
+      maxCount: Math.max(recommendedTeamSize, 1),
+      weight: 2 + Math.max(toNumber(routeComplexity, 1) - 1, 0) * 1.9,
+      productivity: 6.8,
+      costRate: 1,
+    },
+    {
+      role: "cableInstaller",
+      label: "Кабельщик/трассировщик",
+      minCount: recommendedTeamSize >= 5 || cableLengthM > 1800 ? 1 : 0,
+      maxCount: Math.max(Math.ceil(recommendedTeamSize / 2), 1),
+      weight: 0.8 + Math.min(cableLengthM / 2400, 1.6),
+      productivity: 6.5,
+      costRate: 1.08,
+    },
+    {
+      role: "commissioning",
+      label: "Инженер ПНР",
+      minCount: integrationPoints > 0 || controllerUnits > 0 ? 1 : 0,
+      maxCount: 3,
+      weight: 0.95 + Math.min((integrationPoints + controllerUnits) / 25, 1.5),
+      productivity: 5.8,
+      costRate: 1.38,
+    },
+  ];
+
+  const recommendedRoles = splitHeadcount(roleDefinitions, recommendedTeamSize);
+  const recommendedRoleMap = new Map(recommendedRoles.map((role) => [role.role, role]));
+  const roles = roleDefinitions
+    .map((definition) => {
+      const recommended = recommendedRoleMap.get(definition.role);
+      const rawOverride = executionRoleOverrides?.[definition.role];
+      const hasOverride = rawOverride !== null && rawOverride !== undefined && rawOverride !== "" && Number.isFinite(Number(rawOverride));
+      const recommendedCount = Math.max(Math.round(toNumber(recommended?.count, definition.minCount)), 0);
+      const count = clamp(
+        hasOverride ? Math.round(Number(rawOverride)) : recommendedCount,
+        0,
+        Math.max(Math.round(toNumber(definition.maxCount, recommendedTeamSize || 1)), recommendedCount, 1)
+      );
+
+      return {
+        role: definition.role,
+        label: definition.label,
+        count,
+        recommendedCount,
+        productivity: definition.productivity,
+        costRate: definition.costRate,
+      };
+    })
+    .filter((role) => role.count > 0);
+
+  const teamSize = Math.max(roles.reduce((total, role) => total + role.count, 0), 1);
+  const recommendedWeightedCost =
+    recommendedRoles.reduce((total, role) => total + role.count * toNumber(role.costRate, 1), 0) / Math.max(recommendedTeamSize, 1);
+  const weightedCostIndex =
+    roles.reduce((total, role) => total + role.count * role.costRate, 0) / Math.max(teamSize, 1) / Math.max(recommendedWeightedCost || 1, 0.001);
+  const teamRatio = teamSize / Math.max(recommendedTeamSize, 1);
+  const missingLeadPenalty = roles.some((role) => role.role === "leadInstaller") ? 0 : recommendedTeamSize >= 4 ? 0.07 : 0;
+  const missingCommissioningPenalty =
+    integrationPoints > 0 && !roles.some((role) => role.role === "commissioning") ? 0.12 : 0;
+  const throughputFactor = clamp(
+    1 -
+      Math.max(teamSize - recommendedTeamSize, 0) * 0.02 -
+      Math.max(recommendedTeamSize - teamSize, 0) * 0.03 -
+      missingLeadPenalty -
+      missingCommissioningPenalty,
+    0.68,
+    1.04
+  );
+  const effectiveDailyCapacity = Math.max(
+    roles.reduce((total, role) => total + role.count * role.productivity, 0) * throughputFactor,
+    1
+  );
+  const executionDaysExact = hours / effectiveDailyCapacity;
+  const executionDays = Math.max(1, Math.ceil(executionDaysExact));
+  const executionMonths = Math.max(1, Math.ceil(executionDays / 22));
+  const productiveHoursPerPersonDay = effectiveDailyCapacity / Math.max(teamSize, 1);
+  const staffingCostFactor = clamp(
+    weightedCostIndex *
+      (0.96 + Math.max(teamSize - 1, 0) * 0.024 + Math.max(teamSize - recommendedTeamSize, 0) * 0.028) *
+      (1 + Math.max(1 - throughputFactor, 0) * 0.55),
+    0.9,
+    1.42
+  );
+
+  return {
+    recommendedTeamSize,
+    teamSize,
+    executionDaysExact,
+    executionDays,
+    executionMonths,
+    teamRatio,
+    throughputFactor,
+    staffingCostFactor,
+    weightedCostIndex,
+    effectiveDailyCapacity,
+    productiveHoursPerPersonDay,
+    recommendedRoles: recommendedRoles.map((role) => ({
+      role: role.role,
+      label: role.label,
+      count: role.count,
+    })),
+    roles: roles.map((role) => ({
+      role: role.role,
+      label: role.label,
+      count: role.count,
+      recommendedCount: role.recommendedCount,
+    })),
+  };
 }
 
 function buildDesignStaffingPlan(designHours, designTeamOverride = null) {
@@ -131,6 +334,7 @@ export function calculateLaborCost({
   executionHoursOverride = null,
   designHoursOverride = null,
   designTeamOverride = null,
+  executionRoleOverrides = null,
   projectMode = false,
   skipDesignPricing = false,
 }) {
@@ -197,8 +401,25 @@ export function calculateLaborCost({
     computedWorkBase,
     Math.max(projectWorkBase, marketFloorBase, computedWorkBase) * 1.32
   );
+
+  const computedExecutionHours =
+    primaryUnits * 0.3 + controllerUnits * 0.65 + cableLengthM * 0.015 + integrationPoints * 0.55 + knsWorkUnits * 0.1;
+  const safeExecutionHours =
+    executionHoursOverride === null || executionHoursOverride === undefined || executionHoursOverride === ""
+      ? Math.max(computedExecutionHours, 0)
+      : Math.max(toNumber(executionHoursOverride, computedExecutionHours), 0);
+  const executionStaffingPlan = buildExecutionStaffingPlan({
+    executionHours: safeExecutionHours,
+    cableLengthM,
+    integrationPoints,
+    controllerUnits,
+    primaryUnits,
+    routeComplexity: coefficientLayer?.conditionLaborFactorRaw || coefficientLayer?.conditionLaborFactor || 1,
+    executionRoleOverrides,
+  });
+  const effectiveWorkBase = workBase * executionStaffingPlan.staffingCostFactor;
   const { workAfterConditions, workChargesBeforeRegion, workTotalBeforeRegion, workTotal } = calculateWorkTotals(
-    workBase,
+    effectiveWorkBase,
     conditionFactor,
     exploitedFactor,
     regionalFactor,
@@ -250,13 +471,6 @@ export function calculateLaborCost({
   const designTotalBeforeRegion = skipDesignPricing ? 0 : designBase + designChargesBeforeRegion.total;
   const designTotal = skipDesignPricing ? 0 : designTotalBeforeRegion * regionalFactor;
 
-  const computedExecutionHours =
-    primaryUnits * 0.3 + controllerUnits * 0.65 + cableLengthM * 0.015 + integrationPoints * 0.55 + knsWorkUnits * 0.1;
-  const safeExecutionHours =
-    executionHoursOverride === null || executionHoursOverride === undefined || executionHoursOverride === ""
-      ? Math.max(computedExecutionHours, 0)
-      : Math.max(toNumber(executionHoursOverride, computedExecutionHours), 0);
-  const workSchedule = estimateExecutionSchedule(safeExecutionHours);
   const designSchedule = skipDesignPricing
     ? {
         recommendedTeamSize: 0,
@@ -272,6 +486,7 @@ export function calculateLaborCost({
 
   return {
     workBase,
+    effectiveWorkBase,
     projectWorkBase,
     marketFloorBase,
     workAfterConditions,
@@ -315,6 +530,7 @@ export function calculateLaborCost({
       conditionFactor,
       exploitedFactor,
       regionalFactor,
+      staffingCostFactor: executionStaffingPlan.staffingCostFactor,
     },
     marketGuard: {
       minBaseFactor: toNumber(marketGuardrail.minBaseFactor, 1),
@@ -349,7 +565,20 @@ export function calculateLaborCost({
     markerUnits,
     markerCostPerUnit,
     executionHours: safeExecutionHours,
-    ...workSchedule,
+    crewSize: executionStaffingPlan.teamSize,
+    executionTeamSize: executionStaffingPlan.teamSize,
+    executionRecommendedTeamSize: executionStaffingPlan.recommendedTeamSize,
+    executionDays: executionStaffingPlan.executionDays,
+    executionDaysExact: executionStaffingPlan.executionDaysExact,
+    executionMonths: executionStaffingPlan.executionMonths,
+    executionTeamRatio: executionStaffingPlan.teamRatio,
+    executionThroughputFactor: executionStaffingPlan.throughputFactor,
+    executionProductiveHoursPerPersonDay: round1(executionStaffingPlan.productiveHoursPerPersonDay),
+    executionDailyCapacity: round1(executionStaffingPlan.effectiveDailyCapacity),
+    executionStaffingCostFactor: executionStaffingPlan.staffingCostFactor,
+    executionWeightedCostIndex: round1(executionStaffingPlan.weightedCostIndex),
+    executionRoles: executionStaffingPlan.roles,
+    executionRecommendedRoles: executionStaffingPlan.recommendedRoles,
     ...designSchedule,
   };
 }

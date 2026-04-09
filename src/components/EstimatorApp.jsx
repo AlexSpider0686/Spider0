@@ -46,7 +46,7 @@ export default function EstimatorApp() {
     { key: "design", label: t("РџСЂРѕРµРєС‚РёСЂРѕРІР°РЅРёРµ"), icon: Ruler },
     { key: "norms", label: "Нормативные требования", icon: Scale },
     { key: "budget", label: t("Р‘СЋРґР¶РµС‚"), icon: Wallet },
-    { key: "breakdown", label: t("РЎС‚РѕРёРјРѕСЃС‚СЊ РїСЂРѕРµРєС‚Р°"), icon: PieChart },
+    { key: "breakdown", label: "Расчет ресурса", icon: PieChart },
     { key: "logic", label: t("Р›РѕРіРёРєР° СЂР°СЃС‡РµС‚РѕРІ"), icon: FileText },
     { key: "risks", label: t("AI-СЂРёСЃРєРё РїСЂРѕРµРєС‚Р°"), icon: ShieldAlert },
   ];
@@ -164,7 +164,16 @@ export default function EstimatorApp() {
         {vm.step === 2 ? <ProjectDesignStep {...vm} /> : null}
         {vm.step === 3 ? <NormativeRequirementsStep {...vm} /> : null}
         {vm.step === 4 ? <BudgetStep {...vm} /> : null}
-        {vm.step === 5 ? <CostBreakdownStep systemResults={vm.systemResults} totals={vm.totals} /> : null}
+        {vm.step === 5 ? (
+          <CostBreakdownStep
+            systems={vm.systems}
+            updateSystem={vm.updateSystem}
+            systemResults={vm.systemResults}
+            totals={vm.totals}
+            objectData={vm.objectData}
+            effectiveObjectData={vm.effectiveObjectData}
+          />
+        ) : null}
         {vm.step === 6 ? <CalculationLogicStep {...vm} /> : null}
         {vm.step === 7 ? <ProjectRisksStep projectRisks={vm.projectRisks} /> : null}
 
