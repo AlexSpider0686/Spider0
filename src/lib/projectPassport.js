@@ -140,7 +140,7 @@ function buildPassportHtml(snapshot, options = {}) {
       <tr><td>Зон</td><td>${escapeHtml((snapshot?.zones || []).length)}</td></tr>
       <tr><td>Фотоматериалов</td><td>${escapeHtml(photoCount)}</td></tr>
       <tr><td>Суточные, руб./чел.</td><td>${escapeHtml(snapshot?.travelEstimate?.perDiemPerPersonDay || 0)}</td></tr>
-      <tr><td>Комментарий</td><td>${escapeHtml(options?.note || "Для загрузки обратно в платформу выберите папку с этим файлом и нажмите «Загрузить паспорт проекта».")}</td></tr>
+      <tr><td>Комментарий</td><td>${escapeHtml(options?.note || "Для загрузки обратно в платформу выберите файл паспорта проекта и нажмите «Загрузить паспорт проекта».")}</td></tr>
     </table>
 
     <table>

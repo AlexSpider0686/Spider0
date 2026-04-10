@@ -253,6 +253,35 @@ const CONCRETE_MODEL_CATALOG = repairCatalogNode({
   },
 });
 
+const CONCRETE_MODEL_FALLBACK = {
+  sots: {
+    "\u0411\u043e\u043b\u0438\u0434": {
+      sensor: {
+        "\u0418\u041a": "\u04212000-\u0418\u041a \u0438\u0441\u043f.03",
+        "\u0418\u041a+\u0421\u0412\u0427": "\u04212000-\u0421\u0422\u0418\u041a",
+        "\u0432\u0438\u0431\u0440\u0430\u0446\u0438\u043e\u043d\u043d\u044b\u0439": "\u0428\u043e\u0440\u043e\u0445-2",
+      },
+      panel: { 2: "\u0421\u0438\u0433\u043d\u0430\u043b-20\u041f \u0438\u0441\u043f.01", 4: "\u0421\u0438\u0433\u043d\u0430\u043b-10", 8: "\u0421\u0438\u0433\u043d\u0430\u043b-20\u041c" },
+    },
+    "\u0420\u0443\u0431\u0435\u0436": {
+      sensor: {
+        "\u0418\u041a": "\u0418\u041e 409-28 \u0420\u0443\u0431\u0435\u0436",
+        "\u0418\u041a+\u0421\u0412\u0427": "\u0418\u041e 414-1 \u0420\u0443\u0431\u0435\u0436",
+        "\u0432\u0438\u0431\u0440\u0430\u0446\u0438\u043e\u043d\u043d\u044b\u0439": "\u0418\u041e 102-26 \u0438\u0441\u043f.200",
+      },
+      panel: { 2: "\u041f\u041f\u041a\u041e\u041f R3-\u0420\u0443\u0431\u0435\u0436-2\u041e\u041f", 4: "\u041f\u041f\u041a\u041e\u041f R3-\u0420\u0443\u0431\u0435\u0436-4\u041e\u041f", 8: "\u041f\u041f\u041a\u041e\u041f \u0420\u0443\u0431\u0435\u0436-20\u041f" },
+    },
+    "\u0410\u0440\u0433\u0443\u0441-\u0421\u043f\u0435\u043a\u0442\u0440": {
+      sensor: {
+        "\u0418\u041a": "\u0418\u043a\u0430\u0440-5\u0420\u0410",
+        "\u0418\u041a+\u0421\u0412\u0427": "\u0418\u043a\u0430\u0440-\u0428",
+        "\u0432\u0438\u0431\u0440\u0430\u0446\u0438\u043e\u043d\u043d\u044b\u0439": "\u0421\u0442\u0435\u043a\u043b\u043e-3",
+      },
+      panel: { 2: "\u0420\u0420\u041e\u041f2", 4: "\u0421\u0442\u0440\u0435\u043b\u0435\u0446-\u041f\u0420\u041e \u041a\u043e\u043d\u0442\u0440\u043e\u043b\u043b\u0435\u0440", 8: "\u041f\u041f\u041a\u041e\u041f \u0421\u0442\u0440\u0435\u043b\u0435\u0446-\u0418\u043d\u0442\u0435\u0433\u0440\u0430\u043b" },
+    },
+  },
+};
+
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
@@ -402,7 +431,23 @@ function appendManagementInfrastructure(details, systemType, quantityContext, ma
 }
 
 export function getConcreteModel(systemType, vendor, itemType, optionKey) {
-  return sanitizeDisplayText(CONCRETE_MODEL_CATALOG?.[systemType]?.[vendor]?.[itemType]?.[optionKey] || "");
+  const systemCatalog = CONCRETE_MODEL_CATALOG?.[systemType];
+  const fallbackSystemCatalog = CONCRETE_MODEL_FALLBACK?.[systemType];
+  if (!systemCatalog && !fallbackSystemCatalog) return "";
+
+  const normalizedVendor = sanitizeDisplayText(vendor).toLowerCase();
+  const normalizedOptionKey = sanitizeDisplayText(optionKey);
+  const resolveFromCatalog = (catalog) => {
+    if (!catalog) return "";
+    const resolvedVendorKey = Object.keys(catalog).find((key) => sanitizeDisplayText(key).toLowerCase() === normalizedVendor) || vendor;
+    const itemCatalog = catalog?.[resolvedVendorKey]?.[itemType];
+    if (!itemCatalog || typeof itemCatalog !== "object") return "";
+    const resolvedOptionKey =
+      Object.keys(itemCatalog).find((key) => sanitizeDisplayText(key) === normalizedOptionKey || String(key) === String(optionKey)) || optionKey;
+    return sanitizeDisplayText(itemCatalog?.[resolvedOptionKey] || "");
+  };
+
+  return resolveFromCatalog(systemCatalog) || resolveFromCatalog(fallbackSystemCatalog);
 }
 
 function resolveQuantity(systemType, itemType, quantityContext, fallbackQty) {
@@ -567,7 +612,27 @@ export function calculateEquipment(
 
   if (vendorMeta.sensor) {
     const kind = getValue(selectedParams.sensorKind, vendorMeta.sensor.kind[0]);
-    const model = getConcreteModel(system.type, system.vendor, "sensor", kind);
+    const sotsSensorFallback =
+      system.type === "sots"
+        ? {
+            "\u0411\u043e\u043b\u0438\u0434": {
+              "\u0418\u041a": "\u04212000-\u0418\u041a \u0438\u0441\u043f.03",
+              "\u0418\u041a+\u0421\u0412\u0427": "\u04212000-\u0421\u0422\u0418\u041a",
+              "\u0432\u0438\u0431\u0440\u0430\u0446\u0438\u043e\u043d\u043d\u044b\u0439": "\u0428\u043e\u0440\u043e\u0445-2",
+            },
+            "\u0420\u0443\u0431\u0435\u0436": {
+              "\u0418\u041a": "\u0418\u041e 409-28 \u0420\u0443\u0431\u0435\u0436",
+              "\u0418\u041a+\u0421\u0412\u0427": "\u0418\u041e 414-1 \u0420\u0443\u0431\u0435\u0436",
+              "\u0432\u0438\u0431\u0440\u0430\u0446\u0438\u043e\u043d\u043d\u044b\u0439": "\u0418\u041e 102-26 \u0438\u0441\u043f.200",
+            },
+            "\u0410\u0440\u0433\u0443\u0441-\u0421\u043f\u0435\u043a\u0442\u0440": {
+              "\u0418\u041a": "\u0418\u043a\u0430\u0440-5\u0420\u0410",
+              "\u0418\u041a+\u0421\u0412\u0427": "\u0418\u043a\u0430\u0440-\u0428",
+              "\u0432\u0438\u0431\u0440\u0430\u0446\u0438\u043e\u043d\u043d\u044b\u0439": "\u0421\u0442\u0435\u043a\u043b\u043e-3",
+            },
+          }?.[system.vendor]?.[kind] || ""
+        : "";
+    const model = getConcreteModel(system.type, system.vendor, "sensor", kind) || sotsSensorFallback;
     const basePrice = vendorMeta.sensor.basePrices[kind] || 0;
     const unitPrice = resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, MARKET_KEY_ALIASES.sensor, priceMultiplier);
     const qty = resolveQuantity(system.type, "sensor", quantityContext, Math.round(areaUnits * 9));
@@ -603,7 +668,15 @@ export function calculateEquipment(
 
   if (vendorMeta.panel) {
     const loops = Number(getValue(selectedParams.panelLoops, vendorMeta.panel.loops[1] || vendorMeta.panel.loops[0]));
-    const model = getConcreteModel(system.type, system.vendor, "panel", loops);
+    const sotsPanelFallback =
+      system.type === "sots"
+        ? {
+            "\u0411\u043e\u043b\u0438\u0434": { 2: "\u0421\u0438\u0433\u043d\u0430\u043b-20\u041f \u0438\u0441\u043f.01", 4: "\u0421\u0438\u0433\u043d\u0430\u043b-10", 8: "\u0421\u0438\u0433\u043d\u0430\u043b-20\u041c" },
+            "\u0420\u0443\u0431\u0435\u0436": { 2: "\u041f\u041f\u041a\u041e\u041f R3-\u0420\u0443\u0431\u0435\u0436-2\u041e\u041f", 4: "\u041f\u041f\u041a\u041e\u041f R3-\u0420\u0443\u0431\u0435\u0436-4\u041e\u041f", 8: "\u041f\u041f\u041a\u041e\u041f \u0420\u0443\u0431\u0435\u0436-20\u041f" },
+            "\u0410\u0440\u0433\u0443\u0441-\u0421\u043f\u0435\u043a\u0442\u0440": { 2: "\u0420\u0420\u041e\u041f2", 4: "\u0421\u0442\u0440\u0435\u043b\u0435\u0446-\u041f\u0420\u041e \u041a\u043e\u043d\u0442\u0440\u043e\u043b\u043b\u0435\u0440", 8: "\u041f\u041f\u041a\u041e\u041f \u0421\u0442\u0440\u0435\u043b\u0435\u0446-\u0418\u043d\u0442\u0435\u0433\u0440\u0430\u043b" },
+          }?.[system.vendor]?.[loops] || ""
+        : "";
+    const model = getConcreteModel(system.type, system.vendor, "panel", loops) || sotsPanelFallback;
     const basePrice = vendorMeta.panel.basePrices[loops] || 0;
     const unitPrice = resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, MARKET_KEY_ALIASES.panel, priceMultiplier);
     const detectorsQty =

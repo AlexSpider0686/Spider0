@@ -1233,16 +1233,18 @@ export default function SystemsStep({
                     <table>
                       <thead>
                         <tr>
-                          <th>Наименование</th>
-                          <th>Кол-во</th>
-                          <th>Цена</th>
-                          <th>Сумма</th>
+                          <th>{"\u041d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435"}</th>
+                          <th>{"\u041c\u043e\u0434\u0435\u043b\u044c"}</th>
+                          <th>{"\u041a\u043e\u043b-\u0432\u043e"}</th>
+                          <th>{"\u0426\u0435\u043d\u0430"}</th>
+                          <th>{"\u0421\u0443\u043c\u043c\u0430"}</th>
                         </tr>
                       </thead>
                       <tbody>
                         {keyEquipment.map((item) => (
                           <tr key={`${system.id}-key-${item.code}`}>
                             <td>{item.name}</td>
+                            <td>{item.model || (system.type === "sots" ? ({"\u0411\u043e\u043b\u0438\u0434": { sensor: { "\u0418\u041a": "\u04212000-\u0418\u041a \u0438\u0441\u043f.03", "\u0418\u041a+\u0421\u0412\u0427": "\u04212000-\u0421\u0422\u0418\u041a", "\u0432\u0438\u0431\u0440\u0430\u0446\u0438\u043e\u043d\u043d\u044b\u0439": "\u0428\u043e\u0440\u043e\u0445-2" }, panel: { 2: "\u0421\u0438\u0433\u043d\u0430\u043b-20\u041f \u0438\u0441\u043f.01", 4: "\u0421\u0438\u0433\u043d\u0430\u043b-10", 8: "\u0421\u0438\u0433\u043d\u0430\u043b-20\u041c" } }, "\u0420\u0443\u0431\u0435\u0436": { sensor: { "\u0418\u041a": "\u0418\u041e 409-28 \u0420\u0443\u0431\u0435\u0436", "\u0418\u041a+\u0421\u0412\u0427": "\u0418\u041e 414-1 \u0420\u0443\u0431\u0435\u0436", "\u0432\u0438\u0431\u0440\u0430\u0446\u0438\u043e\u043d\u043d\u044b\u0439": "\u0418\u041e 102-26 \u0438\u0441\u043f.200" }, panel: { 2: "\u041f\u041f\u041a\u041e\u041f R3-\u0420\u0443\u0431\u0435\u0436-2\u041e\u041f", 4: "\u041f\u041f\u041a\u041e\u041f R3-\u0420\u0443\u0431\u0435\u0436-4\u041e\u041f", 8: "\u041f\u041f\u041a\u041e\u041f \u0420\u0443\u0431\u0435\u0436-20\u041f" }, }, "\u0410\u0440\u0433\u0443\u0441-\u0421\u043f\u0435\u043a\u0442\u0440": { sensor: { "\u0418\u041a": "\u0418\u043a\u0430\u0440-5\u0420\u0410", "\u0418\u041a+\u0421\u0412\u0427": "\u0418\u043a\u0430\u0440-\u0428", "\u0432\u0438\u0431\u0440\u0430\u0446\u0438\u043e\u043d\u043d\u044b\u0439": "\u0421\u0442\u0435\u043a\u043b\u043e-3" }, panel: { 2: "\u0420\u0420\u041e\u041f2", 4: "\u0421\u0442\u0440\u0435\u043b\u0435\u0446-\u041f\u0420\u041e \u041a\u043e\u043d\u0442\u0440\u043e\u043b\u043b\u0435\u0440", 8: "\u041f\u041f\u041a\u041e\u041f \u0421\u0442\u0440\u0435\u043b\u0435\u0446-\u0418\u043d\u0442\u0435\u0433\u0440\u0430\u043b" } } }[system.vendor]?.[item.code === "SEN" ? "sensor" : item.code === "PANEL" ? "panel" : ""]?.[item.code === "SEN" ? system.selectedEquipmentParams?.sensorKind : item.code === "PANEL" ? system.selectedEquipmentParams?.panelLoops : ""]) : "") || "-"}</td>
                             <td>{num(item.qty, 0)}</td>
                             <td>{rub(item.unitPrice)}</td>
                             <td>{rub(item.total)}</td>
@@ -1251,25 +1253,7 @@ export default function SystemsStep({
                       </tbody>
                     </table>
                   </div>
-                  {system.vendor !== "Базовый" ? (
-                    <div className="equipment-principles">
-                      {keyEquipment.map((item) => {
-                        const sourceLink = resolveEquipmentSourceLink(item, result, system, manufacturerWebsite);
-                        return (
-                          <p key={`${system.id}-${item.code}-source`}>
-                            <strong>{item.name}:</strong>{" "}
-                            {sourceLink ? (
-                              <a href={sourceLink} target="_blank" rel="noreferrer">
-                                источник подобранной модели
-                              </a>
-                            ) : (
-                              <span className="warn-inline">ссылка на подобранную модель не найдена</span>
-                            )}
-                          </p>
-                        );
-                      })}
-                    </div>
-                  ) : null}
+                  
                   <div className="equipment-principles">
                     {keyEquipment.map((item) => (
                       <p key={`${system.id}-${item.code}-basis`}>
@@ -1377,25 +1361,7 @@ export default function SystemsStep({
                       </tbody>
                     </table>
                   </div>
-                  {system.vendor !== "Базовый" ? (
-                    <div className="equipment-principles">
-                      {(technicalRecommendation.specRows || []).map((row) => {
-                        const sourceLink = resolveEquipmentSourceLink(row, result, system, manufacturerWebsite);
-                        return (
-                          <p key={`${system.id}-${row.key}-spec-source`}>
-                            <strong>{row.name}:</strong>{" "}
-                            {sourceLink ? (
-                              <a href={sourceLink} target="_blank" rel="noreferrer">
-                                ссылка на источник позиции
-                              </a>
-                            ) : (
-                              <span className="warn-inline">нет ссылки на источник позиции</span>
-                            )}
-                          </p>
-                        );
-                      })}
-                    </div>
-                  ) : null}
+                  
                 </div>
               ) : null}
 
@@ -1416,4 +1382,7 @@ export default function SystemsStep({
 
   return repairReactTextTree(content);
 }
+
+
+
 
