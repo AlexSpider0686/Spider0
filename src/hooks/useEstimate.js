@@ -26,6 +26,7 @@ import { downloadSystemSpecificationExcel } from "../lib/specExport";
 import { buildNormativeRequirements } from "../lib/normativeRequirements";
 import { repairUtf8Cp1251Mojibake } from "../lib/textEncoding";
 import { applyTravelToResults, buildInitialTravelEstimate, createEmptyTravelEstimate, recalculateTravelEstimateDraft } from "../lib/travelEstimate";
+import { downloadProjectPassport, readProjectPassport } from "../lib/projectPassport";
 
 function removeById(mapObject, id) {
   if (!(id in mapObject)) return mapObject;
@@ -1485,6 +1486,94 @@ export default function useEstimate() {
     return true;
   };
 
+  const exportProjectPassport = async () => {
+    try {
+      await downloadProjectPassport({
+        objectData,
+        zones,
+        systems,
+        budget,
+        normativeRequirementsApplied,
+        zonePreset,
+        lockedZoneIds,
+        addressVerification,
+        travelEstimate,
+        technicalSolution,
+        apsProjectSnapshots,
+        vendorPriceSnapshots,
+        vendorComparisonsBySystem,
+      });
+      return true;
+    } catch (error) {
+      window.alert(`Ошибка выгрузки паспорта проекта: ${error?.message || "неизвестная ошибка"}`);
+      return false;
+    }
+  };
+
+  const importProjectPassport = async (file) => {
+    if (!file) return false;
+
+    try {
+      const imported = await readProjectPassport(file);
+      const nextObjectData = {
+        ...createProjectIdentity(),
+        ...(imported?.objectData || {}),
+      };
+      const nextSystems = Array.isArray(imported?.systems) && imported.systems.length ? imported.systems : systems;
+      const nextZones = Array.isArray(imported?.zones) && imported.zones.length ? imported.zones : zones;
+      const nextBudget = imported?.budget && typeof imported.budget === "object" ? imported.budget : budget;
+      const nextTechnicalSolution =
+        imported?.technicalSolution && typeof imported.technicalSolution === "object"
+          ? imported.technicalSolution
+          : {
+              surveyStartedAt: null,
+              answers: {},
+              photoAnalyses: {},
+              appliedAnswers: {},
+              appliedPhotoAnalyses: {},
+              appliedAt: null,
+              specOverrides: {},
+            };
+      const nextAddressVerification =
+        imported?.addressVerification && typeof imported.addressVerification === "object"
+          ? imported.addressVerification
+          : {
+              state: "idle",
+              message: "Адрес загружен из паспорта проекта.",
+              result: null,
+            };
+      const nextTravelEstimate = imported?.travelEstimate
+        ? recalculateTravelEstimateDraft(imported.travelEstimate, nextSystems.length)
+        : buildInitialTravelEstimate([], nextSystems.length);
+
+      setObjectData({
+        ...nextObjectData,
+        regionCoef: getRegionCoef(nextObjectData.regionName || DEFAULT_REGION_NAME),
+      });
+      setZones(nextZones);
+      setSystems(nextSystems);
+      setBudget(nextBudget);
+      setNormativeRequirementsApplied(imported?.normativeRequirementsApplied !== false);
+      setZonePreset(imported?.zonePreset || "business_center");
+      setLockedZoneIds(Array.isArray(imported?.lockedZoneIds) ? imported.lockedZoneIds : []);
+      setAddressVerification(nextAddressVerification);
+      setTravelEstimate(nextTravelEstimate);
+      setTechnicalSolution(nextTechnicalSolution);
+      setVendorPriceSnapshots(imported?.vendorPriceSnapshots && typeof imported.vendorPriceSnapshots === "object" ? imported.vendorPriceSnapshots : {});
+      setVendorComparisonsBySystem(
+        imported?.vendorComparisonsBySystem && typeof imported.vendorComparisonsBySystem === "object" ? imported.vendorComparisonsBySystem : {}
+      );
+      setVendorPricingProgressBySystem({});
+      setApsProjectSnapshots(imported?.apsProjectSnapshots && typeof imported.apsProjectSnapshots === "object" ? imported.apsProjectSnapshots : {});
+      setApsImportStatuses({});
+      setStep(0);
+      return true;
+    } catch (error) {
+      window.alert(`Ошибка загрузки паспорта проекта: ${error?.message || "неизвестная ошибка"}`);
+      return false;
+    }
+  };
+
   const startAiSurvey = () => {
     if (!aiSurveyPlan.readiness.isReady) return false;
     setTechnicalSolution((prev) => ({
@@ -1804,6 +1893,8 @@ export default function useEstimate() {
     generateProjectPlan,
     exportEstimateCsv,
     exportSystemSpecification,
+    exportProjectPassport,
+    importProjectPassport,
     setZones,
     canAddMoreSystems: systems.length < SYSTEM_TYPES.length,
   };

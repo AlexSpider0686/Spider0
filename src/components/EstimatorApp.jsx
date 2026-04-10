@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Building2, Layers, Wallet, Download, PieChart, FileText, Ruler, ShieldAlert, CalendarRange, Scale } from "lucide-react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Building2, Layers, Wallet, Download, PieChart, FileText, Ruler, ShieldAlert, CalendarRange, Scale, Upload } from "lucide-react";
 import useEstimate from "../hooks/useEstimate";
 import projectCoreMarkUrl from "../assets/project-core-mark.svg";
 import ObjectStep from "./ObjectStep";
@@ -33,6 +33,10 @@ export default function EstimatorApp() {
   const [videoUnavailable, setVideoUnavailable] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
   const [planModalOpen, setPlanModalOpen] = useState(false);
+  const [pendingPassportFile, setPendingPassportFile] = useState(null);
+  const [passportImportBusy, setPassportImportBusy] = useState(false);
+  const [passportHint, setPassportHint] = useState("");
+  const passportFolderInputRef = useRef(null);
   const [authorized, setAuthorized] = useState(() => {
     if (typeof window === "undefined") return false;
     const storedToken = window.localStorage.getItem("smetacore_auth_token");
@@ -41,14 +45,14 @@ export default function EstimatorApp() {
   });
 
   const steps = [
-    { key: "object", label: t("РћР±СЉРµРєС‚"), icon: Building2 },
-    { key: "systems", label: t("РЎРёСЃС‚РµРјС‹"), icon: Layers },
-    { key: "design", label: t("РџСЂРѕРµРєС‚РёСЂРѕРІР°РЅРёРµ"), icon: Ruler },
-    { key: "norms", label: "Нормативные требования", icon: Scale },
-    { key: "budget", label: t("Р‘СЋРґР¶РµС‚"), icon: Wallet },
-    { key: "breakdown", label: "Расчет ресурса", icon: PieChart },
-    { key: "logic", label: t("Р›РѕРіРёРєР° СЂР°СЃС‡РµС‚РѕРІ"), icon: FileText },
-    { key: "risks", label: t("AI-СЂРёСЃРєРё РїСЂРѕРµРєС‚Р°"), icon: ShieldAlert },
+    { key: "object", label: t("Р С›Р В±РЎР‰Р ВµР С”РЎвЂљ"), icon: Building2 },
+    { key: "systems", label: t("Р РЋР С‘РЎРѓРЎвЂљР ВµР СРЎвЂ№"), icon: Layers },
+    { key: "design", label: t("Р СџРЎР‚Р С•Р ВµР С”РЎвЂљР С‘РЎР‚Р С•Р Р†Р В°Р Р…Р С‘Р Вµ"), icon: Ruler },
+    { key: "norms", label: "РќРѕСЂРјР°С‚РёРІРЅС‹Рµ С‚СЂРµР±РѕРІР°РЅРёСЏ", icon: Scale },
+    { key: "budget", label: t("Р вЂРЎР‹Р Т‘Р В¶Р ВµРЎвЂљ"), icon: Wallet },
+    { key: "breakdown", label: "Р Р°СЃС‡РµС‚ СЂРµСЃСѓСЂСЃР°", icon: PieChart },
+    { key: "logic", label: t("Р вЂєР С•Р С–Р С‘Р С”Р В° РЎР‚Р В°РЎРѓРЎвЂЎР ВµРЎвЂљР С•Р Р†"), icon: FileText },
+    { key: "risks", label: t("AI-РЎР‚Р С‘РЎРѓР С”Р С‘ Р С—РЎР‚Р С•Р ВµР С”РЎвЂљР В°"), icon: ShieldAlert },
   ];
   const stepRows = [steps.slice(0, 4), steps.slice(4)];
 
@@ -70,6 +74,46 @@ export default function EstimatorApp() {
   const handlePlanExport = async (format) => {
     setPlanModalOpen(false);
     await vm.generateProjectPlan(format);
+  };
+
+  const handlePassportDownload = async () => {
+    await vm.exportProjectPassport?.();
+  };
+
+  const handlePassportFolderPicked = (event) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = "";
+    if (!files.length) return;
+
+    const preferred =
+      files.find((file) => /passport.*\.(xls|html?|mht)$/i.test(file.name)) ||
+      files.find((file) => /РїР°СЃРїРѕСЂС‚.*\.(xls|html?|mht)$/i.test(file.name)) ||
+      files.find((file) => /\.(xls|html?|mht)$/i.test(file.name)) ||
+      null;
+
+    if (!preferred) {
+      setPendingPassportFile(null);
+      setPassportHint("Р’ РІС‹Р±СЂР°РЅРЅРѕР№ РїР°РїРєРµ РЅРµ РЅР°Р№РґРµРЅ С„Р°Р№Р» РїР°СЃРїРѕСЂС‚Р° РїСЂРѕРµРєС‚Р°.");
+      return;
+    }
+
+    setPendingPassportFile(preferred);
+    setPassportHint(`РќР°Р№РґРµРЅ С„Р°Р№Р»: ${preferred.name}. РќР°Р¶РјРёС‚Рµ В«Р—Р°РіСЂСѓР·РёС‚СЊ РїР°СЃРїРѕСЂС‚ РїСЂРѕРµРєС‚Р°В», С‡С‚РѕР±С‹ РїСЂРёРјРµРЅРёС‚СЊ РґР°РЅРЅС‹Рµ.`);
+  };
+
+  const handlePassportUpload = async () => {
+    if (!pendingPassportFile) {
+      passportFolderInputRef.current?.click();
+      return;
+    }
+
+    setPassportImportBusy(true);
+    const ok = await vm.importProjectPassport?.(pendingPassportFile);
+    setPassportImportBusy(false);
+    if (ok) {
+      setPassportHint(`РџР°СЃРїРѕСЂС‚ РїСЂРѕРµРєС‚Р° В«${pendingPassportFile.name}В» Р·Р°РіСЂСѓР¶РµРЅ РІ РїР»Р°С‚С„РѕСЂРјСѓ.`);
+      setPendingPassportFile(null);
+    }
   };
 
   return (
@@ -105,27 +149,44 @@ export default function EstimatorApp() {
         <img src={projectCoreMarkUrl} alt="Project.Core" className="build-badge__logo" />
         <div className="build-badge__text">
           <strong>Project.Core</strong>
-          <span>Версия {APP_VERSION_LABEL} · сборка {BUILD_NUMBER}</span>
+          <span>Р’РµСЂСЃРёСЏ {APP_VERSION_LABEL} В· СЃР±РѕСЂРєР° {BUILD_NUMBER}</span>
         </div>
       </div>
 
       <div className={`app-wrap ${authorized ? "" : "locked"}`} aria-hidden={!authorized}>
         <header className="hero-card">
           <div>
-            <div className="hero-kicker">Project.Core™</div>
+            <div className="hero-kicker">Project.Coreв„ў</div>
             <h1 className="hero-title">
               <img className="hero-title__mark" src={projectCoreMarkUrl} alt="" aria-hidden="true" />
-              <span>Project.Core™ — предварительный расчет бюджета систем безопасности</span>
+              <span>Project.Coreв„ў вЂ” РїСЂРµРґРІР°СЂРёС‚РµР»СЊРЅС‹Р№ СЂР°СЃС‡РµС‚ Р±СЋРґР¶РµС‚Р° СЃРёСЃС‚РµРј Р±РµР·РѕРїР°СЃРЅРѕСЃС‚Рё</span>
             </h1>
-            <p>С AI-аудитом цен и трудозатрат, рыночной верификацией и Risk Guard AI для контроля сбалансированности бюджета.</p>
+            <p>РЎ AI-Р°СѓРґРёС‚РѕРј С†РµРЅ Рё С‚СЂСѓРґРѕР·Р°С‚СЂР°С‚, СЂС‹РЅРѕС‡РЅРѕР№ РІРµСЂРёС„РёРєР°С†РёРµР№ Рё Risk Guard AI РґР»СЏ РєРѕРЅС‚СЂРѕР»СЏ СЃР±Р°Р»Р°РЅСЃРёСЂРѕРІР°РЅРЅРѕСЃС‚Рё Р±СЋРґР¶РµС‚Р°.</p>
           </div>
           <div className="hero-actions">
             <button className="primary-btn" onClick={vm.exportEstimate} type="button">
-              <Download size={16} /> Экспорт ТКП
+              <Download size={16} /> Р­РєСЃРїРѕСЂС‚ РўРљРџ
             </button>
             <button className="ghost-btn" onClick={() => setPlanModalOpen(true)} type="button">
-              <CalendarRange size={16} /> Сгенерировать план проекта
+              <CalendarRange size={16} /> РЎРіРµРЅРµСЂРёСЂРѕРІР°С‚СЊ РїР»Р°РЅ РїСЂРѕРµРєС‚Р°
             </button>
+            <button className="ghost-btn" onClick={handlePassportDownload} type="button">
+              <Download size={16} /> Скачать паспорт проекта
+            </button>
+            <button className="ghost-btn" onClick={handlePassportUpload} type="button" disabled={passportImportBusy}>
+              <Upload size={16} /> Загрузить паспорт проекта
+            </button>
+            <input
+              ref={passportFolderInputRef}
+              className="file-upload-input"
+              type="file"
+              accept=".xls,.html,.htm,.mht"
+              multiple
+              webkitdirectory="true"
+              directory=""
+              onChange={handlePassportFolderPicked}
+            />
+            {passportHint ? <div className="hero-actions__hint">{passportHint}</div> : null}
           </div>
         </header>
 

@@ -726,6 +726,12 @@ body.ai-survey-open .object-photo-card {
   min-width: 240px;
 }
 
+.hero-actions__hint {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
 .hero-kicker {
   font-size: 9px;
   text-transform: uppercase;
