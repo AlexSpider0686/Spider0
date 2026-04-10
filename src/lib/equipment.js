@@ -255,6 +255,14 @@ const CONCRETE_MODEL_CATALOG = repairCatalogNode({
 
 const CONCRETE_MODEL_FALLBACK = {
   sots: {
+    "\u0411\u0430\u0441\u0442\u0438\u043e\u043d": {
+      sensor: {
+        "\u0418\u041a": "SPRUT \u0418\u041a-01",
+        "\u0418\u041a+\u0421\u0412\u0427": "SPRUT \u0418\u041a/\u0421\u0412\u0427-02",
+        "\u0432\u0438\u0431\u0440\u0430\u0446\u0438\u043e\u043d\u043d\u044b\u0439": "SPRUT \u0412\u0418\u0411-01",
+      },
+      panel: { 2: "SPRUT \u041f\u041f\u041a-2", 4: "SPRUT \u041f\u041f\u041a-4", 8: "SPRUT \u041f\u041f\u041a-8" },
+    },
     "\u0411\u043e\u043b\u0438\u0434": {
       sensor: {
         "\u0418\u041a": "\u04212000-\u0418\u041a \u0438\u0441\u043f.03",
@@ -279,6 +287,21 @@ const CONCRETE_MODEL_FALLBACK = {
       },
       panel: { 2: "\u0420\u0420\u041e\u041f2", 4: "\u0421\u0442\u0440\u0435\u043b\u0435\u0446-\u041f\u0420\u041e \u041a\u043e\u043d\u0442\u0440\u043e\u043b\u043b\u0435\u0440", 8: "\u041f\u041f\u041a\u041e\u041f \u0421\u0442\u0440\u0435\u043b\u0435\u0446-\u0418\u043d\u0442\u0435\u0433\u0440\u0430\u043b" },
     },
+  },
+};
+
+const MANAGEMENT_MODEL_FALLBACK = {
+  server: {
+    compact: "iRU Rock 1206",
+    rack: "Dell PowerEdge R350",
+    enterprise: "Dell PowerEdge R550",
+    default: "Dell PowerEdge R350",
+  },
+  arm: {
+    compact: "iRU Office 310 MT",
+    rack: "iRU Office 515 MT",
+    enterprise: "iRU Office 715 MT",
+    default: "iRU Office 515 MT",
   },
 };
 
@@ -394,6 +417,12 @@ function resolveManagementUnitPrice(systemType, unitType, marketRatios, priceMul
   return resolveUnitPrice(basePrice, basePrice, marketRatios, aliasKeys, priceMultiplier);
 }
 
+function resolveManagementModel(unitType, modelTier) {
+  const unitCatalog = MANAGEMENT_MODEL_FALLBACK[unitType];
+  if (!unitCatalog) return "";
+  return unitCatalog[modelTier] || unitCatalog.default || "";
+}
+
 function appendManagementInfrastructure(details, systemType, quantityContext, marketRatios, priceMultiplier) {
   const managementPlan = quantityContext?.secondary?.managementPlan;
   if (!managementPlan) return;
@@ -405,9 +434,11 @@ function appendManagementInfrastructure(details, systemType, quantityContext, ma
 
   if (serverQty > 0) {
     const unitPrice = resolveManagementUnitPrice(systemType, "server", marketRatios, priceMultiplier * tierMultiplier);
+    const model = resolveManagementModel("server", managementPlan.modelTier);
     pushItem(details, {
       code: "SRV",
       name: `Сервер управления ${systemType.toUpperCase()}`,
+      model,
       qty: serverQty,
       unitPrice,
       total: serverQty * unitPrice,
@@ -418,9 +449,11 @@ function appendManagementInfrastructure(details, systemType, quantityContext, ma
 
   if (armQty > 0) {
     const unitPrice = resolveManagementUnitPrice(systemType, "arm", marketRatios, priceMultiplier);
+    const model = resolveManagementModel("arm", managementPlan.modelTier);
     pushItem(details, {
       code: "ARM",
       name: `АРМ оператора ${systemType.toUpperCase()}`,
+      model,
       qty: armQty,
       unitPrice,
       total: armQty * unitPrice,
