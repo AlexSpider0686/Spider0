@@ -250,7 +250,7 @@ export default function CostBreakdownStep({
                   />
                 </div>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
+              <div className="travel-stay-grid travel-stay-grid--days">
                 <div>
                   <small className="hint-inline">Комнат</small>
                   <input
@@ -279,7 +279,7 @@ export default function CostBreakdownStep({
                   />
                 </div>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
+              <div className="travel-stay-grid travel-stay-grid--costs">
                 <div>
                   <small className="hint-inline">Билет на 1 чел. в одну сторону, ₽</small>
                   <input
@@ -299,7 +299,7 @@ export default function CostBreakdownStep({
                   />
                 </div>
                 <div>
-                  <small className="hint-inline">Суточные на 1 чел./день, ₽</small>
+                  <small className="hint-inline">Суточные на 1 чел./день ₽</small>
                   <input
                     type="number"
                     min="0"
