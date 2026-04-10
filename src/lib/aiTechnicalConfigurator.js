@@ -32,6 +32,7 @@ function sanitizeRow(row) {
     ...row,
     key: String(row?.key ?? ""),
     name: sanitizeText(row?.name),
+    model: sanitizeText(row?.model),
     unit: sanitizeText(row?.unit),
     basis: sanitizeText(row?.basis),
     category: row?.category || "material",
@@ -337,6 +338,7 @@ function buildPricedEquipmentRows(systemType, result, apsSnapshot) {
     return apsSnapshot.items.map((item, index) => ({
       key: item.id || `${systemType}-pdf-${index + 1}`,
       name: item.model ? `${item.name} (${item.model})` : item.name,
+      model: item.model || "",
       qty: Math.max(num(item.qty, 0), 0),
       unit: item.unit || "шт",
       basis: item.position ? `Позиция ${item.position} из проектной спецификации` : "Проектная спецификация APS",
@@ -351,6 +353,7 @@ function buildPricedEquipmentRows(systemType, result, apsSnapshot) {
     return bom.map((item, index) => ({
       key: item.code || `${systemType}-bom-${index + 1}`,
       name: item.name,
+      model: item.model || "",
       qty: Math.max(num(item.qty, 0), 0),
       unit: "шт",
       basis: "Расчетная ведомость оборудования и материалов (BOM) системы",
@@ -364,6 +367,7 @@ function buildPricedEquipmentRows(systemType, result, apsSnapshot) {
   return keyEquipment.map((item, index) => ({
     key: item.code || `${systemType}-key-${index + 1}`,
     name: item.label || item.name || `Позиция ${index + 1}`,
+    model: item.model || "",
     qty: Math.max(num(item.qty, result?.units || 0), 0),
     unit: "шт",
     basis: "Ключевое оборудование по конфигуратору системы",

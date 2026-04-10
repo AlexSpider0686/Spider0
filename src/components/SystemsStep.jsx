@@ -1324,6 +1324,7 @@ export default function SystemsStep({
                       <thead>
                         <tr>
                           <th>Позиция</th>
+                          <th>{"\u041c\u043e\u0434\u0435\u043b\u044c"}</th>
                           <th>Категория</th>
                           <th>Источник</th>
                           <th>Основание</th>
@@ -1337,6 +1338,7 @@ export default function SystemsStep({
                         {(technicalRecommendation.specRows || []).map((row) => (
                           <tr key={`${system.id}-${row.key}`}>
                             <td>{row.name}</td>
+                            <td>{row.model || "?"}</td>
                             <td>{row.category === "equipment" ? "Оборудование" : "Материалы"}</td>
                             <td>{row.source || "algorithm"}</td>
                             <td>{row.basis}</td>

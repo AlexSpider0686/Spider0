@@ -57,7 +57,8 @@ export function downloadSystemSpecificationExcel({ objectData, system, systemRes
             <tr>
               <th>№</th>
               <th>Позиция</th>
-              <th>Категория</th>
+              <th>Модель</th>
+              <th>??????????????????</th>
               <th>Источник</th>
               <th>Основание</th>
               <th>Кол-во</th>
@@ -73,6 +74,7 @@ export function downloadSystemSpecificationExcel({ objectData, system, systemRes
                   <tr>
                     <td>${index + 1}</td>
                     <td>${escapeHtml(row.name)}</td>
+                    <td>${escapeHtml(row.model || "?")}</td>
                     <td>${escapeHtml(row.category === "equipment" ? "Оборудование" : "Материалы")}</td>
                     <td>${escapeHtml(row.source || "algorithm")}</td>
                     <td>${escapeHtml(row.basis)}</td>
