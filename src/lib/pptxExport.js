@@ -970,6 +970,28 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
     fontSize: 9,
   });
 
+  if (safeTotals.tripTotal > 0) {
+    slide4.addShape("roundRect", {
+      x: 0.55,
+      y: 7.02,
+      w: 12.2,
+      h: 0.3,
+      rectRadius: 0.04,
+      fill: { color: "EAF7F3" },
+      line: { color: "9CCFBC", pt: 1 },
+    });
+    slide4.addText(`Командировочные выезды учтены в составе работ: ${rub(safeTotals.tripTotal)}. Сумма распределена по системам равномерно после расчета коэффициентов и надбавок.`, {
+      x: 0.7,
+      y: 7.09,
+      w: 11.9,
+      h: 0.12,
+      fontFace: "Calibri",
+      fontSize: 8.2,
+      color: COLORS.text,
+      fit: "shrink",
+    });
+  }
+
   const comparisonRows = buildVendorComparisonRows(safeVendorComparisons);
   const comparisonChunks = chunkArray(comparisonRows, 9);
 

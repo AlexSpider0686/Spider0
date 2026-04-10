@@ -253,6 +253,18 @@ export default function ObjectStep({
     setSurveyModalOpen(false);
   };
 
+  const handleShowOnMap = () => {
+    const addressText = String(addressVerification?.result?.verifiedLabel || objectData.address || "").trim();
+    if (!addressText || typeof window === "undefined") return;
+    const lat = addressVerification?.result?.lat;
+    const lon = addressVerification?.result?.lon;
+    const mapUrl =
+      lat && lon
+        ? `https://yandex.ru/maps/?ll=${lon}%2C${lat}&mode=search&pt=${lon},${lat},pm2rdm&text=${encodeURIComponent(addressText)}&z=17`
+        : `https://yandex.ru/maps/?text=${encodeURIComponent(addressText)}`;
+    window.open(mapUrl, "_blank", "noopener,noreferrer,width=1280,height=860");
+  };
+
   const handleResetSurveySection = (section) => {
     const questionIds = (section?.questions || []).map((question) => question.id);
     const photoPromptIds = photoPromptIdsBySection[section.id] || [];
@@ -291,6 +303,14 @@ export default function ObjectStep({
             />
           </div>
           <div className="address-actions">
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <button className="ghost-btn" style={{ padding: "8px 14px", minHeight: 36 }} type="button" onClick={verifyObjectAddress} disabled={addressVerification?.state === "loading"}>
+                {addressVerification?.state === "loading" ? "Уточнение..." : "Уточнить адрес"}
+              </button>
+              <button className="ghost-btn" style={{ padding: "8px 14px", minHeight: 36 }} type="button" onClick={handleShowOnMap} disabled={!String(objectData.address || "").trim()}>
+                Показать на карте
+              </button>
+            </div>
             <button className="primary-btn" type="button" onClick={verifyObjectAddress} disabled={addressVerification?.state === "loading"}>
               {addressVerification?.state === "loading" ? "Проверка адреса..." : "Проверить адрес"}
             </button>

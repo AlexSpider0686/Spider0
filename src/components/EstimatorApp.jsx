@@ -172,6 +172,10 @@ export default function EstimatorApp() {
             totals={vm.totals}
             objectData={vm.objectData}
             effectiveObjectData={vm.effectiveObjectData}
+            travelEstimate={vm.travelEstimate}
+            updateTravelField={vm.updateTravelField}
+            runTravelEstimate={vm.runTravelEstimate}
+            resetTravelEstimate={vm.resetTravelEstimate}
           />
         ) : null}
         {vm.step === 6 ? <CalculationLogicStep {...vm} /> : null}

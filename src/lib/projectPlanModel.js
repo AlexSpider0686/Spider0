@@ -57,13 +57,14 @@ function buildSystemRows(systemResults, timeline) {
       works,
       design,
       total,
+      tripCost: n(item?.tripCostAllocation, 0),
     };
   });
 }
 
 export function buildProjectPlan(payload = {}) {
-  const { objectData = {}, systemResults = [], totals = {}, projectRisks = [], apsProjectExports = [] } = payload;
-  const timeline = buildProjectTimeline(systemResults, objectData, totals);
+  const { objectData = {}, systemResults = [], totals = {}, projectRisks = [], apsProjectExports = [], travelEstimate = null } = payload;
+  const timeline = buildProjectTimeline(systemResults, { ...objectData, travelEstimate }, { ...totals, travelEstimate });
   const crewPlan = buildProjectCrewPlan(systemResults, objectData, totals, timeline);
   const phaseMap = timeline.phaseMap;
   const tasks = [];
@@ -91,6 +92,21 @@ export function buildProjectPlan(payload = {}) {
     { name: "Комплектация заказа", weight: 1.05 },
     { name: "Поставка на объект и входной контроль", weight: 0.95 },
   ]), "Логистика");
+
+  if (phaseMap.travel_out) {
+    tasks.push({
+      order,
+      phase: "travel_out",
+      name: "Выезд бригады на объект",
+      start: phaseMap.travel_out.start,
+      duration: phaseMap.travel_out.duration,
+      finish: phaseMap.travel_out.finish,
+      owner: "Логистика / бригада",
+      comment: "Время в пути включено в план проекта",
+    });
+    order += 1;
+  }
+
   push("smr", splitDuration(phaseMap.smr.duration, [
     { name: "Подготовка фронта работ", weight: 0.75 },
     { name: "Прокладка трасс и монтаж инфраструктуры", weight: 1.45 },
@@ -103,6 +119,20 @@ export function buildProjectPlan(payload = {}) {
     { name: "Сдача исполнительных материалов", weight: 0.7 },
   ]), "ПНР / интеграция");
 
+  if (phaseMap.travel_back) {
+    tasks.push({
+      order,
+      phase: "travel_back",
+      name: "Возврат бригады",
+      start: phaseMap.travel_back.start,
+      duration: phaseMap.travel_back.duration,
+      finish: phaseMap.travel_back.finish,
+      owner: "Логистика / бригада",
+      comment: "Завершение командировочного выезда",
+    });
+    order += 1;
+  }
+
   const systemRows = buildSystemRows(systemResults, timeline);
   systemRows.forEach((row) => {
     tasks.push({ order, phase: "smr", name: `${row.name}: монтаж и трассы`, start: row.smrStart, duration: row.smrDuration, finish: row.smrStart + row.smrDuration - 1, owner: `${row.vendor} / монтаж`, comment: row.mode });
@@ -111,11 +141,13 @@ export function buildProjectPlan(payload = {}) {
     order += 1;
   });
 
+  const tripBudget = n(totals?.tripTotal, 0);
   const cost = [
     { label: "Оборудование", color: "1D88D2", value: n(totals?.totalEquipment, 0) },
     { label: "Материалы", color: "785AF8", value: n(totals?.totalMaterials, 0) },
-    { label: "СМР + ПНР", color: "189F6B", value: n(totals?.totalLabor, 0) },
+    { label: "СМР + ПНР", color: "189F6B", value: Math.max(n(totals?.totalWork, 0) - tripBudget, 0) },
     { label: "Проектирование", color: "D6A63D", value: n(totals?.totalDesign, 0) },
+    { label: "Командировки", color: "0F766E", value: tripBudget },
   ].filter((item) => item.value > 0);
 
   return {
@@ -135,6 +167,7 @@ export function buildProjectPlan(payload = {}) {
       apsProjectExports?.length ? `По ${apsProjectExports.length} системам использована проектная PDF-спецификация.` : "План собран по параметрической модели платформы.",
       "Единица измерения сроков: рабочие дни.",
       `Пиковая монтажная бригада: ${crewPlan.field.peakHeadcount} чел.; проектная группа: ${crewPlan.design.peakHeadcount} чел.`,
+      travelEstimate?.totalCost > 0 ? `Командировочный выезд: ${formatRub(travelEstimate.totalCost)}, переезды добавляют ${timeline.travelDays} раб. дн. к плану.` : "Отдельные командировочные выезды в плане не учитывались.",
     ],
     summary: {
       generatedAt: new Date().toLocaleDateString("ru-RU"),
@@ -146,9 +179,11 @@ export function buildProjectPlan(payload = {}) {
       totalBudget: n(totals?.total, 0),
       peakFieldTeam: crewPlan.field.peakHeadcount,
       peakDesignTeam: crewPlan.design.peakHeadcount,
+      tripBudget: n(travelEstimate?.totalCost, 0),
+      tripDays: n(timeline.travelDays, 0),
     },
     disclaimer:
-      "Сроки указаны в рабочих днях и носят предварительный характер. Финальный календарный график уточняется после подтверждения РД, поставок, доступа на объект и подрядного ресурса.",
+      "Сроки указаны в рабочих днях и носят предварительный характер. Финальный календарный график уточняется после подтверждения РД, поставок, доступа на объект, маршрута командировки и подрядного ресурса.",
   };
 }
 

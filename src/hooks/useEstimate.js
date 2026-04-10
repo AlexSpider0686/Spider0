@@ -25,6 +25,7 @@ import { aggregatePlanRecognitions } from "../lib/evacuationPlanRecognition";
 import { downloadSystemSpecificationExcel } from "../lib/specExport";
 import { buildNormativeRequirements } from "../lib/normativeRequirements";
 import { repairUtf8Cp1251Mojibake } from "../lib/textEncoding";
+import { applyTravelToResults, buildInitialTravelEstimate, createEmptyTravelEstimate, recalculateTravelEstimateDraft } from "../lib/travelEstimate";
 
 function removeById(mapObject, id) {
   if (!(id in mapObject)) return mapObject;
@@ -178,6 +179,7 @@ export default function useEstimate() {
   });
 
   const pricingSignaturesRef = useRef(new Map());
+  const [travelEstimate, setTravelEstimate] = useState(() => createEmptyTravelEstimate());
   const appliedSurveyAreaRefinement = useMemo(
     () => deriveSurveyAreaRefinement(technicalSolution.appliedPhotoAnalyses, objectData.totalArea),
     [technicalSolution.appliedPhotoAnalyses, objectData.totalArea]
@@ -228,7 +230,7 @@ export default function useEstimate() {
     }),
     [normativeProfile, normativeRequirementsApplied]
   );
-  const { systemsDetailed: systemResults, totals } = useMemo(
+  const { systemsDetailed: baseSystemResults, totals: baseTotals } = useMemo(
     () =>
       calculateEstimateEngine(
         systems,
@@ -254,6 +256,11 @@ export default function useEstimate() {
     ]
   );
   const zoneDistribution = useMemo(() => validateZoneDistribution(zones, recalculatedArea), [zones, recalculatedArea]);
+  const initializedTravelEstimate = useMemo(() => buildInitialTravelEstimate(baseSystemResults, systems.length), [baseSystemResults, systems.length]);
+  const { systemResults, totals, travelEstimate: normalizedTravelEstimate } = useMemo(
+    () => applyTravelToResults(baseSystemResults, baseTotals, travelEstimate),
+    [baseSystemResults, baseTotals, travelEstimate]
+  );
   const aiSurveyPlan = useMemo(
     () =>
       buildAiSurveyPlan({
@@ -276,7 +283,7 @@ export default function useEstimate() {
     () =>
       buildAiTechnicalRecommendations({
         systems,
-        systemResults,
+        systemResults: baseSystemResults,
         objectData: effectiveObjectData,
         zones,
         surveyAnswers: technicalSolution.appliedAnswers,
@@ -286,7 +293,7 @@ export default function useEstimate() {
       }),
     [
       systems,
-      systemResults,
+      baseSystemResults,
       effectiveObjectData,
       zones,
       technicalSolution.appliedAnswers,
@@ -301,12 +308,12 @@ export default function useEstimate() {
         objectData: { ...effectiveObjectData, protectedAreaM2: recalculatedArea },
         zones,
         systems,
-        systemResults,
+        systemResults: baseSystemResults,
         technicalSolution,
         aiSurveyCompletion: appliedAiSurveyCompletion,
         apsProjectSnapshots,
       }),
-    [effectiveObjectData, recalculatedArea, zones, systems, systemResults, technicalSolution, appliedAiSurveyCompletion, apsProjectSnapshots]
+    [effectiveObjectData, recalculatedArea, zones, systems, baseSystemResults, technicalSolution, appliedAiSurveyCompletion, apsProjectSnapshots]
   );
   const inputValidation = useMemo(
     () =>
@@ -319,6 +326,21 @@ export default function useEstimate() {
       }),
     [systems, zones, budget, effectiveObjectData, recalculatedArea]
   );
+
+  useEffect(() => {
+    setTravelEstimate((prev) => {
+      const next = recalculateTravelEstimateDraft(
+        {
+          ...initializedTravelEstimate,
+          ...prev,
+          crewSize: prev?.crewSize || initializedTravelEstimate.crewSize,
+          workDurationDays: prev?.workDurationDays || initializedTravelEstimate.workDurationDays,
+        },
+        systems.length
+      );
+      return JSON.stringify(next) === JSON.stringify(prev) ? prev : next;
+    });
+  }, [initializedTravelEstimate, systems.length]);
 
   const updateObject = (key, value) => {
     if (key === "regionName") {
@@ -373,6 +395,79 @@ export default function useEstimate() {
         message: error?.message || "Не удалось подтвердить адрес объекта.",
         result: null,
       });
+    }
+  };
+
+  const updateTravelField = (key, value) => {
+    setTravelEstimate((prev) => recalculateTravelEstimateDraft({ ...prev, enabled: true, [key]: value }, systems.length));
+  };
+
+  const resetTravelEstimate = () => {
+    setTravelEstimate(recalculateTravelEstimateDraft({ ...initializedTravelEstimate, enabled: false }, systems.length));
+  };
+
+  const runTravelEstimate = async () => {
+    const payload = {
+      originAddress: travelEstimate.originAddress || "",
+      destinationAddress: travelEstimate.destinationAddress || objectData.address || "",
+      crewSize: travelEstimate.crewSize || initializedTravelEstimate.crewSize,
+      workDurationDays: travelEstimate.workDurationDays || initializedTravelEstimate.workDurationDays,
+      perDiemPerPersonDay: travelEstimate.perDiemPerPersonDay || initializedTravelEstimate.perDiemPerPersonDay,
+      systemsCount: systems.length,
+    };
+
+    if (!payload.originAddress.trim() || !payload.destinationAddress.trim()) {
+      setTravelEstimate((prev) =>
+        recalculateTravelEstimateDraft(
+          {
+            ...prev,
+            enabled: true,
+            alerts: ["Для интеллектуального расчета заполните начальную и конечную точки маршрута."],
+          },
+          systems.length
+        )
+      );
+      return false;
+    }
+
+    setTravelEstimate((prev) =>
+      recalculateTravelEstimateDraft(
+        {
+          ...prev,
+          enabled: true,
+          calculationMethod: "smart",
+          notes: "Идет интеллектуальный расчет маршрута и командировочных расходов...",
+          alerts: [],
+        },
+        systems.length
+      )
+    );
+
+    try {
+      const response = await fetch("/api/travel-estimate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const raw = await response.json().catch(() => null);
+      if (!response.ok || !raw?.result) {
+        throw new Error(raw?.error || "Не удалось рассчитать командировку.");
+      }
+      setTravelEstimate(recalculateTravelEstimateDraft(raw.result, systems.length));
+      return true;
+    } catch (error) {
+      setTravelEstimate((prev) =>
+        recalculateTravelEstimateDraft(
+          {
+            ...prev,
+            enabled: true,
+            alerts: [error?.message || "Не удалось рассчитать командировку."],
+            notes: "Автоматический расчет не завершен. Вы можете скорректировать параметры вручную.",
+          },
+          systems.length
+        )
+      );
+      return false;
     }
   };
 
@@ -1309,6 +1404,7 @@ export default function useEstimate() {
         recalculatedArea,
         systemResults,
         totals,
+        travelEstimate: normalizedTravelEstimate,
         projectRisks,
         apsProjectExports,
         vendorComparisons: Object.values(vendorComparisonsBySystem || {}).filter((item) => item?.state === "success" && item?.rows?.length),
@@ -1348,6 +1444,7 @@ export default function useEstimate() {
         recalculatedArea,
         systemResults,
         totals,
+        travelEstimate: normalizedTravelEstimate,
         projectRisks,
         apsProjectExports,
         technicalRecommendations,
@@ -1640,6 +1737,7 @@ export default function useEstimate() {
     appliedSurveyAreaRefinement,
     draftSurveyAreaRefinement,
     addressVerification,
+    travelEstimate: normalizedTravelEstimate,
     zones,
     systems,
     budget,
@@ -1668,6 +1766,9 @@ export default function useEstimate() {
     VENDOR_EQUIPMENT,
     updateObject,
     verifyObjectAddress,
+    updateTravelField,
+    runTravelEstimate,
+    resetTravelEstimate,
     updateZone,
     addZone,
     removeZone,

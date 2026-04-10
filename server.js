@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveVendorPrices } from "./api/vendor-prices.js";
+import { resolveTravelEstimate } from "./api/travel-estimate.js";
 import { issueOtpChallenge, verifyOtpChallenge } from "./api/auth-otp-core.js";
 import { buildProjectPlanArtifact } from "./api/project-plan-export.js";
 
@@ -113,6 +114,16 @@ async function handleApiRequest(req, res, pathname) {
       sendJson(res, 200, {
         ok: true,
         results,
+        fetchedAt: new Date().toISOString(),
+      });
+      return true;
+    }
+
+    if (pathname === "/api/travel-estimate") {
+      const result = await resolveTravelEstimate(payload);
+      sendJson(res, 200, {
+        ok: true,
+        result,
         fetchedAt: new Date().toISOString(),
       });
       return true;

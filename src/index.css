@@ -1713,6 +1713,10 @@ body.ai-survey-open .object-photo-card {
   margin-top: 2px;
 }
 
+.address-actions > .primary-btn {
+  display: none;
+}
+
 .address-status {
   margin-top: 2px;
   font-size: 10px;

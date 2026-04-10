@@ -50,7 +50,7 @@ function findRegionByStateName(stateName) {
   );
 }
 
-function scoreAddressResult(item, queryTokens) {
+function scoreAddressResult(item, queryTokens, queryParts) {
   const address = item?.address || {};
   const resultText = [
     item?.display_name || "",
@@ -66,19 +66,28 @@ function scoreAddressResult(item, queryTokens) {
   const overlapScore = queryTokens.length ? overlap / queryTokens.length : 0;
 
   let score = Number(item?.importance || 0);
-  if (address.house_number) score += 0.45;
-  if (address.block || address.block_number) score += 0.2;
-  if (address.building || address.construction) score += 0.14;
-  if (address.road) score += 0.25;
+  if (address.house_number) score += 0.6;
+  if (address.block || address.block_number) score += 0.22;
+  if (address.building || address.construction) score += 0.16;
+  if (address.road) score += 0.28;
   if (address.city || address.town || address.village) score += 0.18;
   if (address.state) score += 0.12;
-  score += overlapScore * 0.8;
+  score += overlapScore * 0.9;
+
+  const matchedHouse = normalizeName(address.house_number) === normalizeName(queryParts.house);
+  const matchedCorpus = normalizeName(address.block || address.block_number) === normalizeName(queryParts.corpus);
+  const matchedBuilding = normalizeName(address.building || address.construction) === normalizeName(queryParts.building);
+
+  if (queryParts.house && matchedHouse) score += 0.45;
+  if (queryParts.house && !matchedHouse && address.house_number) score -= 0.18;
+  if (queryParts.corpus && matchedCorpus) score += 0.2;
+  if (queryParts.building && matchedBuilding) score += 0.14;
 
   return score;
 }
 
-function pickBestAddressResult(results = [], queryTokens = []) {
-  return [...results].sort((left, right) => scoreAddressResult(right, queryTokens) - scoreAddressResult(left, queryTokens))[0] || null;
+function pickBestAddressResult(results = [], queryTokens = [], queryParts = {}) {
+  return [...results].sort((left, right) => scoreAddressResult(right, queryTokens, queryParts) - scoreAddressResult(left, queryTokens, queryParts))[0] || null;
 }
 
 function buildDistrictLabel(address = {}) {
@@ -144,7 +153,24 @@ async function fetchJson(url, message) {
 }
 
 function buildSearchVariants(normalizedQuery) {
-  return [...new Set([normalizedQuery, `${normalizedQuery}, Россия`, normalizedQuery.replace(/[«»"]/g, "")].filter(Boolean))];
+  const queryParts = extractQueryAddressParts(normalizedQuery);
+  const trimmedWithoutCorpus = normalizedQuery
+    .replace(/(?:,|\s)+(корп(?:ус)?|к)\.?\s*[\dа-яa-z/-]+/giu, "")
+    .replace(/(?:,|\s)+(стр(?:оение)?)\.?\s*[\dа-яa-z/-]+/giu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const variants = [
+    normalizedQuery,
+    `${normalizedQuery}, Россия`,
+    normalizedQuery.replace(/[«»"]/g, ""),
+    trimmedWithoutCorpus,
+  ];
+
+  if (queryParts.house) {
+    variants.push(normalizedQuery.replace(/\bдом\b/giu, "").replace(/\s+/g, " ").trim());
+  }
+
+  return [...new Set(variants.filter(Boolean))];
 }
 
 export async function verifyObjectAddress(addressLine) {
@@ -154,13 +180,14 @@ export async function verifyObjectAddress(addressLine) {
   }
 
   const queryTokens = tokenizeAddress(normalizedQuery);
+  const queryParts = extractQueryAddressParts(normalizedQuery);
   let results = [];
 
   for (const query of buildSearchVariants(normalizedQuery)) {
     const params = new URLSearchParams({
       format: "jsonv2",
       addressdetails: "1",
-      limit: "6",
+      limit: "8",
       "accept-language": "ru",
       countrycodes: "ru",
       q: query,
@@ -172,8 +199,7 @@ export async function verifyObjectAddress(addressLine) {
     );
 
     if (Array.isArray(nextResults) && nextResults.length) {
-      results = nextResults;
-      break;
+      results = results.concat(nextResults);
     }
   }
 
@@ -181,13 +207,14 @@ export async function verifyObjectAddress(addressLine) {
     throw new Error("Адрес не найден. Уточните улицу, дом, корпус или строение.");
   }
 
-  const bestResult = pickBestAddressResult(results, queryTokens);
+  const uniqueResults = Array.from(new Map(results.map((item) => [String(item.place_id || item.display_name), item])).values());
+  const bestResult = pickBestAddressResult(uniqueResults, queryTokens, queryParts);
   if (!bestResult) {
     throw new Error("Адрес не найден. Уточните улицу, дом, корпус или строение.");
   }
 
   const matchedRegion = findRegionByStateName(bestResult.address?.state);
-  const confidence = scoreAddressResult(bestResult, queryTokens);
+  const confidence = scoreAddressResult(bestResult, queryTokens, queryParts);
 
   return {
     query: normalizedQuery,

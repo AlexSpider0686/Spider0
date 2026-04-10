@@ -26,6 +26,12 @@ export default function Summary({ totals, systemResults, objectData }) {
           <span>Работы (СМР+ПНР)</span>
           <strong>{rub(totals.totalWork)}</strong>
         </div>
+        {totals.tripTotal ? (
+          <div className="metric-card">
+            <span>Командировки</span>
+            <strong>{rub(totals.tripTotal)}</strong>
+          </div>
+        ) : null}
         <div className="metric-card">
           <span>Проектирование</span>
           <strong>{rub(totals.totalDesign || 0)}</strong>
@@ -46,6 +52,7 @@ export default function Summary({ totals, systemResults, objectData }) {
               <th>Оборудование</th>
               <th>Материалы</th>
               <th>Работы</th>
+              <th>Командировки</th>
               <th>Проектирование</th>
               <th>Итого</th>
             </tr>
@@ -60,6 +67,7 @@ export default function Summary({ totals, systemResults, objectData }) {
                 <td>{rub(item.equipmentCost)}</td>
                 <td>{rub(item.materialCost)}</td>
                 <td>{rub(item.workTotal)}</td>
+                <td>{rub(item.tripCostAllocation || 0)}</td>
                 <td>{item.designSkipped ? "Не рассчитывается" : rub(item.designTotal || 0)}</td>
                 <td>{rub(item.total)}</td>
               </tr>
