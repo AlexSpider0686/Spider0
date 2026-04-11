@@ -10,18 +10,18 @@ import VendorConfigurator from "./VendorConfigurator";
 
 function renderApsImportStatus(status) {
   if (!status) return null;
-  if (status.state === "loading") return <p className="hint-inline">РЎС‚Р°С‚СѓСЃ: {status.message}</p>;
-  if (status.state === "warning") return <p className="warn-inline">РЎС‚Р°С‚СѓСЃ: {status.message}</p>;
-  if (status.state === "error") return <p className="warn-inline">РЎС‚Р°С‚СѓСЃ: {status.message}</p>;
-  return <p className="hint-inline">РЎС‚Р°С‚СѓСЃ: {status.message}</p>;
+  if (status.state === "loading") return <p className="hint-inline">Статус: {status.message}</p>;
+  if (status.state === "warning") return <p className="warn-inline">Статус: {status.message}</p>;
+  if (status.state === "error") return <p className="warn-inline">Статус: {status.message}</p>;
+  return <p className="hint-inline">Статус: {status.message}</p>;
 }
 
 function renderApsImportProgress(status, elapsedSeconds = 0) {
   if (!status) return null;
   const stages = [
-    { key: "parsing", label: "1. РђРЅР°Р»РёР· PDF" },
-    { key: "pricing", label: "2. РЎР±РѕСЂ С†РµРЅ" },
-    { key: "done", label: "3. Р¤РёРЅР°Р»РёР·Р°С†РёСЏ" },
+    { key: "parsing", label: "1. Анализ PDF" },
+    { key: "pricing", label: "2. Сбор цен" },
+    { key: "done", label: "3. Финализация" },
   ];
   const currentIndex = Math.max(
     stages.findIndex((item) => item.key === status.stage),
@@ -53,12 +53,12 @@ function renderApsImportProgress(status, elapsedSeconds = 0) {
       })}
       {status.state === "loading" ? (
         <span className="pricing-source-chip muted">
-          <strong>Р’СЂРµРјСЏ:</strong> {elapsedSeconds} СЃРµРє.
+          <strong>Время:</strong> {elapsedSeconds} сек.
         </span>
       ) : null}
       {status.parsedItems ? (
         <span className="pricing-source-chip ok">
-          <strong>РџРѕР·РёС†РёРё:</strong> {status.parsedItems}
+          <strong>Позиции:</strong> {status.parsedItems}
         </span>
       ) : null}
       </div>
@@ -88,11 +88,11 @@ function renderVendorPricingProgress(progress) {
     <div className="calc-explain" style={{ marginTop: 10 }}>
       <div className="pricing-source-row" style={{ marginBottom: 8 }}>
         <span className={`pricing-source-chip ${progress.state === "error" ? "warn" : progress.state === "warning" ? "muted" : "ok"}`}>
-          <strong>РћР±РЅРѕРІР»РµРЅРёРµ С†РµРЅ</strong>
+          <strong>Обновление цен</strong>
         </span>
         {progress.total ? (
           <span className="pricing-source-chip muted">
-            <strong>РџРѕР·РёС†РёРё:</strong> {progress.processed || 0} / {progress.total}
+            <strong>Позиции:</strong> {progress.processed || 0} / {progress.total}
           </span>
         ) : null}
       </div>
@@ -111,11 +111,11 @@ function renderComparisonProgress(progress) {
     <div className="calc-explain" style={{ marginTop: 10 }}>
       <div className="pricing-source-row" style={{ marginBottom: 8 }}>
         <span className="pricing-source-chip ok">
-          <strong>РЎСЂР°РІРЅРµРЅРёРµ С†РµРЅ</strong>
+          <strong>Сравнение цен</strong>
         </span>
         {progress.total ? (
           <span className="pricing-source-chip muted">
-            <strong>Р’РµРЅРґРѕСЂС‹:</strong> {progress.processed || 0} / {progress.total}
+            <strong>Вендоры:</strong> {progress.processed || 0} / {progress.total}
           </span>
         ) : null}
       </div>
@@ -162,12 +162,12 @@ function buildSpecModelOptions(system, row) {
 const TECHNICAL_SOURCE_LABELS = {
   project_pdf: "PDF",
   model_bom: "BOM",
-  cable_model: "РєР°Р±РµР»СЊ",
-  kns_model: "РљРќРЎ",
-  resource_model: "СЂРµСЃСѓСЂСЃС‹",
+  cable_model: "кабель",
+  kns_model: "КНС",
+  resource_model: "ресурсы",
   survey_ai: "AI",
-  key_equipment: "РІРµРЅРґРѕСЂ",
-  algorithm: "РјРѕРґРµР»СЊ",
+  key_equipment: "вендор",
+  algorithm: "модель",
 };
 
 function resolveKeyEquipmentModel(system, item) {
@@ -958,11 +958,11 @@ export default function SystemsStep({
 
               {true ? (
                 <div className="calc-explain aps-import-card">
-                  <h4>РРјРїРѕСЂС‚ РїСЂРѕРµРєС‚РЅРѕР№ СЃРїРµС†РёС„РёРєР°С†РёРё СЃРёСЃС‚РµРјС‹ (PDF)</h4>
+                  <h4>Импорт проектной спецификации системы (PDF)</h4>
                   <p className="hint-inline">
-                    Р•СЃР»Рё PDF-РїСЂРѕРµРєС‚ Р·Р°РіСЂСѓР¶РµРЅ, СЂР°СЃС‡С‘С‚ РїРѕ СЌС‚РѕР№ СЃРёСЃС‚РµРјРµ РІС‹РїРѕР»РЅСЏРµС‚СЃСЏ РїРѕ СЃРїРµС†РёС„РёРєР°С†РёРё РїСЂРѕРµРєС‚Р°. Р’РЅСѓС‚СЂРµРЅРЅРёРµ Р°Р»РіРѕСЂРёС‚РјС‹ РїРѕРґР±РѕСЂР° РѕР±СЉС‘РјРѕРІ РґР»СЏ СЌС‚РѕР№ СЃРёСЃС‚РµРјС‹ Р±РѕР»СЊС€Рµ РЅРµ С„РѕСЂРјРёСЂСѓСЋС‚ СЃРѕСЃС‚Р°РІ РѕР±РѕСЂСѓРґРѕРІР°РЅРёСЏ Рё РјР°С‚РµСЂРёР°Р»РѕРІ, Р° РёСЃРїРѕР»СЊР·СѓСЋС‚СЃСЏ С‚РѕР»СЊРєРѕ РєР°Рє СЂРµР·РµСЂРІРЅС‹Р№ РєРѕРЅС‚СѓСЂ С‚Р°Рј, РіРґРµ РїСЂРѕРµРєС‚РЅС‹С… РґР°РЅРЅС‹С… РЅРµС‚.
+                    Если PDF-проект загружен, расчёт по этой системе выполняется по спецификации проекта. Внутренние алгоритмы подбора объёмов для этой системы больше не формируют состав оборудования и материалов, а используются только как резервный контур там, где проектных данных нет.
                   </p>
-                  <p className="hint-inline">Р”Р»СЏ РђРџРЎ РґРѕРїРѕР»РЅРёС‚РµР»СЊРЅРѕ РїСЂРёРјРµРЅСЏРµС‚СЃСЏ РїСЂРѕС„РёР»СЊ РЎРџР”РЎ/Р“РћРЎРў 21.110-2013 Рё AI-СѓС‚РѕС‡РЅРµРЅРёРµ СЃС‚СЂРѕРє. Р”Р»СЏ РѕСЃС‚Р°Р»СЊРЅС‹С… СЃРёСЃС‚РµРј Р·Р°РіСЂСѓР¶РµРЅРЅР°СЏ PDF-СЃРїРµС†РёС„РёРєР°С†РёСЏ С‚Р°РєР¶Рµ РїРѕР»СѓС‡Р°РµС‚ РїСЂРёРѕСЂРёС‚РµС‚ РЅР°Рґ Р°Р»РіРѕСЂРёС‚РјРёС‡РµСЃРєРёРј СЂР°СЃС‡С‘С‚РѕРј.</p>
+                  <p className="hint-inline">Для АПС дополнительно применяется профиль СПДС/ГОСТ 21.110-2013 и AI-уточнение строк. Для остальных систем загруженная PDF-спецификация также получает приоритет над алгоритмическим расчётом.</p>
 
                   <div className="aps-import-actions">
                     <label
@@ -971,7 +971,7 @@ export default function SystemsStep({
                       style={isApsImportLoading ? { opacity: 0.55, cursor: "not-allowed" } : undefined}
                       aria-disabled={isApsImportLoading}
                     >
-                      <FileUp size={14} /> Р—Р°РіСЂСѓР·РёС‚СЊ PDF
+                      <FileUp size={14} /> Загрузить PDF
                     </label>
                     <input
                       id={`aps-pdf-${system.id}`}
@@ -989,7 +989,7 @@ export default function SystemsStep({
                         try {
                           await importApsProjectPdf(system.id, file);
                         } catch {
-                          // РћС€РёР±РєР° РѕС‚РѕР±СЂР°Р¶Р°РµС‚СЃСЏ С‡РµСЂРµР· apsImportStatuses.
+                          // Ошибка отображается через apsImportStatuses.
                         } finally {
                           event.target.value = "";
                         }
@@ -997,12 +997,12 @@ export default function SystemsStep({
                     />
                     {apsSnapshot ? (
                       <button className="danger-btn" type="button" onClick={() => clearApsProjectPdf(system.id)} disabled={isApsImportLoading}>
-                        РћС‡РёСЃС‚РёС‚СЊ РїСЂРѕРµРєС‚
+                        Очистить проект
                       </button>
                     ) : null}
                     {isApsImportLoading ? (
                       <button className="ghost-btn" type="button" onClick={() => cancelApsProjectPdfImport(system.id)}>
-                        РћС‚РјРµРЅРёС‚СЊ РѕР±СЂР°Р±РѕС‚РєСѓ
+                        Отменить обработку
                       </button>
                     ) : null}
                   </div>
@@ -1011,10 +1011,10 @@ export default function SystemsStep({
                   {renderApsImportStatus(apsStatus)}
                   {apsStatus?.state === "warning" && !apsStatus?.cancelled ? (
                     <p className="hint-inline">
-                      РћР±СЂР°Р±РѕС‚РєР° Р·Р°РІРµСЂС€РµРЅР° РІ СЂРµР·РµСЂРІРЅРѕРј СЂРµР¶РёРјРµ: PDF СЂР°СЃРїРѕР·РЅР°РЅ, РЅРѕ С‡Р°СЃС‚СЊ РёР»Рё РІСЃРµ С†РµРЅС‹ РїРѕРґСЃС‚Р°РІР»РµРЅС‹ РёР· fallback-Р»РѕРіРёРєРё.
+                      Обработка завершена в резервном режиме: PDF распознан, но часть или все цены подставлены из fallback-логики.
                     </p>
                   ) : null}
-                  {apsSnapshot?.gostStandard ? <p className="hint-inline">РЎС‚Р°РЅРґР°СЂС‚ PDF: {apsSnapshot.gostStandard}</p> : null}
+                  {apsSnapshot?.gostStandard ? <p className="hint-inline">Стандарт PDF: {apsSnapshot.gostStandard}</p> : null}
 
                   {apsSnapshot ? (
                     <>
@@ -1556,10 +1556,10 @@ export default function SystemsStep({
 
               <div className="action-cell">
                 <button className="ghost-btn" type="button" onClick={() => exportSystemSpecification?.(system.id)}>
-                  <Download size={16} /> Excel-СЃРїРµС†РёС„РёРєР°С†РёСЏ
+                  <Download size={16} /> Excel-спецификация
                 </button>
                 <button className="danger-btn" type="button" onClick={() => removeSystem(system.id)} disabled={systems.length <= 1}>
-                  <Trash2 size={16} /> РЈРґР°Р»РёС‚СЊ СЃРёСЃС‚РµРјСѓ
+                  <Trash2 size={16} /> Удалить систему
                 </button>
               </div>
             </div>
