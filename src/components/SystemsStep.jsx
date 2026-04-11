@@ -700,14 +700,14 @@ export default function SystemsStep({
 
                     <div className="input-card compact">
                       <div className="label-with-tooltip">
-                        <label>РљР°СЃС‚РѕРјРЅС‹Р№ РёРЅРґРµРєСЃ</label>
+                        <label>Кастомный индекс</label>
                         <span className="label-tooltip-help">?</span>
                         <div className="label-tooltip-popover">
                           <p>
-                            РљР°СЃС‚РѕРјРЅС‹Р№ РёРЅРґРµРєСЃ РєРѕСЂСЂРµРєС‚РёСЂСѓРµС‚ С†РµРЅРѕРІРѕР№ РїСЂРѕС„РёР»СЊ РІС‹Р±СЂР°РЅРЅРѕРіРѕ РІРµРЅРґРѕСЂР° РґР»СЏ РєРѕРЅРєСЂРµС‚РЅРѕРіРѕ РѕР±СЉРµРєС‚Р°. Р—РЅР°С‡РµРЅРёРµ Р±РѕР»СЊС€Рµ
-                            1.00 РїРѕРІС‹С€Р°РµС‚ СЃС‚РѕРёРјРѕСЃС‚СЊ, РјРµРЅСЊС€Рµ 1.00 СЃРЅРёР¶Р°РµС‚.
+                            Кастомный индекс корректирует ценовой профиль выбранного вендора для конкретного объекта. Значение больше
+                            1.00 повышает стоимость, меньше 1.00 снижает.
                           </p>
-                          <p>РџР°СЂР°РјРµС‚СЂ СѓС‡РёС‚С‹РІР°РµС‚СЃСЏ РїСЂРё СЂР°СЃС‡С‘С‚Рµ СЃС‚РѕРёРјРѕСЃС‚Рё РѕР±РѕСЂСѓРґРѕРІР°РЅРёСЏ Рё Р·Р°РІРёСЃСЏС‰РёС… РѕС‚ РЅРµРіРѕ СЂР°Р±РѕС‚ СЌС‚РѕР№ СЃРёСЃС‚РµРјС‹.</p>
+                          <p>Параметр учитывается при расчёте стоимости оборудования и зависящих от него работ этой системы.</p>
                         </div>
                       </div>
                       <input
@@ -853,78 +853,78 @@ export default function SystemsStep({
                   <div className="pricing-source-row">
                     <span className="pricing-chip-tooltip">
                       <span className="pricing-source-chip">
-                        <strong>РџСЂРѕРІРµСЂРµРЅРѕ РёСЃС‚РѕС‡РЅРёРєРѕРІ:</strong> {checkedSourceCount}
+                      <strong>Проверено источников:</strong> {checkedSourceCount}
                       </span>
                       <span className="pricing-chip-popover">
-                        Р­С‚Рѕ С‡РёСЃР»Рѕ РёСЃС‚РѕС‡РЅРёРєРѕРІ, РєРѕС‚РѕСЂС‹Рµ СЃРёСЃС‚РµРјР° СЂРµР°Р»СЊРЅРѕ РѕРїСЂРѕСЃРёР»Р° РїСЂРё РїРѕРёСЃРєРµ СЃС‚РѕРёРјРѕСЃС‚Рё РїРѕ С‚РµРєСѓС‰РµР№ СЃРёСЃС‚РµРјРµ:
-                        РїРѕСЃС‚Р°РІС‰РёРєРё, С‚РѕСЂРіРѕРІС‹Рµ РїР»РѕС‰Р°РґРєРё Рё СЃР°Р№С‚ РІС‹Р±СЂР°РЅРЅРѕРіРѕ РїСЂРѕРёР·РІРѕРґРёС‚РµР»СЏ. РњРµС‚СЂРёРєР° РїРѕРєР°Р·С‹РІР°РµС‚ С€РёСЂРёРЅСѓ
-                        РїСЂРѕРІРµСЂРєРё СЂС‹РЅРєР° РїРѕ С‚РµРєСѓС‰РµРјСѓ Р·Р°РїСЂРѕСЃСѓ.
+                        Это число источников, которые система реально опросила при поиске стоимости по текущей системе:
+                        поставщики, торговые площадки и сайт выбранного производителя. Метрика показывает ширину
+                        проверки рынка по текущему запросу.
                       </span>
                     </span>
                     <span className="pricing-chip-tooltip">
                       <span className={`pricing-source-chip ${pricedSourceCount > 0 ? "ok" : "warn"}`}>
-                        <strong>РСЃС‚РѕС‡РЅРёРєРё СЃ РЅР°Р№РґРµРЅРЅРѕР№ С†РµРЅРѕР№:</strong> {pricedSourceCount}
+                        <strong>Источники с найденной ценой:</strong> {pricedSourceCount}
                       </span>
                       <span className="pricing-chip-popover">
-                        Р­С‚Рѕ С‡РёСЃР»Рѕ РёСЃС‚РѕС‡РЅРёРєРѕРІ, РіРґРµ СѓРґР°Р»РѕСЃСЊ РЅР°Р№С‚Рё РїСЂРёРіРѕРґРЅСѓСЋ С†РµРЅСѓ РїРѕ СЃРѕРїРѕСЃС‚Р°РІР»РµРЅРЅРѕР№ РїРѕР·РёС†РёРё. Р§РµРј Р±РѕР»СЊС€Рµ
-                        С‚Р°РєРёС… РёСЃС‚РѕС‡РЅРёРєРѕРІ, С‚РµРј СѓСЃС‚РѕР№С‡РёРІРµРµ СЃСЂРµРґРЅСЏСЏ СЂС‹РЅРѕС‡РЅР°СЏ С†РµРЅР° Рё С‚РµРј РјРµРЅСЊС€Рµ СЂРёСЃРє РѕРїРѕСЂС‹ РЅР° РµРґРёРЅРёС‡РЅРѕРµ
-                        Р·РЅР°С‡РµРЅРёРµ.
+                        Это число источников, где удалось найти пригодную цену по сопоставленной позиции. Чем больше
+                        таких источников, тем устойчивее средняя рыночная цена и тем меньше риск опоры на единичное
+                        значение.
                       </span>
                     </span>
                     <span className="pricing-chip-tooltip">
                       <span className={`pricing-source-chip ${manufacturerSuccess ? "ok" : manufacturerChecked ? "warn" : "muted"}`}>
-                        <strong>РЎР°Р№С‚ РїСЂРѕРёР·РІРѕРґРёС‚РµР»СЏ:</strong> {manufacturerHost || "РЅРµ Р·Р°РґР°РЅ"} В·{" "}
-                        {manufacturerSuccess ? "С†РµРЅС‹ РЅР°Р№РґРµРЅС‹" : manufacturerChecked ? "СЃР°Р№С‚ РѕРїСЂРѕС€РµРЅ, С†РµРЅ РЅРµС‚" : "РЅРµ РѕРїСЂРѕС€РµРЅ"}
+                        <strong>Сайт производителя:</strong> {manufacturerHost || "не задан"} ·{" "}
+                        {manufacturerSuccess ? "цены найдены" : manufacturerChecked ? "сайт опрошен, цен нет" : "не опрошен"}
                       </span>
                       <span className="pricing-chip-popover">
-                        Р—РґРµСЃСЊ РїРѕРєР°Р·С‹РІР°РµС‚СЃСЏ СЃС‚Р°С‚СѓСЃ РѕРїСЂРѕСЃР° СЃР°Р№С‚Р° РїСЂРѕРёР·РІРѕРґРёС‚РµР»СЏ РІС‹Р±СЂР°РЅРЅРѕРіРѕ РІРµРЅРґРѕСЂР°. Р•СЃР»Рё С†РµРЅР° РЅР°Р№РґРµРЅР°,
-                        РѕРЅР° СѓС‡Р°СЃС‚РІСѓРµС‚ РІ СЂС‹РЅРѕС‡РЅРѕР№ РІС‹Р±РѕСЂРєРµ. Р•СЃР»Рё СЃР°Р№С‚ С‚РѕР»СЊРєРѕ РѕРїСЂРѕС€РµРЅ, РЅРѕ С†РµРЅР° РЅРµ РїРѕР»СѓС‡РµРЅР°, СЃРёСЃС‚РµРјР°
-                        РёСЃРїРѕР»СЊР·СѓРµС‚ РЅР°Р№РґРµРЅРЅС‹Рµ Р·РЅР°С‡РµРЅРёСЏ Сѓ РїРѕСЃС‚Р°РІС‰РёРєРѕРІ Рё fallback-Р»РѕРіРёРєСѓ.
+                        Здесь показывается статус опроса сайта производителя выбранного вендора. Если цена найдена,
+                        она участвует в рыночной выборке. Если сайт только опрошен, но цена не получена, система
+                        использует найденные значения у поставщиков и fallback-логику.
                       </span>
                     </span>
                     <span className="pricing-chip-tooltip">
                       <span className={`pricing-source-chip ${recheckRequiredCount ? "warn" : "ok"}`}>
-                        <strong>РўСЂРµР±СѓСЋС‚ РїРµСЂРµРїСЂРѕРІРµСЂРєРё:</strong> {recheckRequiredCount}
+                        <strong>Требуют перепроверки:</strong> {recheckRequiredCount}
                       </span>
                       <span className="pricing-chip-popover">
-                        Р­С‚Рѕ РєРѕР»РёС‡РµСЃС‚РІРѕ РїРѕР·РёС†РёР№, РїРѕ РєРѕС‚РѕСЂС‹Рј СЃРёСЃС‚РµРјР° РЅР°С€Р»Р° РїСЂРёР·РЅР°РєРё РЅРµС‚РѕС‡РЅРѕРіРѕ СЃРѕРїРѕСЃС‚Р°РІР»РµРЅРёСЏ:
-                        СЃРїРѕСЂРЅР°СЏ РјРѕРґРµР»СЊ, СЂР°СЃС…РѕР¶РґРµРЅРёРµ РµРґРёРЅРёС† РёР·РјРµСЂРµРЅРёСЏ, РЅРµСЃРєРѕР»СЊРєРѕ РІРѕР·РјРѕР¶РЅС‹С… СЃРѕРІРїР°РґРµРЅРёР№ РёР»Рё РЅРёР·РєР°СЏ
-                        СѓРІРµСЂРµРЅРЅРѕСЃС‚СЊ РІ СЂР°СЃРїРѕР·РЅР°РІР°РЅРёРё. РўР°РєРёРµ РїРѕР·РёС†РёРё Р»СѓС‡С€Рµ РІСЂСѓС‡РЅСѓСЋ РїСЂРѕРІРµСЂРёС‚СЊ РїРµСЂРµРґ С„РёРЅР°Р»СЊРЅС‹Рј СЂР°СЃС‡РµС‚РѕРј.
+                        Это количество позиций, по которым система нашла признаки неточного сопоставления:
+                        спорная модель, расхождение единиц измерения, несколько возможных совпадений или низкая
+                        уверенность в распознавании. Такие позиции лучше вручную проверить перед финальным расчётом.
                       </span>
                     </span>
                     <span className="pricing-chip-tooltip">
                       <span className="pricing-source-chip muted">
-                        <strong>РЎС‚СЂР°С‚РµРіРёСЏ:</strong> {formatSelectionStrategy(strategy)}
+                        <strong>Стратегия:</strong> {formatSelectionStrategy(strategy)}
                       </span>
                       <span className="pricing-chip-popover">
-                        Р­С‚Рѕ РїСЂР°РІРёР»Рѕ, РїРѕ РєРѕС‚РѕСЂРѕРјСѓ СЃРёСЃС‚РµРјР° РІС‹Р±СЂР°Р»Р° РёС‚РѕРіРѕРІСѓСЋ С†РµРЅСѓ: СЃСЂРµРґРЅРµРµ РїРѕ СЂС‹РЅРєСѓ, РѕРїРѕСЂР° РЅР° PDF-РїСЂРѕРµРєС‚,
-                        fallback РїРѕ Р±Р°Р·РѕРІРѕР№ РјРѕРґРµР»Рё РёР»Рё СЃРјРµС€Р°РЅРЅС‹Р№ СЃС†РµРЅР°СЂРёР№. РњРµС‚СЂРёРєР° РїРѕРјРѕРіР°РµС‚ РїРѕРЅСЏС‚СЊ, РёР· РєР°РєРѕРіРѕ СЂРµР¶РёРјР°
-                        РїРѕР»СѓС‡РµРЅР° С‚РµРєСѓС‰Р°СЏ СЃС‚РѕРёРјРѕСЃС‚СЊ.
+                        Это правило, по которому система выбрала итоговую цену: среднее по рынку, опора на PDF-проект,
+                        fallback по базовой модели или смешанный сценарий. Метрика помогает понять, из какого режима
+                        получена текущая стоимость.
                       </span>
                     </span>
                     <span className="pricing-chip-tooltip">
                       <span className="pricing-source-chip muted">
-                        <strong>РЈРІРµСЂРµРЅРЅРѕСЃС‚СЊ:</strong> {num(avgConfidence * 100, 0)}%
+                        <strong>Уверенность:</strong> {num(avgConfidence * 100, 0)}%
                       </span>
                       <span className="pricing-chip-popover">
-                        Р­С‚Рѕ СЃРІРѕРґРЅР°СЏ РѕС†РµРЅРєР° С‚РѕРіРѕ, РЅР°СЃРєРѕР»СЊРєРѕ РЅР°РґРµР¶РЅРѕ СЃРёСЃС‚РµРјР° СЂР°СЃРїРѕР·РЅР°Р»Р° РїРѕР·РёС†РёРё Рё СЃРѕРїРѕСЃС‚Р°РІРёР»Р° РёС… СЃ
-                        СЂС‹РЅРѕС‡РЅС‹РјРё РёСЃС‚РѕС‡РЅРёРєР°РјРё. Р§РµРј РІС‹С€Рµ РїСЂРѕС†РµРЅС‚, С‚РµРј РјРµРЅСЊС€Рµ СЃРїРѕСЂРЅС‹С… РјРµСЃС‚ РІ РЅР°РёРјРµРЅРѕРІР°РЅРёСЏС…, РјРѕРґРµР»СЏС…,
-                        РµРґРёРЅРёС†Р°С… РёР·РјРµСЂРµРЅРёСЏ Рё РЅР°Р№РґРµРЅРЅС‹С… С†РµРЅР°С….
+                        Это сводная оценка того, насколько надёжно система распознала позиции и сопоставила их с
+                        рыночными источниками. Чем выше процент, тем меньше спорных мест в наименованиях, моделях,
+                        единицах измерения и найденных ценах.
                       </span>
                     </span>
                   </div>
                   {snapshot.warning ? <span className="warn-inline"> {formatPricingWarning(snapshot)}</span> : null}
-                  {!snapshot.warning && snapshot.error ? <span className="warn-inline"> РћС€РёР±РєР° API: {snapshot.error}</span> : null}
+                  {!snapshot.warning && snapshot.error ? <span className="warn-inline"> Ошибка API: {snapshot.error}</span> : null}
                 </div>
               ) : null}
 
               {recheckRequiredCount ? (
                 <div className="calc-explain">
                   <div className="aps-ops-header">
-                    <h4>РЎРїРѕСЂРЅС‹Рµ РїРѕР·РёС†РёРё</h4>
+                  <h4>Спорные позиции</h4>
                     <button className="ghost-btn" type="button" onClick={() => toggleRecheckRows(system.id)}>
                       {showRecheck ? <EyeOff size={14} /> : <Eye size={14} />}
-                      {showRecheck ? "РЎРєСЂС‹С‚СЊ СЃРїРѕСЂРЅС‹Рµ РїРѕР·РёС†РёРё" : "РџРѕРєР°Р·Р°С‚СЊ СЃРїРѕСЂРЅС‹Рµ РїРѕР·РёС†РёРё"}
+                      {showRecheck ? "Скрыть спорные позиции" : "Показать спорные позиции"}
                     </button>
                   </div>
                   {showRecheck ? (
@@ -932,21 +932,21 @@ export default function SystemsStep({
                       <table>
                         <thead>
                           <tr>
-                            <th>РџРѕР·РёС†РёСЏ</th>
-                            <th>РќР°РёРјРµРЅРѕРІР°РЅРёРµ</th>
-                            <th>Р¦РµРЅР°</th>
-                            <th>РЈРІРµСЂРµРЅРЅРѕСЃС‚СЊ</th>
-                            <th>РџСЂРёС‡РёРЅР°</th>
+                              <th>Позиция</th>
+                              <th>Наименование</th>
+                              <th>Цена</th>
+                              <th>Уверенность</th>
+                              <th>Причина</th>
                           </tr>
                         </thead>
                         <tbody>
                           {recheckRows.map((item) => (
                             <tr key={`${system.id}-recheck-${item.key}`}>
-                              <td>{item.position || item.key || "вЂ”"}</td>
-                              <td>{item.equipmentLabel || item.model || item.name || "РџРѕР·РёС†РёСЏ"}</td>
+                              <td>{item.position || item.key || "—"}</td>
+                              <td>{item.equipmentLabel || item.model || item.name || "Позиция"}</td>
                               <td>{rub(item.price || 0)}</td>
                               <td>{num((item.priceConfidence || 0) * 100, 0)}%</td>
-                              <td>{item.recheckReason || "РќСѓР¶РЅР° СЂСѓС‡РЅР°СЏ РїРµСЂРµРїСЂРѕРІРµСЂРєР° СЃРѕРїРѕСЃС‚Р°РІР»РµРЅРёСЏ Рё С†РµРЅС‹"}</td>
+                              <td>{item.recheckReason || "Нужна ручная перепроверка сопоставления и цены"}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -1020,36 +1020,36 @@ export default function SystemsStep({
                     <>
                       <div className="summary-grid breakdown-metrics">
                         <div className="metric-card">
-                          <span>Р¤Р°Р№Р» РїСЂРѕРµРєС‚Р°</span>
+                          <span>Файл проекта</span>
                           <strong>{apsSnapshot.fileName}</strong>
                         </div>
                         <div className="metric-card">
-                          <span>РџРѕР·РёС†РёРё РІ СЃРїРµС†РёС„РёРєР°С†РёРё</span>
+                          <span>Позиции в спецификации</span>
                           <strong>{num(apsSnapshot.items.length, 0)}</strong>
                         </div>
                         <div className="metric-card">
-                          <span>РџРѕР·РёС†РёРё СЃ С†РµРЅРѕР№ РїРѕСЃС‚Р°РІС‰РёРєР°</span>
+                          <span>Позиции с ценой поставщика</span>
                           <strong>{num(apsSnapshot.sourceStats.itemsWithSupplierPrice, 0)}</strong>
                         </div>
                         <div className="metric-card">
-                          <span>РџРѕР·РёС†РёРё Р±РµР· С†РµРЅС‹</span>
+                          <span>Позиции без цены</span>
                           <strong>{num(apsSnapshot.sourceStats.itemsWithoutPrice, 0)}</strong>
                         </div>
                         <div className="metric-card">
-                          <span>РќРµСЂР°СЃРїРѕР·РЅР°РЅРЅС‹Рµ СЃС‚СЂРѕРєРё</span>
+                          <span>Нераспознанные строки</span>
                           <strong>{num(apsSnapshot.sourceStats.unresolvedPositions, 0)}</strong>
                         </div>
                         <div className="metric-card">
-                          <span>РўРѕС‡РЅРѕСЃС‚СЊ СЂР°СЃРїРѕР·РЅР°РІР°РЅРёСЏ</span>
+                          <span>Точность распознавания</span>
                           <strong>{num((apsSnapshot.sourceStats.recognitionRate || 0) * 100, 1)}%</strong>
                         </div>
                         <div className="metric-card">
-                          <span>РљР°Р±РµР»СЊ (РёР· РїСЂРѕРµРєС‚Р°/РјРѕРґРµР»Рё)</span>
-                          <strong>{num(apsSnapshot.metrics?.cableLengthM || 0, 1)} Рј</strong>
+                          <span>Кабель (из проекта/модели)</span>
+                          <strong>{num(apsSnapshot.metrics?.cableLengthM || 0, 1)} м</strong>
                         </div>
                         <div className="metric-card">
-                          <span>РљСЂРµРїРµР¶ (РёР· РїСЂРѕРµРєС‚Р°/РјРѕРґРµР»Рё)</span>
-                          <strong>{num(apsSnapshot.metrics?.fastenerQty || 0, 0)} С€С‚</strong>
+                          <span>Крепеж (из проекта/модели)</span>
+                          <strong>{num(apsSnapshot.metrics?.fastenerQty || 0, 0)} шт</strong>
                         </div>
                       </div>
 
