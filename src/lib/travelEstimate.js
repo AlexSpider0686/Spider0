@@ -103,15 +103,12 @@ function pickAirRoute(originPoint, destinationPoint) {
   const toNearest = toList[0] || null;
   const airportClosed = Boolean(fromNearest?.closed || toNearest?.closed);
   const openUnavailable = !fromOpen || !toOpen;
-  const detourTooLarge = toNumber(fromOpen?.distanceKm, 999) > 320 || toNumber(toOpen?.distanceKm, 999) > 320;
-
   return {
     airportClosed,
     openUnavailable,
-    detourTooLarge,
     fromAirport: fromOpen || fromNearest || null,
     toAirport: toOpen || toNearest || null,
-    airAllowed: !openUnavailable && !detourTooLarge && !(airportClosed && (!fromOpen || !toOpen)),
+    airAllowed: !openUnavailable,
   };
 }
 
@@ -203,6 +200,7 @@ export function createEmptyTravelEstimate() {
     alerts: [],
     airportClosed: false,
     airportComment: "",
+    routeSummary: "",
     departureAirport: "",
     arrivalAirport: "",
     crewSize: 1,
@@ -390,6 +388,10 @@ export async function estimateTravelFromRoute(input, options = {}) {
   const hotelNights = Math.max(workDurationDays, 1);
   const roundTripDurationHours = round(pricing.oneWayDurationHours * 2, 1);
   const perDiemDays = Math.max(workDurationDays + ceil(roundTripDurationHours / 24), 1);
+  const routeSummary =
+    mode === "air"
+      ? `${originAddress} -> ${airRoute?.fromAirport?.city || "Аэропорт вылета"} (${airRoute?.fromAirport?.label || "не определен"}) -> ${airRoute?.toAirport?.city || "Аэропорт прилета"} (${airRoute?.toAirport?.label || "не определен"}) -> ${destinationAddress}`
+      : `${originAddress} -> ${destinationAddress}`;
   const airportComment =
     mode === "air"
       ? `Вылет: ${airRoute?.fromAirport?.city || "не определен"} (${airRoute?.fromAirport?.label || "аэропорт"}), прилет: ${airRoute?.toAirport?.city || "не определен"} (${airRoute?.toAirport?.label || "аэропорт"}).`
@@ -415,6 +417,7 @@ export async function estimateTravelFromRoute(input, options = {}) {
           : ["Для авиаперелета маршрут не выбран: ближайший аэропорт по направлению недоступен или нецелесообразен."],
       airportClosed: Boolean(airRoute?.airportClosed && mode !== "air"),
       airportComment,
+      routeSummary,
       departureAirport: airRoute?.fromAirport ? `${airRoute.fromAirport.city}, ${airRoute.fromAirport.label}` : "",
       arrivalAirport: airRoute?.toAirport ? `${airRoute.toAirport.city}, ${airRoute.toAirport.label}` : "",
       crewSize,
