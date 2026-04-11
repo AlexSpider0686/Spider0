@@ -194,24 +194,24 @@ function resolveKeyEquipmentModel(system, item) {
 
 function resolveUnrecognizedReason(reason) {
   const map = {
-    position_not_found: "РЅРµ РЅР°Р№РґРµРЅ РЅРѕРјРµСЂ РїРѕР·РёС†РёРё",
-    descriptor_missing: "РЅРµС‚ РѕРїРёСЃР°РЅРёСЏ РїРѕР·РёС†РёРё",
-    qty_or_unit_not_found: "РЅРµ РѕРїСЂРµРґРµР»РµРЅС‹ РєРѕР»РёС‡РµСЃС‚РІРѕ РёР»Рё РµРґРёРЅРёС†Р° РёР·РјРµСЂРµРЅРёСЏ",
-    validation_failed: "РЅРµ РїСЂРѕР№РґРµРЅР° РІР°Р»РёРґР°С†РёСЏ СЃС‚СЂРѕРєРё",
-    not_parsed: "СЃС‚СЂРѕРєР° С‚СЂРµР±СѓРµС‚ СЂСѓС‡РЅРѕР№ РїСЂРѕРІРµСЂРєРё",
+    position_not_found: "не найден номер позиции",
+    descriptor_missing: "нет описания позиции",
+    qty_or_unit_not_found: "не определены количество или единица измерения",
+    validation_failed: "не пройдена валидация строки",
+    not_parsed: "строка требует ручной проверки",
   };
-  return map[reason] || "СЃС‚СЂРѕРєР° С‚СЂРµР±СѓРµС‚ СЂСѓС‡РЅРѕР№ РїСЂРѕРІРµСЂРєРё";
+  return map[reason] || "строка требует ручной проверки";
 }
 
 function formatSelectionStrategy(strategy) {
   const value = String(strategy || "");
-  if (value.includes("article_exact_match")) return "С‚РѕС‡РЅРѕРµ СЃРѕРІРїР°РґРµРЅРёРµ Р°СЂС‚РёРєСѓР»Р°";
-  if (value.includes("model_token_match")) return "СЃРѕРІРїР°РґРµРЅРёРµ Р°СЂС‚РёРєСѓР»Р°/РјРѕРґРµР»Рё";
-  if (value.includes("luis_api_exact_model")) return "С‚РѕС‡РЅРѕРµ СЃРѕРІРїР°РґРµРЅРёРµ РјРѕРґРµР»Рё (LUIS+ API)";
-  if (value.includes("luis_api_model_bias")) return "РїСЂРёРѕСЂРёС‚РµС‚ РїРѕ РјРѕРґРµР»Рё (LUIS+ API)";
-  if (value.includes("manufacturer_source_bias")) return "РїСЂРёРѕСЂРёС‚РµС‚ РёСЃС‚РѕС‡РЅРёРєР° РїСЂРѕРёР·РІРѕРґРёС‚РµР»СЏ";
-  if (value.includes("average_all_sources")) return "СЃСЂРµРґРЅРµРµ РїРѕ РґРѕСЃС‚СѓРїРЅС‹Рј РёСЃС‚РѕС‡РЅРёРєР°Рј";
-  return "Р°Р»РіРѕСЂРёС‚Рј РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ";
+  if (value.includes("article_exact_match")) return "точное совпадение артикула";
+  if (value.includes("model_token_match")) return "совпадение артикула/модели";
+  if (value.includes("luis_api_exact_model")) return "точное совпадение модели (LUIS+ API)";
+  if (value.includes("luis_api_model_bias")) return "приоритет по модели (LUIS+ API)";
+  if (value.includes("manufacturer_source_bias")) return "приоритет источника производителя";
+  if (value.includes("average_all_sources")) return "среднее по доступным источникам";
+  return "алгоритм по умолчанию";
 }
 
 function buildSourceLinkIndex(result) {
@@ -274,19 +274,19 @@ function formatPricingWarning(snapshot) {
   const warning = String(snapshot?.warning || "").trim();
   if (!warning) return "";
   if (warning === "price_collection_unavailable_fallback_mode") {
-    return "РЎРµСЂРІРёСЃ СЃР±РѕСЂР° С†РµРЅ РІСЂРµРјРµРЅРЅРѕ РЅРµРґРѕСЃС‚СѓРїРµРЅ. РСЃРїРѕР»СЊР·РѕРІР°РЅ СЂРµР·РµСЂРІРЅС‹Р№ СЂРµР¶РёРј Рё fallback-Р»РѕРіРёРєР°.";
+    return "Сервис сбора цен временно недоступен. Использован резервный режим и fallback-логика.";
   }
   return warning;
 }
 
-const APS_MANUAL_UNIT_OPTIONS = ["С€С‚", "РєРѕРјРїР»", "Рј", "Рј2", "РєРі", "Р»", "СѓРї", "Р»РёСЃС‚"];
+const APS_MANUAL_UNIT_OPTIONS = ["шт", "компл", "м", "м2", "кг", "л", "уп", "лист"];
 
 function defaultManualDraft() {
   return {
     kind: "equipment",
     name: "",
     model: "",
-    unit: "С€С‚",
+    unit: "шт",
     qty: 1,
     unitPrice: 0,
   };
@@ -390,23 +390,23 @@ function renderVendorMetricPopover(kind, result) {
   const markerLabel = result?.unitWorkMarker?.label || "вЂ”";
   const costPerUnit = toNumber(result?.unitWorkMarker?.costPerUnit, 0);
   const selectionKey = result?.equipmentData?.selectionKey || "fallback";
-  const modeLabel = result?.estimateMode === "project_pdf" ? "РїРѕ PDF-РїСЂРѕРµРєС‚Сѓ" : "РїРѕ РІРЅСѓС‚СЂРµРЅРЅРµР№ РјРѕРґРµР»Рё";
+  const modeLabel = result?.estimateMode === "project_pdf" ? "по PDF-проекту" : "по внутренней модели";
 
   if (kind === "unitPrice") {
     return (
       <span className="pricing-chip-popover work-cost-popover">
         <span className="work-cost-popover__section">
-          <strong>Р§С‚Рѕ С‚Р°РєРѕРµ В«Р•Рґ. С†РµРЅР°В»</strong>
-          <span>Р­С‚Рѕ СЂР°СЃС‡РµС‚РЅР°СЏ СЃС‚РѕРёРјРѕСЃС‚СЊ РѕРґРЅРѕР№ Р±Р°Р·РѕРІРѕР№ РµРґРёРЅРёС†С‹ РѕР±РѕСЂСѓРґРѕРІР°РЅРёСЏ РґР»СЏ С‚РµРєСѓС‰РµР№ СЃРёСЃС‚РµРјС‹.</span>
+          <strong>Что такое «Ед. цена»</strong>
+          <span>Это расчетная стоимость одной базовой единицы оборудования для текущей системы.</span>
         </span>
         <span className="work-cost-popover__section">
-          <strong>РљР°Рє СЂР°СЃСЃС‡РёС‚Р°РЅРѕ СЃРµР№С‡Р°СЃ</strong>
+          <strong>Как рассчитано сейчас</strong>
           <span>
-            Р—РЅР°С‡РµРЅРёРµ {rub(unitPrice)} РїРѕР»СѓС‡РµРЅРѕ РёР· Р±Р»РѕРєР° РѕР±РѕСЂСѓРґРѕРІР°РЅРёСЏ СЃРёСЃС‚РµРјС‹: РѕР±С‰РёР№ Р±СЋРґР¶РµС‚ РѕР±РѕСЂСѓРґРѕРІР°РЅРёСЏ {rub(equipmentCost)} СЃРІРµРґРµРЅ Рє
-            Р±Р°Р·РѕРІРѕР№ РµРґРёРЅРёС†Рµ СЂР°СЃС‡РµС‚Р° РїРѕ С‚РµРєСѓС‰РµРјСѓ РїСЂРѕС„РёР»СЋ РІРµРЅРґРѕСЂР°, С‚РёРїСѓ СЃРёСЃС‚РµРјС‹ Рё РЅР°Р№РґРµРЅРЅС‹Рј СЂС‹РЅРѕС‡РЅС‹Рј РёСЃС‚РѕС‡РЅРёРєР°Рј.
+            Значение {rub(unitPrice)} получено из блока оборудования системы: общий бюджет оборудования {rub(equipmentCost)} сведен к
+            базовой единице расчета по текущему профилю вендора, типу системы и найденным рыночным источникам.
           </span>
           <span>
-            РљР»СЋС‡ РІС‹Р±РѕСЂР°: {selectionKey}. Р РµР¶РёРј СЂР°СЃС‡РµС‚Р°: {modeLabel}.
+            Ключ выбора: {selectionKey}. Режим расчета: {modeLabel}.
           </span>
         </span>
       </span>
@@ -417,16 +417,16 @@ function renderVendorMetricPopover(kind, result) {
     return (
       <span className="pricing-chip-popover work-cost-popover">
         <span className="work-cost-popover__section">
-          <strong>Р§С‚Рѕ С‚Р°РєРѕРµ В«РњР°СЂРєРµСЂВ»</strong>
+          <strong>Что такое «Маркер»</strong>
           <span>
-            Р­С‚Рѕ РѕРїРѕСЂРЅР°СЏ РµРґРёРЅРёС†Р° С‚СЂСѓРґРѕР·Р°С‚СЂР°С‚, РїРѕ РєРѕС‚РѕСЂРѕР№ СЃРёСЃС‚РµРјР° РЅРѕСЂРјРёСЂСѓРµС‚ СЃС‚РѕРёРјРѕСЃС‚СЊ СЂР°Р±РѕС‚ РЅР° РѕРґРЅСѓ СѓСЃР»РѕРІРЅСѓСЋ РµРґРёРЅРёС†Сѓ С‚РµРєСѓС‰РµР№ СЃРёСЃС‚РµРјС‹.
+            Это опорная единица трудозатрат, по которой система нормирует стоимость работ на одну условную единицу текущей системы.
           </span>
         </span>
         <span className="work-cost-popover__section">
-          <strong>РљР°Рє СЂР°СЃСЃС‡РёС‚Р°РЅРѕ СЃРµР№С‡Р°СЃ</strong>
+          <strong>Как рассчитано сейчас</strong>
           <span>
-            Р”Р»СЏ СЌС‚РѕР№ СЃРёСЃС‚РµРјС‹ РІС‹Р±СЂР°РЅ РјР°СЂРєРµСЂ В«{markerLabel}В». РћРЅ РѕРїСЂРµРґРµР»СЏРµС‚СЃСЏ Р°Р»РіРѕСЂРёС‚РјРѕРј РїРѕ С‚РёРїСѓ СЃРёСЃС‚РµРјС‹, СЃРѕСЃС‚Р°РІСѓ РѕР±РѕСЂСѓРґРѕРІР°РЅРёСЏ Рё СЂРµР¶РёРјСѓ
-            СЂР°СЃС‡РµС‚Р°, С‡С‚РѕР±С‹ РїСЂРёРІРµСЃС‚Рё СЂР°Р±РѕС‚С‹ Рє РµРґРёРЅРѕР№ СЃСЂР°РІРЅРёРјРѕР№ Р±Р°Р·Рµ.
+            Для этой системы выбран маркер «{markerLabel}». Он определяется алгоритмом по типу системы, составу оборудования и режиму
+            расчета, чтобы привести работы к единой сравнимой базе.
           </span>
         </span>
       </span>
@@ -436,17 +436,17 @@ function renderVendorMetricPopover(kind, result) {
   return (
     <span className="pricing-chip-popover work-cost-popover">
       <span className="work-cost-popover__section">
-        <strong>Р§С‚Рѕ С‚Р°РєРѕРµ В«Р—Р° РµРґРёРЅРёС†СѓВ»</strong>
-        <span>Р­С‚Рѕ СЃС‚РѕРёРјРѕСЃС‚СЊ СЂР°Р±РѕС‚ РІ РїРµСЂРµСЃС‡РµС‚Рµ РЅР° РѕРґРёРЅ РІС‹Р±СЂР°РЅРЅС‹Р№ РјР°СЂРєРµСЂ С‚СЂСѓРґРѕРµРјРєРѕСЃС‚Рё.</span>
+        <strong>Что такое «За единицу»</strong>
+        <span>Это стоимость работ в пересчете на один выбранный маркер трудоемкости.</span>
       </span>
       <span className="work-cost-popover__section">
-        <strong>РљР°Рє СЂР°СЃСЃС‡РёС‚Р°РЅРѕ СЃРµР№С‡Р°СЃ</strong>
+        <strong>Как рассчитано сейчас</strong>
         <span>
-          РЎРµР№С‡Р°СЃ РїРѕРєР°Р·Р°С‚РµР»СЊ СЂР°РІРµРЅ {num(costPerUnit, 0)} Рё РѕС‚СЂР°Р¶Р°РµС‚, СЃРєРѕР»СЊРєРѕ СЂСѓР±Р»РµР№ СЂР°Р±РѕС‚ РїСЂРёС…РѕРґРёС‚СЃСЏ РЅР° РѕРґРёРЅ РјР°СЂРєРµСЂ В«{markerLabel}В».
+          Сейчас показатель равен {num(costPerUnit, 0)} и отражает, сколько рублей работ приходится на один маркер «{markerLabel}».
         </span>
         <span>
-          Р—РЅР°С‡РµРЅРёРµ С„РѕСЂРјРёСЂСѓРµС‚СЃСЏ РёР· РѕР±С‰РµР№ СЃС‚РѕРёРјРѕСЃС‚Рё РЎРњР +РџРќР , РІРЅСѓС‚СЂРµРЅРЅРµР№ РјРѕРґРµР»Рё РµРґРёРЅРёС‡РЅС‹С… СЂР°СЃС†РµРЅРѕРє, РїРѕРїСЂР°РІРѕРє СѓСЃР»РѕРІРёР№ РјРѕРЅС‚Р°Р¶Р° Рё РїСЂРѕРІРµСЂРєРё
-          СЂС‹РЅРѕС‡РЅС‹Рј floor.
+          Значение формируется из общей стоимости СМР+ПНР, внутренней модели единичных расценок, поправок условий монтажа и проверки
+          рыночным floor.
         </span>
       </span>
     </span>
@@ -570,8 +570,8 @@ export default function SystemsStep({
     <section className="panel">
       <div className="panel-header">
         <div>
-          <h2>РЎРёСЃС‚РµРјС‹</h2>
-          <p>РќР° РѕРґРЅРѕРј РѕР±СЉРµРєС‚Рµ РјРѕР¶РµС‚ Р±С‹С‚СЊ С‚РѕР»СЊРєРѕ РѕРґРЅР° СЃРёСЃС‚РµРјР° РєР°Р¶РґРѕРіРѕ РІРёРґР°.</p>
+          <h2>Системы</h2>
+          <p>На одном объекте может быть только одна система каждого вида.</p>
         </div>
         <div className="action-cell" style={{ justifyContent: "flex-end", flexWrap: "wrap", gap: 10 }}>
           <button className="ghost-btn" onClick={handleRefreshAll} type="button" disabled={refreshingAll || !systems.length}>
@@ -581,7 +581,7 @@ export default function SystemsStep({
             <Download size={16} /> {exportingAll ? "Готовим файл..." : "Выгрузить спецификацию"}
           </button>
           <button className="primary-btn" onClick={addSystem} type="button" disabled={!canAddMoreSystems}>
-            <Plus size={16} /> + РЎРёСЃС‚РµРјР°
+            <Plus size={16} /> + Система
           </button>
         </div>
       </div>
@@ -590,7 +590,7 @@ export default function SystemsStep({
         {systems.map((system, index) => {
           const typeMeta = SYSTEM_TYPES.find((item) => item.code === system.type);
           const Icon = typeMeta?.icon || Shield;
-          const vendorList = VENDORS[system.type] || ["Р‘Р°Р·РѕРІС‹Р№"];
+          const vendorList = VENDORS[system.type] || ["Базовый"];
           const selectedVendor = getVendorByName(system.type, system.vendor);
           const apsSnapshot = apsProjectSnapshots?.[system.id];
           const result = systemResults[index];
@@ -651,7 +651,7 @@ export default function SystemsStep({
                 </div>
                 <div>
                   <h3>
-                    РЎРёСЃС‚РµРјР° {index + 1}: {typeMeta?.name}
+                    Система {index + 1}: {typeMeta?.name}
                   </h3>
                   <p>{selectedVendor.description}</p>
                 </div>
@@ -662,7 +662,7 @@ export default function SystemsStep({
                 <div className="input-card system-control-card">
                   <div className="system-control-grid">
                     <div className="input-card compact">
-                      <label>РўРёРї СЃРёСЃС‚РµРјС‹</label>
+                      <label>Тип системы</label>
                       <select value={system.type} onChange={(event) => updateSystem(system.id, "type", event.target.value)}>
                         {SYSTEM_TYPES.map((item) => {
                           const usedByOther = [...usedTypeMap.entries()].some(([id, code]) => id !== system.id && code === item.code);
@@ -676,11 +676,11 @@ export default function SystemsStep({
                     </div>
 
                     <div className="input-card compact">
-                      <label>Р’РµРЅРґРѕСЂ</label>
+                      <label>Вендор</label>
                       {vendorLockedByProject ? (
                         <>
-                          <input type="text" value={detectedVendor} readOnly disabled title="Р’РµРЅРґРѕСЂ РѕРїСЂРµРґРµР»РµРЅ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё РїРѕ СЃРїРµС†РёС„РёРєР°С†РёРё РёР· РїСЂРѕРµРєС‚Р°." />
-                          <small className="hint-inline">РћРїСЂРµРґРµР»РµРЅ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё РїРѕ СЃРїРµС†РёС„РёРєР°С†РёРё РїСЂРѕРµРєС‚Р°</small>
+                          <input type="text" value={detectedVendor} readOnly disabled title="Вендор определен автоматически по спецификации из проекта." />
+                          <small className="hint-inline">Определен автоматически по спецификации проекта</small>
                         </>
                       ) : null}
                       <select
@@ -688,7 +688,7 @@ export default function SystemsStep({
                         onChange={(event) => updateSystem(system.id, "vendor", event.target.value)}
                         disabled={projectBasedMode}
                         style={vendorLockedByProject ? { display: "none" } : undefined}
-                        title="Р’РµРЅРґРѕСЂ РІР»РёСЏРµС‚ РЅР° С†РµРЅРѕРІРѕР№ РїСЂРѕС„РёР»СЊ, РєРѕСЌС„С„РёС†РёРµРЅС‚С‹ Рё РёС‚РѕРі СЃРёСЃС‚РµРјС‹. Р‘Р°Р·РѕРІС‹Р№ РІРµРЅРґРѕСЂ РїСЂРёРјРµРЅСЏР№С‚Рµ, РµСЃР»Рё Р±СЂРµРЅРґ РµС‰Рµ РЅРµ РІС‹Р±СЂР°РЅ Рё РЅСѓР¶РЅР° РЅРµР№С‚СЂР°Р»СЊРЅР°СЏ СЂС‹РЅРѕС‡РЅР°СЏ РѕС†РµРЅРєР°."
+                        title="Вендор влияет на ценовой профиль, коэффициенты и итог системы. Базовый вендор применяйте, если бренд еще не выбран и нужна нейтральная рыночная оценка."
                       >
                         {vendorList.map((vendor) => (
                           <option key={vendor} value={vendor}>
@@ -722,12 +722,12 @@ export default function SystemsStep({
                   </div>
                   <div className="comparison-trigger-row">
                     <div className="input-card compact comparison-trigger-card">
-                      <label>РЎСЂР°РІРЅРµРЅРёРµ С†РµРЅ</label>
+                        <label>Сравнение цен</label>
                       <button className="ghost-btn comparison-trigger-btn" type="button" onClick={() => handleCompare(system)} disabled={isComparing}>
                         <BarChart3 size={16} />
-                        {isComparing ? "РЎРѕР±РёСЂР°РµРј С†РµРЅС‹..." : "РЎСЂР°РІРЅРёС‚СЊ 3 РІРµРЅРґРѕСЂР°"}
+                        {isComparing ? "Собираем цены..." : "Сравнить 3 вендора"}
                       </button>
-                      <small className="hint-inline">РЎСЂР°РІРЅРёРІР°СЋС‚СЃСЏ С‚РµРєСѓС‰РёР№ РІРµРЅРґРѕСЂ Рё РґРІРµ СЂРµР°Р»СЊРЅС‹Рµ Р°Р»СЊС‚РµСЂРЅР°С‚РёРІС‹ Р±РµР· Р±Р°Р·РѕРІРѕРіРѕ РїСЂРѕС„РёР»СЏ.</small>
+                      <small className="hint-inline">Сравниваются текущий вендор и две реальные альтернативы без базового профиля.</small>
                     </div>
                   </div>
                 </div>
@@ -736,21 +736,21 @@ export default function SystemsStep({
                   <div className="vendor-hint-top">
                     <p className="vendor-kpi">
                       <span className="pricing-chip-tooltip">
-                        <span>Р•Рґ. С†РµРЅР°:</span>
+                        <span>Ед. цена:</span>
                         {renderVendorMetricPopover("unitPrice", result)}
                       </span>{" "}
                       <strong>{rub(result?.equipmentData?.unitPrice || 0)}</strong>
                     </p>
                     <p className="vendor-kpi">
                       <span className="pricing-chip-tooltip">
-                        <span>РњР°СЂРєРµСЂ:</span>
+                        <span>Маркер:</span>
                         {renderVendorMetricPopover("marker", result)}
                       </span>{" "}
                       <strong>{result?.unitWorkMarker?.label || "вЂ”"}</strong>
                     </p>
                     <p className="vendor-kpi">
                       <span className="pricing-chip-tooltip">
-                        <span>Р—Р° РµРґРёРЅРёС†Сѓ:</span>
+                        <span>За единицу:</span>
                         {renderVendorMetricPopover("costPerUnit", result)}
                       </span>{" "}
                       <strong>{num(result?.unitWorkMarker?.costPerUnit || 0, 0)}</strong>
@@ -759,27 +759,27 @@ export default function SystemsStep({
 
                   <div className="vendor-hint-mid">
                     <div>
-                      <span>РћР±РѕСЂСѓРґРѕРІР°РЅРёРµ</span>
+                      <span>Оборудование</span>
                       <strong>{rub(result?.equipmentCost || 0)}</strong>
                     </div>
                     <div>
                       <span className="pricing-chip-tooltip">
-                        <span>РЎС‚РѕРёРјРѕСЃС‚СЊ СЂР°Р±РѕС‚ (РЎРњР +РџРќР )</span>
+                        <span>Стоимость работ (СМР+ПНР)</span>
                         {renderWorkCostPopover(result)}
                       </span>
                       <strong>{rub(result?.workTotal || 0)}</strong>
                     </div>
                     <div>
-                      <span>РњР°С‚РµСЂРёР°Р»С‹</span>
+                      <span>Материалы</span>
                       <strong>{rub(result?.materialCost || 0)}</strong>
                     </div>
                   </div>
 
                   <div className="vendor-hint-footer">
-                    <p>РљР»СЋС‡ РІС‹Р±РѕСЂР°: {result?.equipmentData?.selectionKey || "fallback"}</p>
-                    <p>Р РµР¶РёРј: {result?.estimateMode === "project_pdf" ? "РїРѕ PDF-РїСЂРѕРµРєС‚Сѓ" : "РїРѕ РІРЅСѓС‚СЂРµРЅРЅРµР№ РјРѕРґРµР»Рё"}</p>
+                    <p>Ключ выбора: {result?.equipmentData?.selectionKey || "fallback"}</p>
+                    <p>Режим: {result?.estimateMode === "project_pdf" ? "по PDF-проекту" : "по внутренней модели"}</p>
                     <button className="ghost-btn" type="button" onClick={() => handleRefresh(system)} disabled={isRefreshing}>
-                      <RefreshCcw size={14} className={isRefreshing ? "spin" : ""} /> {isRefreshing ? "РћР±РЅРѕРІР»РµРЅРёРµ..." : "РћР±РЅРѕРІРёС‚СЊ С†РµРЅС‹"}
+                      <RefreshCcw size={14} className={isRefreshing ? "spin" : ""} /> {isRefreshing ? "Обновление..." : "Обновить цены"}
                     </button>
                   </div>
                 </div>
@@ -792,8 +792,8 @@ export default function SystemsStep({
                 <div className="subpanel comparison-panel">
                   <div className="subpanel-header">
                     <div>
-                      <h3>РЎСЂР°РІРЅРµРЅРёРµ С†РµРЅ РїРѕ РІРµРЅРґРѕСЂР°Рј</h3>
-                      <p>РЎСЂР°РІРЅРµРЅРёРµ СѓС‡РёС‚С‹РІР°РµС‚ С†РµРЅС‹ РѕР±РѕСЂСѓРґРѕРІР°РЅРёСЏ, РјР°С‚РµСЂРёР°Р»С‹, СЂР°Р±РѕС‚С‹, РїСЂРѕРµРєС‚РёСЂРѕРІР°РЅРёРµ Рё РёС‚РѕРі РїРѕ СЃРёСЃС‚РµРјРµ.</p>
+                      <h3>Сравнение цен по вендорам</h3>
+                      <p>Сравнение учитывает цены оборудования, материалы, работы, проектирование и итог по системе.</p>
                     </div>
                   </div>
 
@@ -804,16 +804,16 @@ export default function SystemsStep({
                     <>
                       <div className="pricing-source-row comparison-summary-row">
                         <span className="pricing-source-chip ok">
-                          <strong>РўРµРєСѓС‰РёР№ РІРµРЅРґРѕСЂ:</strong> {comparison.currentVendor}
+                          <strong>Текущий вендор:</strong> {comparison.currentVendor}
                         </span>
                         <span className="pricing-source-chip">
-                          <strong>РЎС‚СЂРѕРє РІ СЃСЂР°РІРЅРµРЅРёРё:</strong> {comparison.rows.length}
+                          <strong>Строк в сравнении:</strong> {comparison.rows.length}
                         </span>
                         <span className="pricing-source-chip muted">
-                          <strong>PPTX:</strong> С‚Р°Р±Р»РёС†Р° Р±СѓРґРµС‚ РІРєР»СЋС‡РµРЅР° РІ РІС‹РіСЂСѓР·РєСѓ
+                          <strong>PPTX:</strong> таблица будет включена в выгрузку
                         </span>
                         <button className="ghost-btn" type="button" onClick={() => clearVendorComparison(system.id)}>
-                          РЎРєСЂС‹С‚СЊ СЃСЂР°РІРЅРµРЅРёРµ С†РµРЅ
+                          Скрыть сравнение цен
                         </button>
                       </div>
 
@@ -821,11 +821,11 @@ export default function SystemsStep({
                         <table>
                           <thead>
                             <tr>
-                              <th>Р РѕР»СЊ</th>
-                              <th>Р’РµРЅРґРѕСЂ</th>
-                              <th>РћР±РѕСЂСѓРґРѕРІР°РЅРёРµ</th>
-                              <th>РњР°С‚РµСЂРёР°Р»С‹</th>
-                              <th>РС‚РѕРі</th>
+                              <th>Роль</th>
+                              <th>Вендор</th>
+                              <th>Оборудование</th>
+                              <th>Материалы</th>
+                              <th>Итог</th>
                             </tr>
                           </thead>
                           <tbody>
