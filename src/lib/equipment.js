@@ -109,11 +109,58 @@ const DISCONTINUED_MODEL_REPLACEMENTS = {
   },
 };
 
+const EXTRA_DISCONTINUED_MODEL_REPLACEMENTS = {
+  aps: {
+    "Р СѓР±РµР¶": {
+      "Р СѓР±РµР¶-2РћРџ РїСЂРѕС‚.R3": "R3-Р СѓР±РµР¶-2РћРџ",
+      "Р СѓР±РµР¶-20Рџ": "R3-Р СѓР±РµР¶-20Рџ",
+    },
+    "РђСЂРіСѓСЃ-РЎРїРµРєС‚СЂ": {
+      "Р Р РћРџ2": "РџР°РЅРµР»СЊ-2-ПРО",
+    },
+  },
+  sots: {
+    "Р СѓР±РµР¶": {
+      "РџРџРљРћРџ Р СѓР±РµР¶-20Рџ": "R3-Р СѓР±РµР¶-20Рџ",
+    },
+    "РђСЂРіСѓСЃ-РЎРїРµРєС‚СЂ": {
+      "Р Р РћРџ2": "РџР°РЅРµР»СЊ-2-ПРО",
+    },
+  },
+};
+
+function resolveLifecycleVendorMap(catalog, systemType, vendor) {
+  const systemCatalog = catalog?.[systemType];
+  if (!systemCatalog) return {};
+  const normalizedVendor = sanitizeDisplayText(vendor).toLowerCase();
+  const resolvedVendorKey =
+    Object.keys(systemCatalog).find((key) => sanitizeDisplayText(key).toLowerCase() === normalizedVendor) || vendor;
+  return systemCatalog?.[resolvedVendorKey] || {};
+}
+
 function normalizeLifecycleModel(systemType, vendor, model) {
   const safeModel = sanitizeDisplayText(model).trim();
   if (!safeModel) return "";
-  const vendorMap = DISCONTINUED_MODEL_REPLACEMENTS?.[systemType]?.[vendor];
-  if (!vendorMap) return safeModel;
+  const normalizedVendor = sanitizeDisplayText(vendor).trim().toLowerCase();
+
+  if (systemType === "aps" && normalizedVendor === "рубеж") {
+    if (safeModel === "Рубеж-2ОП прот.R3") return "R3-Рубеж-2ОП";
+    if (safeModel === "Рубеж-20П") return "R3-Рубеж-20П";
+  }
+
+  if (systemType === "sots" && normalizedVendor === "рубеж") {
+    if (safeModel === "ППКОП Рубеж-20П") return "R3-Рубеж-20П";
+  }
+
+  if ((systemType === "aps" || systemType === "sots") && normalizedVendor === "аргус-спектр") {
+    if (safeModel === "РРОП2") return "Панель-2-ПРО";
+  }
+
+  const vendorMap = {
+    ...resolveLifecycleVendorMap(DISCONTINUED_MODEL_REPLACEMENTS, systemType, vendor),
+    ...resolveLifecycleVendorMap(EXTRA_DISCONTINUED_MODEL_REPLACEMENTS, systemType, vendor),
+  };
+  if (!Object.keys(vendorMap).length) return safeModel;
   return sanitizeDisplayText(vendorMap[safeModel] || safeModel).trim();
 }
 

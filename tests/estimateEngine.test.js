@@ -280,10 +280,14 @@ test("non-project model catalog does not expose discontinued models", () => {
     aps: {
       "Базовый": ["Сигнал-20П исп.01"],
       Болид: ["Сигнал-20П исп.01"],
+      Рубеж: ["Рубеж-2ОП прот.R3", "Рубеж-20П"],
+      "Аргус-Спектр": ["РРОП2"],
     },
     sots: {
       "Базовый": ["Сигнал-20П исп.01"],
       Болид: ["Сигнал-20П исп.01"],
+      Рубеж: ["ППКОП Рубеж-20П"],
+      "Аргус-Спектр": ["РРОП2"],
     },
     skud: {
       Parsec: ["NC-2000", "NC-100K-IP"],
@@ -304,6 +308,11 @@ test("non-project model catalog does not expose discontinued models", () => {
       }
     }
   }
+});
+
+test("lifecycle replacements resolve to current non-project models", () => {
+  assert.equal(getConcreteModel("aps", "Рубеж", "panel", 8), "R3-Рубеж-20П");
+  assert.equal(getConcreteModel("sots", "Рубеж", "panel", 8), "R3-Рубеж-20П");
 });
 
 test("all configured vendors expose concrete models and prices without a loaded project", () => {
