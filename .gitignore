@@ -7,3 +7,5 @@ npm-debug.log*
 install_m365_personal_to_f.ps1
 repair_and_install_m365_f.ps1
 tmp_aps.pdf
+desktop/codex-gigachat-shell/release-build/
+presentations/~$*.pptx

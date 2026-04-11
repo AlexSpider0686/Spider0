@@ -9,5 +9,6 @@ contextBridge.exposeInMainWorld("agentShell", {
   runAgent: (payload) => ipcRenderer.invoke("agent:run", payload),
   listWorkspace: (workspacePath) => ipcRenderer.invoke("workspace:list", workspacePath),
   switchGitProvider: (payload) => ipcRenderer.invoke("git:switchProvider", payload),
+  testProvider: (payload) => ipcRenderer.invoke("provider:test", payload),
   testGigaChat: (credentials) => ipcRenderer.invoke("gigachat:test", credentials)
 });

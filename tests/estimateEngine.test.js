@@ -3,9 +3,11 @@ import assert from "node:assert/strict";
 import { calculateSystem } from "../src/lib/estimate.js";
 import { calculateSystemWithBreakdown } from "../src/lib/systemCalculators/index.js";
 import { estimateSystemQuantities } from "../src/lib/system-estimator.js";
-import { getConcreteModel } from "../src/lib/equipment.js";
+import { getConcreteModel, getEditableModelOptions, resolveModelPriceOverride } from "../src/lib/equipment.js";
 import { repairUtf8Cp1251Mojibake } from "../src/lib/textEncoding.js";
-import { DEFAULT_BUDGET, DEFAULT_SYSTEM, DEFAULT_ZONE } from "../src/config/estimateConfig.js";
+import { DEFAULT_BUDGET, DEFAULT_SYSTEM, DEFAULT_ZONE, VENDORS } from "../src/config/estimateConfig.js";
+import { getDefaultEquipmentProfiles } from "../src/config/equipmentCatalog.js";
+import { VENDOR_EQUIPMENT } from "../src/config/vendorConfig.js";
 
 function createFixture() {
   const zones = [DEFAULT_ZONE(1, "Офис", "office", 5000, 5), DEFAULT_ZONE(2, "Паркинг", "parking", 2000, 2)];
@@ -249,6 +251,75 @@ test("repairUtf8Cp1251Mojibake restores CP1251 mojibake to readable UTF-8", () =
   const expected = "\u041f\u041f\u041a\u041e\u041f|\u0420\u0443\u0431\u0435\u0436|\u0414\u044b\u043c\u043e\u0432\u043e\u0439";
 
   assert.equal(repairUtf8Cp1251Mojibake(mojibake), expected);
+});
+
+test("editable model catalog exposes concrete alternatives for non-project specs", () => {
+  const options = getEditableModelOptions("skud", "Bastion", "CTRL");
+
+  assert.ok(options.length >= 2);
+  assert.ok(options.some((item) => item.model.includes("SKAT AC 02NET PACS")));
+  assert.ok(options.every((item) => item.basePrice > 0));
+});
+
+test("model override recalculates unit price from the selected concrete model", () => {
+  const override = resolveModelPriceOverride(
+    "skud",
+    "Parsec",
+    "CTRL",
+    "NC-8000",
+    "NC-100K-IP",
+    17400
+  );
+
+  assert.equal(override.model, "NC-8000");
+  assert.ok(override.unitPrice > 17400);
+});
+
+test("all configured vendors expose concrete models and prices without a loaded project", () => {
+  const zones = [DEFAULT_ZONE(1, "Office", "office", 5000, 5), DEFAULT_ZONE(2, "Lobby", "lobby", 3000, 2)];
+  const objectData = {
+    regionName: "Москва",
+    regionCoef: 1.2,
+    objectType: "public",
+    buildingStatus: "operational",
+    totalArea: 8000,
+    floors: 5,
+    basementFloors: 1,
+  };
+  const codeMap = {
+    sot: ["CAM", "NVR", "SW", "HDD"],
+    sots: ["SEN", "PANEL"],
+    skud: ["CTRL"],
+    ssoi: ["NVR", "SW"],
+    aps: ["DET", "PANEL"],
+    soue: ["SPK", "AMP"],
+  };
+
+  for (const [systemType, vendors] of Object.entries(VENDORS)) {
+    const profile = getDefaultEquipmentProfiles(systemType);
+    const selectedEquipmentParams = Object.fromEntries(Object.entries(profile || {}).map(([key, value]) => [key, value.default]));
+
+    for (const vendor of vendors) {
+      const system = {
+        ...DEFAULT_SYSTEM(1, systemType),
+        vendor,
+        baseVendor: vendor,
+        selectedEquipmentParams,
+      };
+      const result = calculateSystemWithBreakdown(system, zones, DEFAULT_BUDGET, objectData);
+      const keyEquipment = result?.equipmentData?.keyEquipment || [];
+
+      assert.ok(VENDOR_EQUIPMENT?.[systemType]?.[vendor], `${systemType}/${vendor} missing pricing profile`);
+
+      for (const code of codeMap[systemType] || []) {
+        const row = keyEquipment.find((item) => item.code === code);
+        assert.ok(row, `${systemType}/${vendor} missing key row ${code}`);
+        assert.ok(String(row.model || "").trim(), `${systemType}/${vendor} missing model for ${code}`);
+        assert.ok(Number(row.unitPrice) > 0, `${systemType}/${vendor} missing price for ${code}`);
+        assert.ok(getEditableModelOptions(systemType, vendor, code).length > 0, `${systemType}/${vendor} missing editable options for ${code}`);
+      }
+    }
+  }
 });
 
 test("survey refinement adjusts zone count but does not replace base object model", () => {

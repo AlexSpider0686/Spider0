@@ -36,6 +36,24 @@ function manualNumber(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function buildTravelProgressState(travelEstimate = {}, enabled = false) {
+  const hasAlerts = Array.isArray(travelEstimate?.alerts) && travelEstimate.alerts.length > 0;
+  const note = String(travelEstimate?.notes || "").toLowerCase();
+  if (!enabled) {
+    return { label: "Блок отключен", percent: 0, tone: "#B8C4BC" };
+  }
+  if (note.includes("идет интеллектуальный расчет")) {
+    return { label: "Расчет маршрута и командировки", percent: 32, tone: "#1E9FC5" };
+  }
+  if (hasAlerts) {
+    return { label: "Требует проверки параметров", percent: 100, tone: "#E07A5F" };
+  }
+  if (travelEstimate?.calculatedAt || travelEstimate?.totalCost > 0) {
+    return { label: "Расчет завершен", percent: 100, tone: "#219653" };
+  }
+  return { label: "Подготовка параметров", percent: 14, tone: "#E0A458" };
+}
+
 export default function CostBreakdownStep({
   systems = [],
   updateSystem,
@@ -57,6 +75,7 @@ export default function CostBreakdownStep({
   const avgTeamSize = activeResults.length ? activeResults.reduce((total, item) => total + (item.executionTeamSize || 0), 0) / activeResults.length : 0;
   const maxDurationDays = Math.max(...activeResults.map((item) => item.executionDurationDays || 0), 0);
   const travelEnabled = Boolean(travelEstimate?.enabled);
+  const travelProgress = buildTravelProgressState(travelEstimate, travelEnabled);
   const handleActivateTravel = async () => {
     setTravelEstimateEnabled?.(true);
     await runTravelEstimate?.();
@@ -153,6 +172,26 @@ export default function CostBreakdownStep({
               </button>
             ) : null}
           </div>
+        </div>
+
+        <div className="calc-explain" style={{ marginTop: 14, background: "linear-gradient(135deg, rgba(30,159,197,0.08), rgba(33,150,83,0.08))" }}>
+          <div className="pricing-source-row" style={{ marginBottom: 8 }}>
+            <span className={`pricing-source-chip ${travelProgress.percent >= 100 && !(travelEstimate.alerts || []).length ? "ok" : (travelEstimate.alerts || []).length ? "warn" : "muted"}`}>
+              <strong>Статус командировки</strong>
+            </span>
+            <span className="pricing-source-chip muted">
+              <strong>Готовность:</strong> {travelProgress.percent}%
+            </span>
+          </div>
+          <p className={(travelEstimate.alerts || []).length ? "warn-inline" : "hint-inline"}>{travelProgress.label}</p>
+          <div style={{ marginTop: 8, height: 10, background: "rgba(20,36,28,0.08)", borderRadius: 999, overflow: "hidden" }}>
+            <div style={{ width: `${travelProgress.percent}%`, height: "100%", background: travelProgress.tone, transition: "width 0.35s ease" }} />
+          </div>
+          {travelEstimate.notes ? (
+            <small className="hint-inline" style={{ display: "block", marginTop: 8 }}>
+              {travelEstimate.notes}
+            </small>
+          ) : null}
         </div>
 
         <div className={`travel-panel-body ${travelEnabled ? "" : "is-hidden"}`}>

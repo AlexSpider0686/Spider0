@@ -72,6 +72,7 @@ export const VENDOR_EQUIPMENT = repairCatalogNode({
     Hikvision: CCTV_PROFILE,
     Dahua: CCTV_PROFILE,
     TRASSIR: CCTV_PROFILE,
+    Uniview: CCTV_PROFILE,
     Axis: {
       ...CCTV_PROFILE,
       camera: {
@@ -130,6 +131,10 @@ export const VENDOR_EQUIPMENT = repairCatalogNode({
       recorder: { ...CCTV_PROFILE.recorder, basePrices: { 8: 40000, 16: 58000, 32: 102000, 64: 190000 } },
       switch: CCTV_PROFILE.switch,
     },
+    AxxonSoft: {
+      recorder: { ...CCTV_PROFILE.recorder, basePrices: { 8: 41000, 16: 60000, 32: 112000, 64: 206000 } },
+      switch: CCTV_PROFILE.switch,
+    },
   },
   skud: {
     Базовый: {
@@ -143,6 +148,8 @@ export const VENDOR_EQUIPMENT = repairCatalogNode({
     Parsec: { controller: { channels: [1, 2, 4], basePrices: { 1: 17400, 2: 26800, 4: 44800 } } },
     PERCo: { controller: { channels: [1, 2, 4], basePrices: { 1: 16800, 2: 26000, 4: 43800 } } },
     Biosmart: { controller: { channels: [1, 2, 4], basePrices: { 1: 18600, 2: 29500, 4: 49600 } } },
+    RusGuard: { controller: { channels: [1, 2, 4], basePrices: { 1: 17100, 2: 27400, 4: 46200 } } },
+    Bastion: { controller: { channels: [1, 2, 4], basePrices: { 1: 15800, 2: 24900, 4: 41800 } } },
   },
   aps: {
     Базовый: {
@@ -171,6 +178,10 @@ export const VENDOR_EQUIPMENT = repairCatalogNode({
     Simplex: {
       detector: { kind: ["дымовой", "тепловой", "комбинированный"], basePrices: { дымовой: 2900, тепловой: 2680, комбинированный: 3820 } },
       panel: { loops: [2, 4, 8], basePrices: { 2: 188000, 4: 262000, 8: 356000 } },
+    },
+    Siemens: {
+      detector: { kind: ["дымовой", "тепловой", "комбинированный"], basePrices: { дымовой: 2780, тепловой: 2540, комбинированный: 3640 } },
+      panel: { loops: [2, 4, 8], basePrices: { 2: 181000, 4: 248000, 8: 338000 } },
     },
   },
   soue: {

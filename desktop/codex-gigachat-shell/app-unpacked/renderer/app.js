@@ -1,4 +1,9 @@
+const QWEN_DEFAULT_BASE_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
+
 const elements = {
+  provider: document.getElementById("provider"),
+  modelLabel: document.getElementById("modelLabel"),
+  workspaceTitle: document.getElementById("workspaceTitle"),
   gigachatModel: document.getElementById("gigachatModel"),
   workspacePath: document.getElementById("workspacePath"),
   gitProvider: document.getElementById("gitProvider"),
@@ -9,6 +14,13 @@ const elements = {
   gigachatClientSecret: document.getElementById("gigachatClientSecret"),
   gigachatScope: document.getElementById("gigachatScope"),
   gigachatAllowInsecureTls: document.getElementById("gigachatAllowInsecureTls"),
+  qwenCliPath: document.getElementById("qwenCliPath"),
+  qwenCliApprovalMode: document.getElementById("qwenCliApprovalMode"),
+  qwenApiKey: document.getElementById("qwenApiKey"),
+  qwenBaseUrl: document.getElementById("qwenBaseUrl"),
+  gigachatFields: document.getElementById("gigachatFields"),
+  qwenCliFields: document.getElementById("qwenCliFields"),
+  qwenApiFields: document.getElementById("qwenApiFields"),
   promptInput: document.getElementById("promptInput"),
   transcript: document.getElementById("transcript"),
   statusPill: document.getElementById("statusPill"),
@@ -24,8 +36,48 @@ const elements = {
   messageTemplate: document.getElementById("messageTemplate")
 };
 
+const PROVIDER_META = {
+  gigachat: {
+    title: "Codex-style интерфейс для GigaChat",
+    modelLabel: "Модель GigaChat",
+    defaultModel: "GigaChat-2-Max",
+    testButton: "Проверить подключение GigaChat"
+  },
+  "qwen-oauth": {
+    title: "Codex-style интерфейс для Qwen OAuth (CLI)",
+    modelLabel: "Модель Qwen CLI",
+    defaultModel: "qwen3-coder-plus",
+    testButton: "Проверить локальный Qwen CLI"
+  },
+  "qwen-api": {
+    title: "Codex-style интерфейс для Qwen API",
+    modelLabel: "Модель Qwen API",
+    defaultModel: "qwen3-coder-plus",
+    testButton: "Проверить подключение Qwen API"
+  }
+};
+
 let currentConfig = null;
 let pendingAttachments = [];
+
+function normalizeProvider(provider) {
+  return provider === "qwen-cli" ? "qwen-oauth" : (provider || "gigachat");
+}
+
+function normalizeQwenCliApprovalMode(mode) {
+  return mode === "default" || !mode ? "auto-edit" : mode;
+}
+
+function getModelKey(provider) {
+  const normalized = normalizeProvider(provider);
+  if (normalized === "qwen-oauth") return "qwenCli";
+  if (normalized === "qwen-api") return "qwenApi";
+  return "gigachat";
+}
+
+function getProviderMeta(provider) {
+  return PROVIDER_META[normalizeProvider(provider)] || PROVIDER_META.gigachat;
+}
 
 function setStatus(text) {
   elements.statusPill.textContent = text;
@@ -53,8 +105,7 @@ function describeAttachment(attachment) {
 
 function renderAttachments() {
   elements.attachmentsList.innerHTML = "";
-  const hasAttachments = pendingAttachments.length > 0;
-  elements.attachmentsPanel.hidden = !hasAttachments;
+  elements.attachmentsPanel.hidden = pendingAttachments.length === 0;
 
   for (const attachment of pendingAttachments) {
     const chip = document.createElement("article");
@@ -87,14 +138,10 @@ function renderAttachments() {
 }
 
 function mergeAttachments(nextAttachments) {
-  const byPath = new Map(
-    pendingAttachments.map((attachment) => [attachment.path || attachment.id, attachment])
-  );
-
+  const byPath = new Map(pendingAttachments.map((attachment) => [attachment.path || attachment.id, attachment]));
   for (const attachment of nextAttachments) {
     byPath.set(attachment.path || attachment.id, attachment);
   }
-
   pendingAttachments = [...byPath.values()];
   renderAttachments();
 }
@@ -107,13 +154,36 @@ function addMessage(role, body) {
   elements.transcript.scrollTop = elements.transcript.scrollHeight;
 }
 
+function updateProviderUi() {
+  const provider = normalizeProvider(elements.provider.value);
+  elements.provider.value = provider;
+  const meta = getProviderMeta(provider);
+  const modelValue = currentConfig?.modelByProvider?.[getModelKey(provider)] || meta.defaultModel;
+
+  elements.modelLabel.textContent = meta.modelLabel;
+  elements.workspaceTitle.textContent = meta.title;
+  elements.testGigaChatButton.textContent = meta.testButton;
+  elements.gigachatModel.placeholder = meta.defaultModel;
+
+  if (!elements.gigachatModel.value || elements.gigachatModel.value === currentConfig?.modelByProvider?.gigachat || elements.gigachatModel.value === currentConfig?.modelByProvider?.qwenCli || elements.gigachatModel.value === currentConfig?.modelByProvider?.qwenApi) {
+    elements.gigachatModel.value = modelValue;
+  }
+
+  elements.gigachatFields.hidden = provider !== "gigachat";
+  elements.qwenCliFields.hidden = provider !== "qwen-oauth";
+  elements.qwenApiFields.hidden = provider !== "qwen-api";
+}
+
 function collectConfigFromForm() {
+  const provider = normalizeProvider(elements.provider.value);
   return {
-    provider: "gigachat",
+    provider,
     workspacePath: elements.workspacePath.value.trim(),
     gitProvider: elements.gitProvider.value,
     modelByProvider: {
-      gigachat: elements.gigachatModel.value.trim() || "GigaChat-2-Max"
+      gigachat: provider === "gigachat" ? (elements.gigachatModel.value.trim() || PROVIDER_META.gigachat.defaultModel) : (currentConfig?.modelByProvider?.gigachat || PROVIDER_META.gigachat.defaultModel),
+      qwenCli: provider === "qwen-oauth" ? (elements.gigachatModel.value.trim() || PROVIDER_META["qwen-oauth"].defaultModel) : (currentConfig?.modelByProvider?.qwenCli || PROVIDER_META["qwen-oauth"].defaultModel),
+      qwenApi: provider === "qwen-api" ? (elements.gigachatModel.value.trim() || PROVIDER_META["qwen-api"].defaultModel) : (currentConfig?.modelByProvider?.qwenApi || PROVIDER_META["qwen-api"].defaultModel)
     },
     remotes: {
       github: elements.githubRemote.value.trim(),
@@ -124,16 +194,20 @@ function collectConfigFromForm() {
       gigachatClientId: elements.gigachatClientId.value.trim(),
       gigachatClientSecret: elements.gigachatClientSecret.value.trim(),
       gigachatScope: elements.gigachatScope.value.trim() || "GIGACHAT_API_PERS",
-      gigachatAllowInsecureTls: elements.gigachatAllowInsecureTls.checked
+      gigachatAllowInsecureTls: elements.gigachatAllowInsecureTls.checked,
+      qwenCliPath: elements.qwenCliPath.value.trim() || "qwen",
+      qwenCliApprovalMode: normalizeQwenCliApprovalMode(elements.qwenCliApprovalMode.value),
+      qwenApiKey: elements.qwenApiKey.value.trim(),
+      qwenBaseUrl: elements.qwenBaseUrl.value.trim() || QWEN_DEFAULT_BASE_URL
     }
   };
 }
 
 function applyConfig(config) {
   currentConfig = config;
+  elements.provider.value = normalizeProvider(config.provider);
   elements.workspacePath.value = config.workspacePath || "";
   elements.gitProvider.value = config.gitProvider || "github";
-  elements.gigachatModel.value = config.modelByProvider?.gigachat || "GigaChat-2-Max";
   elements.githubRemote.value = config.remotes?.github || "";
   elements.gitverseRemote.value = config.remotes?.gitverse || "";
   elements.gigachatAuthorizationKey.value = config.credentials?.gigachatAuthorizationKey || "";
@@ -141,6 +215,12 @@ function applyConfig(config) {
   elements.gigachatClientSecret.value = config.credentials?.gigachatClientSecret || "";
   elements.gigachatScope.value = config.credentials?.gigachatScope || "GIGACHAT_API_PERS";
   elements.gigachatAllowInsecureTls.checked = Boolean(config.credentials?.gigachatAllowInsecureTls);
+  elements.qwenCliPath.value = config.credentials?.qwenCliPath || "qwen";
+  elements.qwenCliApprovalMode.value = normalizeQwenCliApprovalMode(config.credentials?.qwenCliApprovalMode);
+  elements.qwenApiKey.value = config.credentials?.qwenApiKey || "";
+  elements.qwenBaseUrl.value = config.credentials?.qwenBaseUrl || QWEN_DEFAULT_BASE_URL;
+  elements.gigachatModel.value = config.modelByProvider?.[getModelKey(elements.provider.value)] || getProviderMeta(elements.provider.value).defaultModel;
+  updateProviderUi();
 }
 
 async function saveConfig() {
@@ -151,26 +231,36 @@ async function saveConfig() {
   setStatus("Настройки сохранены");
 }
 
-async function testGigaChatConnection() {
+async function testProviderConnection() {
   await saveConfig();
-  setStatus("Проверяю подключение к GigaChat...");
-  const result = await window.agentShell.testGigaChat(currentConfig.credentials);
+  const provider = normalizeProvider(currentConfig.provider);
+  setStatus(`Проверяю подключение: ${provider}...`);
+
+  const result = await window.agentShell.testProvider({
+    provider,
+    credentials: currentConfig.credentials
+  });
+
   if (!result?.ok) {
-    addMessage("Ошибка GigaChat", result?.errorMessage || "Не удалось проверить подключение GigaChat.");
-    setStatus("GigaChat не подключён");
+    addMessage("Ошибка подключения", result?.errorMessage || "Проверка подключения завершилась ошибкой.");
+    setStatus("Подключение не настроено");
     return;
   }
 
-  addMessage(
-    "GigaChat",
-    [
-      "Подключение успешно.",
-      `Токен: ${result.tokenPreview}`,
-      `Доступных моделей: ${result.modelsCount}`,
-      result.models?.length ? `Примеры моделей:\n${result.models.join("\n")}` : "Список моделей не получен."
-    ].join("\n")
-  );
-  setStatus("GigaChat подключён");
+  if (provider === "qwen-oauth") {
+    addMessage("Qwen CLI", [`CLI найден: ${result.version || "unknown"}`, result.authStatus || "Статус авторизации не получен."].join("\n"));
+    setStatus("Qwen CLI готов");
+    return;
+  }
+
+  if (provider === "qwen-api") {
+    addMessage("Qwen API", [`Base URL: ${result.baseUrl}`, `Доступных моделей: ${result.modelsCount}`, result.models?.length ? `Примеры моделей:\n${result.models.join("\n")}` : "Список моделей не получен."].join("\n"));
+    setStatus("Qwen API подключен");
+    return;
+  }
+
+  addMessage("GigaChat", [`Подключение успешно.`, `Токен: ${result.tokenPreview}`, `Доступных моделей: ${result.modelsCount}`, result.models?.length ? `Примеры моделей:\n${result.models.join("\n")}` : "Список моделей не получен."].join("\n"));
+  setStatus("GigaChat подключен");
 }
 
 function buildUserMessage(prompt) {
@@ -178,9 +268,7 @@ function buildUserMessage(prompt) {
     return prompt;
   }
 
-  return `${prompt}\n\nВложения:\n${pendingAttachments
-    .map((attachment) => `- ${attachment.name} (${describeAttachment(attachment)})`)
-    .join("\n")}`;
+  return `${prompt}\n\nВложения:\n${pendingAttachments.map((attachment) => `- ${attachment.name} (${describeAttachment(attachment)})`).join("\n")}`;
 }
 
 async function runAgent() {
@@ -193,7 +281,7 @@ async function runAgent() {
   await saveConfig();
   addMessage("Пользователь", buildUserMessage(prompt || "Проанализируй вложение и выполни нужные изменения в проекте."));
   elements.promptInput.value = "";
-  setStatus("Агент анализирует проект и выполняет задачу...");
+  setStatus(`Агент выполняет задачу через ${currentConfig.provider}...`);
 
   try {
     const result = await window.agentShell.runAgent({
@@ -209,10 +297,7 @@ async function runAgent() {
       return;
     }
 
-    addMessage(
-      "Агент",
-      `${result.final || "Готово."}${result.thought ? `\n\nВнутренняя логика: ${result.thought}` : ""}`
-    );
+    addMessage("Агент", `${result.final || "Готово."}${result.thought ? `\n\nВнутренняя логика: ${result.thought}` : ""}`);
     pendingAttachments = [];
     renderAttachments();
     setStatus(result.ok ? "Задача выполнена" : "Нужна дополнительная декомпозиция");
@@ -304,15 +389,19 @@ async function bootstrap() {
     "Система",
     [
       "Готово к работе.",
-      "Это desktop-приложение в стиле Codex на базе GigaChat.",
-      "Агент умеет анализировать проект целиком, принимать скриншоты и файлы, а затем сам выбирать нужные файлы для правок.",
+      "Это desktop-приложение в стиле Codex с переключением между GigaChat, Qwen CLI и Qwen API.",
+      "Qwen CLI использует локально установленный qwen и бесплатный qwen auth qwen-oauth.",
+      "Qwen API использует OpenAI-compatible endpoint и требует API key.",
       "Можно описывать задачу простыми словами без указания строк и конкретных файлов."
     ].join("\n")
   );
 }
 
+elements.provider.addEventListener("change", () => {
+  updateProviderUi();
+});
 elements.saveSettingsButton.addEventListener("click", saveConfig);
-elements.testGigaChatButton.addEventListener("click", testGigaChatConnection);
+elements.testGigaChatButton.addEventListener("click", testProviderConnection);
 elements.pickWorkspaceButton.addEventListener("click", pickWorkspace);
 elements.pickAttachmentsButton.addEventListener("click", pickAttachments);
 elements.runAgentButton.addEventListener("click", runAgent);

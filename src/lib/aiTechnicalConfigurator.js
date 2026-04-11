@@ -31,12 +31,16 @@ function sanitizeRow(row) {
   return {
     ...row,
     key: String(row?.key ?? ""),
+    itemCode: String(row?.itemCode ?? row?.code ?? ""),
     name: sanitizeText(row?.name),
     model: sanitizeText(row?.model),
     unit: sanitizeText(row?.unit),
     basis: sanitizeText(row?.basis),
     category: row?.category || "material",
     source: row?.source || "algorithm",
+    isModelEditable: Boolean(row?.isModelEditable),
+    sourceUrl: sanitizeText(row?.sourceUrl),
+    usedSources: Array.isArray(row?.usedSources) ? row.usedSources.map((item) => sanitizeText(item)).filter(Boolean) : [],
   };
 }
 
@@ -116,7 +120,7 @@ function buildPlanSpecRows(systemType, recognizedPlanData) {
     systemType === "soue"
       ? "Зональное деление СОУЭ по планировкам"
       : systemType === "sots"
-        ? "Охранные зоны СОТС по планировкам"
+        ? "Расчет охранных зон по планировкам"
         : "ЗКСПС АПС по планировкам";
 
   return [
@@ -320,11 +324,13 @@ function finalizeSpecRows(rows, overrideMap = {}) {
     const row = sanitizeRow(sourceRow);
     const override = overrideMap?.[row.key] || {};
     const qty = override.qty !== undefined ? Math.max(num(override.qty, row.qty), 0) : Math.max(num(row.qty, 0), 0);
-    const unitPrice = roundMoney(row.unitPrice);
+    const model = override.model !== undefined ? sanitizeText(override.model) : row.model;
+    const unitPrice = override.unitPrice !== undefined ? roundMoney(override.unitPrice) : roundMoney(row.unitPrice);
     return {
       ...row,
       order: row.order ?? index,
       qty,
+      model,
       unitPrice,
       total: roundMoney(qty * unitPrice),
       category: row.category,
@@ -334,7 +340,7 @@ function finalizeSpecRows(rows, overrideMap = {}) {
 }
 
 function buildPricedEquipmentRows(systemType, result, apsSnapshot) {
-  if (systemType === "aps" && apsSnapshot?.active && Array.isArray(apsSnapshot.items) && apsSnapshot.items.length) {
+  if (apsSnapshot?.active && Array.isArray(apsSnapshot.items) && apsSnapshot.items.length) {
     return apsSnapshot.items.map((item, index) => ({
       key: item.id || `${systemType}-pdf-${index + 1}`,
       name: item.model ? `${item.name} (${item.model})` : item.name,
@@ -345,6 +351,8 @@ function buildPricedEquipmentRows(systemType, result, apsSnapshot) {
       unitPrice: num(item.unitPrice, 0),
       category: item.category === "materials" ? "material" : "equipment",
       source: "project_pdf",
+      sourceUrl: item.sourceUrl || item.usedSources?.[0] || "",
+      usedSources: item.usedSources || [],
     }));
   }
 
@@ -352,6 +360,7 @@ function buildPricedEquipmentRows(systemType, result, apsSnapshot) {
   if (bom.length) {
     return bom.map((item, index) => ({
       key: item.code || `${systemType}-bom-${index + 1}`,
+      itemCode: item.code || "",
       name: item.name,
       model: item.model || "",
       qty: Math.max(num(item.qty, 0), 0),
@@ -360,12 +369,14 @@ function buildPricedEquipmentRows(systemType, result, apsSnapshot) {
       unitPrice: num(item.unitPrice, 0),
       category: detectSpecCategory(item.name, "equipment"),
       source: "model_bom",
+      isModelEditable: Boolean(item.code && item.model),
     }));
   }
 
   const keyEquipment = Array.isArray(result?.equipmentData?.keyEquipment) ? result.equipmentData.keyEquipment : [];
   return keyEquipment.map((item, index) => ({
     key: item.code || `${systemType}-key-${index + 1}`,
+    itemCode: item.code || "",
     name: item.label || item.name || `Позиция ${index + 1}`,
     model: item.model || "",
     qty: Math.max(num(item.qty, result?.units || 0), 0),
@@ -374,6 +385,7 @@ function buildPricedEquipmentRows(systemType, result, apsSnapshot) {
     unitPrice: num(item.unitPrice, 0),
     category: "equipment",
     source: "key_equipment",
+    isModelEditable: Boolean(item.code && item.model),
   }));
 }
 
@@ -479,7 +491,7 @@ function buildSurveySpecRows(materialRows = []) {
 }
 
 function buildBaseSpecRows(systemType, result, apsSnapshot) {
-  if (systemType === "aps" && apsSnapshot?.active && Array.isArray(apsSnapshot.items) && apsSnapshot.items.length) {
+  if (apsSnapshot?.active && Array.isArray(apsSnapshot.items) && apsSnapshot.items.length) {
     return apsSnapshot.items.map((item, index) => ({
       key: item.id || `${systemType}-pdf-${index + 1}`,
       name: item.model ? `${item.name} (${item.model})` : item.name,

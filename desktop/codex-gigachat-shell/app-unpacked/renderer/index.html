@@ -12,13 +12,21 @@
         <div class="brand">
           <div class="brand__badge">LOCAL AGENT</div>
           <h1>ProjectCore Agent Shell</h1>
-          <p>Codex-style среда на GigaChat с GitHub / GitVerse и локальной рабочей папкой.</p>
+          <p>Codex-style среда с переключением между GigaChat, Qwen CLI и Qwen API, GitHub/GitVerse и локальной рабочей папкой.</p>
         </div>
 
         <section class="panel">
           <h2>Модель</h2>
           <label class="field">
-            <span>Модель GigaChat</span>
+            <span>AI-провайдер</span>
+            <select id="provider">
+              <option value="gigachat">GigaChat</option>
+              <option value="qwen-oauth">Qwen OAuth (CLI)</option>
+              <option value="qwen-api">Qwen API</option>
+            </select>
+          </label>
+          <label class="field">
+            <span id="modelLabel">Модель</span>
             <input id="gigachatModel" placeholder="GigaChat-2-Max" />
           </label>
         </section>
@@ -56,27 +64,61 @@
 
         <section class="panel">
           <h2>Доступы</h2>
-          <label class="field">
-            <span>GigaChat Authorization Key</span>
-            <input id="gigachatAuthorizationKey" type="password" placeholder="Вставь ключ целиком из Studio, можно даже если он начинается с Basic" />
-          </label>
-          <label class="field">
-            <span>GigaChat Client ID</span>
-            <input id="gigachatClientId" type="password" />
-          </label>
-          <label class="field">
-            <span>GigaChat Client Secret</span>
-            <input id="gigachatClientSecret" type="password" />
-          </label>
-          <label class="field">
-            <span>GigaChat Scope</span>
-            <input id="gigachatScope" placeholder="GIGACHAT_API_PERS" />
-          </label>
-          <label class="checkbox-field">
-            <input id="gigachatAllowInsecureTls" type="checkbox" />
-            <span>Небезопасный TLS для GigaChat, только для локальной диагностики</span>
-          </label>
-          <button id="testGigaChatButton" class="ghost-button full-width">Проверить подключение GigaChat</button>
+
+          <div id="gigachatFields">
+            <label class="field">
+              <span>GigaChat Authorization Key</span>
+              <input id="gigachatAuthorizationKey" type="password" placeholder="Вставь ключ целиком из Studio, можно даже если он начинается с Basic" />
+            </label>
+            <label class="field">
+              <span>GigaChat Client ID</span>
+              <input id="gigachatClientId" type="password" />
+            </label>
+            <label class="field">
+              <span>GigaChat Client Secret</span>
+              <input id="gigachatClientSecret" type="password" />
+            </label>
+            <label class="field">
+              <span>GigaChat Scope</span>
+              <input id="gigachatScope" placeholder="GIGACHAT_API_PERS" />
+            </label>
+            <label class="checkbox-field">
+              <input id="gigachatAllowInsecureTls" type="checkbox" />
+              <span>Небезопасный TLS для GigaChat, только для локальной диагностики</span>
+            </label>
+          </div>
+
+          <div id="qwenCliFields" hidden>
+            <label class="field">
+              <span>Qwen CLI path</span>
+              <input id="qwenCliPath" placeholder="qwen" />
+            </label>
+            <label class="field">
+              <span>Qwen approval mode</span>
+              <select id="qwenCliApprovalMode">
+                <option value="default">default</option>
+                <option value="auto-edit">auto-edit</option>
+                <option value="yolo">yolo</option>
+                <option value="plan">plan</option>
+              </select>
+            </label>
+            <div class="info-block">
+              Бесплатный режим работает через локально установленный `qwen` и `qwen auth qwen-oauth`. API key не нужен.
+            </div>
+          </div>
+
+          <div id="qwenApiFields" hidden>
+            <label class="field">
+              <span>Qwen API Key</span>
+              <input id="qwenApiKey" type="password" placeholder="sk-..." />
+            </label>
+            <label class="field">
+              <span>Qwen Base URL</span>
+              <input id="qwenBaseUrl" placeholder="https://dashscope-intl.aliyuncs.com/compatible-mode/v1" />
+            </label>
+          </div>
+
+          <button id="testGigaChatButton" class="ghost-button full-width">Проверить подключение</button>
           <button id="saveSettingsButton" class="primary-button full-width">Сохранить настройки</button>
         </section>
       </aside>
@@ -85,7 +127,7 @@
         <header class="workspace__header">
           <div>
             <div class="workspace__eyebrow">AGENT CONSOLE</div>
-            <h2>Codex-style интерфейс для GigaChat</h2>
+            <h2 id="workspaceTitle">Codex-style интерфейс для GigaChat</h2>
           </div>
           <div class="workspace__status" id="statusPill">Готов к работе</div>
         </header>
@@ -126,4 +168,4 @@
 
     <script src="./app.js"></script>
   </body>
-  </html>
+</html>

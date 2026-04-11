@@ -68,15 +68,6 @@ const vendors = repairTextTree({
       technicalParameters: { maxDistance: 280, efficiency: 0.8, integrationComplexity: 1.0 },
     },
     {
-      name: "Бастион",
-      description: "Надежный массовый сегмент для типовых задач охранной сигнализации.",
-      qualityCoefficient: 1.02,
-      equipmentPriceIndex: 1.04,
-      cableCoefficient: 1.0,
-      installationSpeed: 1.03,
-      technicalParameters: { maxDistance: 300, efficiency: 0.83, integrationComplexity: 1.02 },
-    },
-    {
       name: "Рубеж",
       description: "Умеренно расширенные возможности и интеграция со смежными подсистемами.",
       qualityCoefficient: 1.06,
@@ -93,6 +84,15 @@ const vendors = repairTextTree({
       cableCoefficient: 1.03,
       installationSpeed: 0.97,
       technicalParameters: { maxDistance: 340, efficiency: 0.87, integrationComplexity: 1.09 },
+    },
+    {
+      name: "Аргус-Спектр",
+      description: "Профиль производителя охранной сигнализации с действующей линейкой датчиков и приборов.",
+      qualityCoefficient: 1.11,
+      equipmentPriceIndex: 1.18,
+      cableCoefficient: 1.02,
+      installationSpeed: 0.95,
+      technicalParameters: { maxDistance: 335, efficiency: 0.89, integrationComplexity: 1.11 },
     },
   ],
   skud: [
@@ -149,6 +149,15 @@ const vendors = repairTextTree({
       cableCoefficient: 1.02,
       installationSpeed: 0.95,
       technicalParameters: { maxDistance: 225, efficiency: 0.88, integrationComplexity: 1.13 },
+    },
+    {
+      name: "Bastion",
+      description: "Р РѕСЃСЃРёР№СЃРєРёР№ РІРµРЅРґРѕСЂ СЃ Р»РёРЅРµР№РєРѕР№ СЃРєСѓРґ-РєРѕРЅС‚СЂРѕР»Р»РµСЂРѕРІ Рё РёРЅС„СЂР°СЃС‚СЂСѓРєС‚СѓСЂРѕР№ РґРѕСЃС‚СѓРїР°.",
+      qualityCoefficient: 1.07,
+      equipmentPriceIndex: 1.12,
+      cableCoefficient: 1.02,
+      installationSpeed: 0.96,
+      technicalParameters: { maxDistance: 210, efficiency: 0.86, integrationComplexity: 1.09 },
     },
   ],
   ssoi: [
@@ -310,7 +319,12 @@ export const MANUFACTURER_SOURCES = {
   sot: {
     Базовый: { website: "https://www.hikvision.com" },
     Hikvision: { website: "https://www.hikvision.com" },
-    Dahua: { website: "https://www.dahuasecurity.com" },
+    Dahua: {
+      website: "https://www.dahua.market",
+      searchWebsite: "https://www.dahua.market",
+      searchPathTemplate: "/search/?search={query}",
+      preferSearch: true,
+    },
     TRASSIR: { website: "https://trassir.com" },
     Axis: { website: "https://www.axis.com" },
     Uniview: { website: "https://global.uniview.com" },
@@ -321,7 +335,6 @@ export const MANUFACTURER_SOURCES = {
       searchPathTemplate: "/search/?q={query}",
       preferSearch: true,
     },
-    Бастион: { website: "https://bast.ru" },
     Рубеж: {
       website: "https://products.rubezh.ru",
       searchPathTemplate: "/search/?q={query}",
@@ -332,14 +345,16 @@ export const MANUFACTURER_SOURCES = {
       searchPathTemplate: "/search/?q={query}",
       preferSearch: true,
     },
+    "Аргус-Спектр": { website: "https://argus-spectr.ru" },
   },
   skud: {
     Базовый: { website: "https://sigur.com" },
     Sigur: { website: "https://sigur.com" },
     Parsec: { website: "https://parsec.ru" },
     PERCo: { website: "https://perco.ru" },
-    Biosmart: { website: "https://biosmart.ru" },
-    RusGuard: { website: "https://www.rusguard.ru" },
+    Biosmart: { website: "https://bio-smart.ru" },
+    RusGuard: { website: "https://rgsec.ru" },
+    Bastion: { website: "https://bast.ru" },
   },
   ssoi: {
     Базовый: { website: "https://trassir.com" },

@@ -15,6 +15,19 @@ const MARKET_KEY_ALIASES = {
   amplifier: ["amplifiers", "amplifier"],
 };
 
+const EDITABLE_ITEM_CODE_MAP = {
+  CAM: "camera",
+  NVR: "recorder",
+  HDD: "hdd",
+  SW: "switch",
+  CTRL: "controller",
+  SEN: "sensor",
+  DET: "detector",
+  PANEL: "panel",
+  SPK: "speaker",
+  AMP: "amplifier",
+};
+
 const MANAGEMENT_UNIT_DEFAULTS = {
   aps: { serverPrice: 265000, armPrice: 138000 },
   soue: { serverPrice: 228000, armPrice: 132000 },
@@ -73,6 +86,28 @@ function sanitizeDisplayText(value) {
 
 const CONCRETE_MODEL_CATALOG = repairCatalogNode({
   sot: {
+    "Р‘Р°Р·РѕРІС‹Р№": {
+      camera: {
+        "РІРЅСѓС‚СЂРµРЅРЅРёРµ_2": "DS-2CD1123G2-LIU",
+        "РІРЅСѓС‚СЂРµРЅРЅРёРµ_4": "DS-2CD2143G2-IU",
+        "РІРЅСѓС‚СЂРµРЅРЅРёРµ_8": "DS-2CD2183G2-IU",
+        "СѓР»РёС‡РЅС‹Рµ_2": "DS-2CD2T23G2-2I",
+        "СѓР»РёС‡РЅС‹Рµ_4": "DS-2CD2T43G2-4I",
+        "СѓР»РёС‡РЅС‹Рµ_8": "DS-2CD2T83G2-4I",
+      },
+      recorder: { 8: "DS-7108NI-Q1/M", 16: "DS-7616NXI-K2", 32: "DS-7732NXI-K4", 64: "DS-7764NXI-K4" },
+      hdd: { 4: "WD Purple 4TB", 8: "WD Purple 8TB", 12: "WD Purple Pro 12TB", 16: "WD Purple Pro 16TB" },
+      switch: {
+        "8_true": "DS-3E0510HP-E",
+        "16_true": "DS-3E0518HP-E",
+        "24_true": "DS-3E0526P-E/M",
+        "48_true": "DS-3E0552P-E",
+        "8_false": "DS-3E0109P-E/M",
+        "16_false": "DS-3E0318P-E/M",
+        "24_false": "DS-3E0326P-E/M",
+        "48_false": "DS-3E0352P-E",
+      },
+    },
     Hikvision: {
       camera: {
         "внутренние_2": "DS-2CD1123G2-LIU",
@@ -83,6 +118,7 @@ const CONCRETE_MODEL_CATALOG = repairCatalogNode({
         "уличные_8": "DS-2CD2T83G2-4I",
       },
       recorder: { 8: "iDS-7108NXI-M1/S", 16: "iDS-7716NXI-M4/X", 32: "DS-7732NXI-K4", 64: "DS-7764NXI-K4" },
+      hdd: { 4: "WD Purple 4TB", 8: "WD Purple 8TB", 12: "WD Purple Pro 12TB", 16: "WD Purple Pro 16TB" },
       switch: {
         "8_true": "DS-3E0510HP-E",
         "16_true": "DS-3E0518HP-E",
@@ -104,6 +140,7 @@ const CONCRETE_MODEL_CATALOG = repairCatalogNode({
         "уличные_8": "DH-IPC-HFW2849TP-AS-LED-0280B",
       },
       recorder: { 8: "DHI-NVR2108HS-I2", 16: "DHI-NVR4216-4KS3", 32: "DHI-NVR5232-EI", 64: "DHI-NVR5864-EI" },
+      hdd: { 4: "Seagate SkyHawk 4TB", 8: "Seagate SkyHawk 8TB", 12: "Seagate SkyHawk AI 12TB", 16: "Seagate SkyHawk AI 16TB" },
       switch: {
         "8_true": "PFS3010-8ET-96",
         "16_true": "PFS4218-16ET-190",
@@ -125,6 +162,7 @@ const CONCRETE_MODEL_CATALOG = repairCatalogNode({
         "уличные_8": "TR-D8281WDIR8 v2",
       },
       recorder: { 8: "NeuroStation Compact 8", 16: "NeuroStation Compact 16", 32: "NeuroStation 8800R/32", 64: "NeuroStation 8800R/64" },
+      hdd: { 4: "Seagate SkyHawk 4TB", 8: "Seagate SkyHawk 8TB", 12: "Seagate SkyHawk AI 12TB", 16: "Seagate SkyHawk AI 16TB" },
       switch: {
         "8_true": "TR-NS108P",
         "16_true": "TR-NS116P",
@@ -146,6 +184,7 @@ const CONCRETE_MODEL_CATALOG = repairCatalogNode({
         "уличные_8": "Q1808-LE",
       },
       recorder: { 8: "S3008 Recorder", 16: "S3016 Recorder", 32: "S3050 Recorder", 64: "S3064 Recorder" },
+      hdd: { 4: "WD Purple 4TB", 8: "WD Purple 8TB", 12: "WD Purple Pro 12TB", 16: "WD Purple Pro 16TB" },
       switch: {
         "8_true": "T8504-R",
         "16_true": "D8208-R",
@@ -157,8 +196,43 @@ const CONCRETE_MODEL_CATALOG = repairCatalogNode({
         "48_false": "TU8001-E",
       },
     },
+    Uniview: {
+      camera: {
+        "РІРЅСѓС‚СЂРµРЅРЅРёРµ_2": "IPC3612LB-AF28K-G",
+        "РІРЅСѓС‚СЂРµРЅРЅРёРµ_4": "IPC3614LB-AF28K-G",
+        "РІРЅСѓС‚СЂРµРЅРЅРёРµ_8": "IPC3618LE-ADF28KM-G",
+        "СѓР»РёС‡РЅС‹Рµ_2": "IPC2322LB-ADZK-G",
+        "СѓР»РёС‡РЅС‹Рµ_4": "IPC2324LB-ADZK-G",
+        "СѓР»РёС‡РЅС‹Рµ_8": "IPC2328SB-DZK-I0",
+      },
+      recorder: { 8: "NVR301-08S3", 16: "NVR301-16S3", 32: "NVR302-32S", 64: "NVR304-64S" },
+      hdd: { 4: "Seagate SkyHawk 4TB", 8: "Seagate SkyHawk 8TB", 12: "Seagate SkyHawk AI 12TB", 16: "Seagate SkyHawk AI 16TB" },
+      switch: {
+        "8_true": "NSW2010-10T-POE-IN",
+        "16_true": "NSW2018-16T2GC-POE-IN",
+        "24_true": "NSW2026-24T1GT1GC-POE-IN",
+        "48_true": "NSW2052-48T4GC-POE-IN",
+        "8_false": "NSW2010-10T-IN",
+        "16_false": "NSW2018-16T2GC-IN",
+        "24_false": "NSW2026-24T1GT1GC-IN",
+        "48_false": "NSW2050-48T4GC-IN",
+      },
+    },
   },
   ssoi: {
+    "Р‘Р°Р·РѕРІС‹Р№": {
+      recorder: { 8: "TRASSIR NeuroStation Compact 8", 16: "TRASSIR NeuroStation Compact 16", 32: "TRASSIR NeuroStation 8800R/32", 64: "TRASSIR NeuroStation 8800R/64" },
+      switch: {
+        "8_true": "Cisco CBS250-8P-E-2G",
+        "16_true": "Cisco CBS250-16P-2G",
+        "24_true": "Cisco CBS250-24P-4G",
+        "48_true": "Cisco CBS250-48P-4G",
+        "8_false": "Cisco CBS250-8T-E-2G",
+        "16_false": "Cisco CBS250-16T-2G",
+        "24_false": "Cisco CBS250-24T-4G",
+        "48_false": "Cisco CBS250-48T-4G",
+      },
+    },
     TRASSIR: {
       recorder: { 8: "NeuroStation Compact 8", 16: "NeuroStation Compact 16", 32: "NeuroStation 8800R/32", 64: "NeuroStation 8800R/64" },
       switch: {
@@ -198,8 +272,25 @@ const CONCRETE_MODEL_CATALOG = repairCatalogNode({
         "48_false": "D-Link DGS-1210-52",
       },
     },
+    AxxonSoft: {
+      recorder: { 8: "Axxon PSIM S", 16: "Axxon PSIM M", 32: "Axxon PSIM L", 64: "Axxon PSIM XL" },
+      switch: {
+        "8_true": "Cisco CBS250-8P-E-2G",
+        "16_true": "Cisco CBS250-16P-2G",
+        "24_true": "Cisco CBS250-24P-4G",
+        "48_true": "Cisco CBS250-48P-4G",
+        "8_false": "Cisco CBS250-8T-E-2G",
+        "16_false": "Cisco CBS250-16T-2G",
+        "24_false": "Cisco CBS250-24T-4G",
+        "48_false": "Cisco CBS250-48T-4G",
+      },
+    },
   },
   sots: {
+    "Базовый": {
+      sensor: { "ИК": "С2000-ИК исп.03", "ИК+СВЧ": "С2000-СТИК", "вибрационный": "Шорох-2" },
+      panel: { 2: "Сигнал-20П исп.01", 4: "Сигнал-10", 8: "Сигнал-20М" },
+    },
     "Болид": {
       sensor: { "ИК": "С2000-ИК исп.03", "ИК+СВЧ": "С2000-СТИК", "вибрационный": "Шорох-2" },
       panel: { 2: "Сигнал-20П исп.01", 4: "Сигнал-10", 8: "Сигнал-20М" },
@@ -214,12 +305,19 @@ const CONCRETE_MODEL_CATALOG = repairCatalogNode({
     },
   },
   skud: {
+    "Базовый": { controller: { 1: "NC-100K-IP", 2: "NC-2000", 4: "NC-8000" } },
     Sigur: { controller: { 1: "E510", 2: "E210", 4: "E5100" } },
     Parsec: { controller: { 1: "NC-100K-IP", 2: "NC-2000", 4: "NC-8000" } },
     PERCo: { controller: { 1: "CT/L04.2", 2: "CT/L14.1", 4: "CR11.2" } },
     Biosmart: { controller: { 1: "BS-ACS-1", 2: "BS-ACS-2", 4: "BS-ACS-4" } },
+    RusGuard: { controller: { 1: "ACS-102-CE-BM", 2: "ACS-202-CE-BM", 4: "ACS-402-CE-BM" } },
+    Bastion: { controller: { 1: "SPRUT PACS-02NET", 2: "SKAT AC 02NET PACS", 4: "SKAT AC 02NET PACS" } },
   },
   aps: {
+    "Базовый": {
+      detector: { "дымовой": "ДИП-34А-03", "тепловой": "С2000-ИП-03", "комбинированный": "С2000-ИПГ" },
+      panel: { 2: "Сигнал-20П исп.01", 4: "С2000-КДЛ", 8: "С2000М + С2000-КДЛ" },
+    },
     "Болид": {
       detector: { "дымовой": "ДИП-34А-03", "тепловой": "С2000-ИП-03", "комбинированный": "С2000-ИПГ" },
       panel: { 2: "Сигнал-20П исп.01", 4: "С2000-КДЛ", 8: "С2000М + С2000-КДЛ" },
@@ -236,8 +334,16 @@ const CONCRETE_MODEL_CATALOG = repairCatalogNode({
       detector: { "дымовой": "4098-9714", "тепловой": "4098-9733", "комбинированный": "4098-9754" },
       panel: { 2: "4007ES", 4: "4100ES", 8: "4100ES Expanded" },
     },
+    Siemens: {
+      detector: { "дымовой": "OP720", "тепловой": "HI720", "комбинированный": "OH720" },
+      panel: { 2: "FC722-ZZ", 4: "FC726-ZA", 8: "FC724-ZZ" },
+    },
   },
   soue: {
+    "Базовый": {
+      speaker: { "настенный": "ОПОП 124-R3", "потолочный": "АС-4-1", "рупорный": "ОПОП 2-35" },
+      amplifier: { 2: "Рупор-200", 4: "Рупор-300", 8: "Рупор-Диспетчер исп.02" },
+    },
     "Болид": {
       speaker: { "настенный": "ОПОП 124-R3", "потолочный": "АС-4-1", "рупорный": "ОПОП 2-35" },
       amplifier: { 2: "Рупор-200", 4: "Рупор-300", 8: "Рупор-Диспетчер исп.02" },
@@ -255,14 +361,6 @@ const CONCRETE_MODEL_CATALOG = repairCatalogNode({
 
 const CONCRETE_MODEL_FALLBACK = {
   sots: {
-    "\u0411\u0430\u0441\u0442\u0438\u043e\u043d": {
-      sensor: {
-        "\u0418\u041a": "SPRUT \u0418\u041a-01",
-        "\u0418\u041a+\u0421\u0412\u0427": "SPRUT \u0418\u041a/\u0421\u0412\u0427-02",
-        "\u0432\u0438\u0431\u0440\u0430\u0446\u0438\u043e\u043d\u043d\u044b\u0439": "SPRUT \u0412\u0418\u0411-01",
-      },
-      panel: { 2: "SPRUT \u041f\u041f\u041a-2", 4: "SPRUT \u041f\u041f\u041a-4", 8: "SPRUT \u041f\u041f\u041a-8" },
-    },
     "\u0411\u043e\u043b\u0438\u0434": {
       sensor: {
         "\u0418\u041a": "\u04212000-\u0418\u041a \u0438\u0441\u043f.03",
@@ -483,6 +581,93 @@ export function getConcreteModel(systemType, vendor, itemType, optionKey) {
   return resolveFromCatalog(systemCatalog) || resolveFromCatalog(fallbackSystemCatalog);
 }
 
+function buildEditableModelEntries(itemType, itemMeta, systemType, vendor) {
+  if (!itemMeta?.basePrices || typeof itemMeta.basePrices !== "object") return [];
+
+  if (itemType === "camera") {
+    const placements = Array.isArray(itemMeta.placement) ? itemMeta.placement : [];
+    const resolutions = Array.isArray(itemMeta.resolution) ? itemMeta.resolution : [];
+    return placements.flatMap((placement) =>
+      resolutions.map((resolution) => {
+        const optionKey = `${placement}_${resolution}`;
+        return {
+          optionKey,
+          basePrice: toNumber(itemMeta.basePrices[optionKey], 0),
+          model: getConcreteModel(systemType, vendor, itemType, optionKey),
+        };
+      })
+    );
+  }
+
+  if (itemType === "switch") {
+    const ports = Array.isArray(itemMeta.ports) ? itemMeta.ports : [];
+    const poeValues = Array.isArray(itemMeta.poe) ? itemMeta.poe : [];
+    return ports.flatMap((port) =>
+      poeValues.map((poe) => {
+        const optionKey = `${port}_${poe}`;
+        return {
+          optionKey,
+          basePrice: toNumber(itemMeta.basePrices[optionKey], 0),
+          model: getConcreteModel(systemType, vendor, itemType, optionKey),
+        };
+      })
+    );
+  }
+
+  const numericOptions = itemMeta.channels || itemMeta.loops || itemMeta.tb;
+  if (Array.isArray(numericOptions)) {
+    return numericOptions.map((value) => ({
+      optionKey: value,
+      basePrice: toNumber(itemMeta.basePrices[value], 0),
+      model: getConcreteModel(systemType, vendor, itemType, value),
+    }));
+  }
+
+  const textOptions = itemMeta.kind || [];
+  if (Array.isArray(textOptions)) {
+    return textOptions.map((value) => ({
+      optionKey: value,
+      basePrice: toNumber(itemMeta.basePrices[value], 0),
+      model: getConcreteModel(systemType, vendor, itemType, value),
+    }));
+  }
+
+  return [];
+}
+
+export function getEditableModelOptions(systemType, vendor, itemCode) {
+  const itemType = EDITABLE_ITEM_CODE_MAP[String(itemCode || "").trim().toUpperCase()];
+  if (!itemType) return [];
+
+  const vendorMeta = resolveVendorEquipment(systemType, vendor);
+  if (!vendorMeta?.[itemType]) return [];
+
+  return buildEditableModelEntries(itemType, vendorMeta[itemType], systemType, vendor)
+    .filter((item) => item.model && item.basePrice > 0)
+    .filter((item, index, items) => items.findIndex((candidate) => candidate.model === item.model) === index);
+}
+
+export function resolveModelPriceOverride(systemType, vendor, itemCode, nextModel, currentModel, currentUnitPrice) {
+  const options = getEditableModelOptions(systemType, vendor, itemCode);
+  const nextOption = options.find((item) => item.model === nextModel);
+  if (!nextOption) {
+    return {
+      model: sanitizeDisplayText(nextModel),
+      unitPrice: Math.max(toNumber(currentUnitPrice, 0), 0),
+    };
+  }
+
+  const currentOption = options.find((item) => item.model === currentModel);
+  const currentBasePrice = toNumber(currentOption?.basePrice, 0);
+  const currentPrice = Math.max(toNumber(currentUnitPrice, 0), 0);
+  const appliedRatio = currentBasePrice > 0 && currentPrice > 0 ? currentPrice / currentBasePrice : 1;
+
+  return {
+    model: nextOption.model,
+    unitPrice: Math.max(Number((nextOption.basePrice * appliedRatio).toFixed(2)), 0),
+  };
+}
+
 function resolveQuantity(systemType, itemType, quantityContext, fallbackQty) {
   const primaryUnits = Math.max(toNumber(quantityContext?.primaryUnits, 0), 0);
   const secondary = quantityContext?.secondary || {};
@@ -586,6 +771,7 @@ export function calculateEquipment(
 
   if (vendorMeta.hdd) {
     const hddTb = Number(getValue(selectedParams.hddTb, vendorMeta.hdd.tb[1] || vendorMeta.hdd.tb[0]));
+    const model = getConcreteModel(system.type, system.vendor, "hdd", hddTb);
     const basePrice = vendorMeta.hdd.basePrices[hddTb] || 0;
     const unitPrice = resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, MARKET_KEY_ALIASES.hdd, priceMultiplier);
     const recorderQty = details.find((item) => item.code === "NVR")?.qty || 1;
@@ -595,7 +781,8 @@ export function calculateEquipment(
     const qty = Math.max(Math.ceil(minTb / Math.max(hddTb, 1)), recorderQty * 2);
     pushItem(details, {
       code: "HDD",
-      name: `HDD ${hddTb} ТБ (архив 30 дней)`,
+      name: makeDisplayName(`HDD ${hddTb} ТБ (архив 30 дней)`, model),
+      model,
       qty,
       unitPrice,
       total: qty * unitPrice,

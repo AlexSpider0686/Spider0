@@ -1,5 +1,5 @@
 @echo off
-cd /d C:\Users\User\Documents\GitHub\Spider0
+cd /d "%~dp0"
 
 echo ==== Проверка git ====
 git status

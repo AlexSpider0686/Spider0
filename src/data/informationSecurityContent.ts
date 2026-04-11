@@ -21,7 +21,7 @@ export const informationSecurityRegistry = [
     risk: "Точный адрес определяется окружением deployment и должен отдельно инвентаризироваться.",
   },
   {
-    domain: "spider0.vercel.app",
+    domain: "AMVERA_PROJECT_DOMAIN",
     purpose: "Резервный endpoint /api/vendor-prices для сбора цен",
     required: "Условно обязательно",
     data: "Поисковые запросы, модели, артикулы и параметры позиций",
@@ -77,13 +77,6 @@ export const informationSecurityRegistry = [
     risk: "Внешний сайт производителя.",
   },
   {
-    domain: "bast.ru",
-    purpose: "Сайт производителя Бастион",
-    required: "Необязательно",
-    data: "Поисковые запросы по оборудованию",
-    risk: "Внешний сайт производителя.",
-  },
-  {
     domain: "sigur.com",
     purpose: "Сайт производителя Sigur",
     required: "Необязательно",
@@ -105,14 +98,14 @@ export const informationSecurityRegistry = [
     risk: "Внешний сайт производителя.",
   },
   {
-    domain: "biosmart.ru",
-    purpose: "Сайт производителя Biosmart",
+    domain: "bio-smart.ru",
+    purpose: "Сайт производителя BioSmart",
     required: "Необязательно",
     data: "Поисковые запросы по оборудованию",
     risk: "Внешний сайт производителя.",
   },
   {
-    domain: "www.rusguard.ru",
+    domain: "rgsec.ru",
     purpose: "Сайт производителя RusGuard",
     required: "Необязательно",
     data: "Поисковые запросы по оборудованию",
@@ -182,6 +175,13 @@ export const informationSecurityRegistry = [
     risk: "Внешний сайт производителя.",
   },
   {
+    domain: "www.dahua.market",
+    purpose: "Интернет-магазин Dahua с карточками товаров и ценами",
+    required: "Необязательно",
+    data: "Поисковые запросы по моделям и артикулам оборудования Dahua",
+    risk: "Внешний сайт поставщика, используется для проверки наличия и цены конкретных моделей.",
+  },
+  {
     domain: "www.axis.com",
     purpose: "Сайт производителя Axis",
     required: "Необязательно",
@@ -208,6 +208,13 @@ export const informationSecurityRegistry = [
     required: "Необязательно",
     data: "Факт загрузки страницы, IP-адрес и user-agent на стороне CDN",
     risk: "Внешний CDN изображений, не относится к расчетной логике платформы.",
+  },
+  {
+    domain: "bast.ru",
+    purpose: "РЎР°Р№С‚ РїСЂРѕРёР·РІРѕРґРёС‚РµР»СЏ Bastion",
+    required: "РќРµРѕР±СЏР·Р°С‚РµР»СЊРЅРѕ",
+    data: "РџРѕРёСЃРєРѕРІС‹Рµ Р·Р°РїСЂРѕСЃС‹ РїРѕ РѕР±РѕСЂСѓРґРѕРІР°РЅРёСЋ",
+    risk: "Р’РЅРµС€РЅРёР№ СЃР°Р№С‚ РїСЂРѕРёР·РІРѕРґРёС‚РµР»СЏ.",
   },
 ];
 

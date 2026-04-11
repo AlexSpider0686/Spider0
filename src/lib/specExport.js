@@ -19,6 +19,28 @@ function downloadBlob(fileName, blob) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 
+function formatSpecPosition(row) {
+  const name = String(row?.name || "").trim();
+  const model = String(row?.model || "").trim();
+  if (!name || !model) return name || model || "—";
+  return name.includes(model) ? name : `${name} (${model})`;
+}
+
+function formatSpecSource(row) {
+  const sourceMap = {
+    project_pdf: "PDF",
+    model_bom: "BOM",
+    cable_model: "кабель",
+    kns_model: "КНС",
+    resource_model: "ресурсы",
+    survey_ai: "AI",
+    key_equipment: "вендор",
+    algorithm: "модель",
+  };
+
+  return sourceMap[row?.source] || "—";
+}
+
 export function downloadSystemSpecificationExcel({ objectData, system, systemResult, recommendation, zones = [] }) {
   const systemName = SYSTEM_TYPES.find((item) => item.code === system?.type)?.name || system?.type || "Система";
   const rows = recommendation?.specRows || [];
@@ -58,7 +80,7 @@ export function downloadSystemSpecificationExcel({ objectData, system, systemRes
               <th>№</th>
               <th>Позиция</th>
               <th>Модель</th>
-              <th>??????????????????</th>
+              <th>РљР°С‚РµРіРѕСЂРёСЏ</th>
               <th>Источник</th>
               <th>Основание</th>
               <th>Кол-во</th>
@@ -73,10 +95,10 @@ export function downloadSystemSpecificationExcel({ objectData, system, systemRes
                 (row, index) => `
                   <tr>
                     <td>${index + 1}</td>
-                    <td>${escapeHtml(row.name)}</td>
-                    <td>${escapeHtml(row.model || "?")}</td>
+                    <td>${escapeHtml(formatSpecPosition(row))}</td>
+                    <td>${escapeHtml(row.model || "—")}</td>
                     <td>${escapeHtml(row.category === "equipment" ? "Оборудование" : "Материалы")}</td>
-                    <td>${escapeHtml(row.source || "algorithm")}</td>
+                    <td>${escapeHtml(formatSpecSource(row))}</td>
                     <td>${escapeHtml(row.basis)}</td>
                     <td>${escapeHtml(row.qty)}</td>
                     <td>${escapeHtml(row.unit)}</td>

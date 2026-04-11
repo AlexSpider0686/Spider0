@@ -7,12 +7,17 @@ const os = require("os");
 const { spawn } = require("child_process");
 const Store = require("electron-store").default;
 
+const DEFAULT_QWEN_BASE_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
+const DEFAULT_QWEN_CLI_PATH = process.platform === "win32" ? "qwen" : "qwen";
+
 const store = new Store({
   name: "projectcore-agent-shell",
   defaults: {
     provider: "gigachat",
     modelByProvider: {
-      gigachat: "GigaChat-2-Max"
+      gigachat: "GigaChat-2-Max",
+      qwenCli: "qwen3-coder-plus",
+      qwenApi: "qwen3-coder-plus"
     },
     workspacePath: process.cwd(),
     gitProvider: "github",
@@ -25,7 +30,11 @@ const store = new Store({
       gigachatClientId: "",
       gigachatClientSecret: "",
       gigachatScope: "GIGACHAT_API_PERS",
-      gigachatAllowInsecureTls: false
+      gigachatAllowInsecureTls: false,
+      qwenApiKey: "",
+      qwenBaseUrl: DEFAULT_QWEN_BASE_URL,
+      qwenCliPath: DEFAULT_QWEN_CLI_PATH,
+      qwenCliApprovalMode: "auto-edit"
     }
   }
 });
@@ -746,6 +755,283 @@ function buildInitialConversation(prompt, uploadedAttachments, attachmentContext
   return messages;
 }
 
+function buildTextOnlyConversation(prompt, attachmentContext, workspaceOverview) {
+  const primaryPrompt = String(prompt || "").trim() || "Проанализируй проект и внеси нужные изменения в код.";
+  const baseContent = [
+    primaryPrompt,
+    "",
+    "Контекст проекта:",
+    JSON.stringify(workspaceOverview, null, 2),
+    attachmentContext.summary ? `\nЛокальный контекст вложений:\n${attachmentContext.summary}` : ""
+  ].filter(Boolean).join("\n");
+
+  return [
+    {
+      role: "user",
+      content: baseContent
+    }
+  ];
+}
+
+function normalizeProvider(provider) {
+  const value = String(provider || "").trim().toLowerCase();
+  if (value === "qwen-cli" || value === "qwen-oauth") {
+    return "qwen-oauth";
+  }
+  if (value === "qwen-api" || value === "gigachat") {
+    return value;
+  }
+  return "gigachat";
+}
+
+function normalizeQwenCliApprovalMode(mode) {
+  const value = String(mode || "").trim().toLowerCase();
+  return !value || value === "default" ? "auto-edit" : value;
+}
+
+function getQwenBaseUrl(credentials = {}) {
+  return String(credentials.qwenBaseUrl || DEFAULT_QWEN_BASE_URL).trim().replace(/\/+$/, "");
+}
+
+function buildOpenAITools() {
+  return buildAgentFunctions().map((tool) => ({
+    type: "function",
+    function: {
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.parameters
+    }
+  }));
+}
+
+function extractQwenText(content) {
+  if (typeof content === "string") {
+    return content.trim();
+  }
+
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === "string") {
+          return part;
+        }
+        if (typeof part?.text === "string") {
+          return part.text;
+        }
+        if (typeof part?.content === "string") {
+          return part.content;
+        }
+        if (typeof part?.thinking === "string") {
+          return part.thinking;
+        }
+        return "";
+      })
+      .filter(Boolean)
+      .join("\n")
+      .trim();
+  }
+
+  if (typeof content?.text === "string") {
+    return content.text.trim();
+  }
+
+  return "";
+}
+
+function runProcess(command, args, options = {}) {
+  return new Promise((resolve) => {
+    const child = spawn(command, args, {
+      cwd: options.cwd,
+      env: options.env,
+      windowsHide: true,
+      shell: Boolean(options.shell)
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.on("data", (chunk) => {
+      stdout += String(chunk);
+    });
+
+    child.stderr.on("data", (chunk) => {
+      stderr += String(chunk);
+    });
+
+    if (typeof options.stdin === "string" && child.stdin) {
+      child.stdin.write(options.stdin);
+      child.stdin.end();
+    }
+
+    child.on("error", (error) => {
+      resolve({
+        code: -1,
+        stdout,
+        stderr: `${stderr}\n${error.message}`.trim()
+      });
+    });
+
+    child.on("close", (code) => {
+      resolve({
+        code,
+        stdout: stdout.slice(-32000),
+        stderr: stderr.slice(-32000)
+      });
+    });
+  });
+}
+
+async function runQwenCliPrompt(prompt, workspacePath, settings) {
+  const credentials = settings.credentials || {};
+  const qwenCliPath = String(credentials.qwenCliPath || DEFAULT_QWEN_CLI_PATH).trim() || DEFAULT_QWEN_CLI_PATH;
+  const approvalMode = normalizeQwenCliApprovalMode(credentials.qwenCliApprovalMode);
+  const model = String(settings.modelByProvider?.qwenCli || "qwen3-coder-plus").trim();
+  const args = ["--approval-mode", approvalMode, "--output-format", "text", "--input-format", "text"];
+
+  if (model) {
+    args.push("-m", model);
+  }
+
+  const result = await runProcess(qwenCliPath, args, {
+    cwd: workspacePath,
+    env: { ...process.env, QWEN_CODE_LANG: process.env.QWEN_CODE_LANG || "ru" },
+    shell: process.platform === "win32",
+    stdin: prompt
+  });
+
+  if (result.code !== 0) {
+    throw new Error(result.stderr || result.stdout || "Не удалось выполнить локальный Qwen CLI.");
+  }
+
+  return (result.stdout || result.stderr || "").trim();
+}
+
+async function testQwenCliConnection(credentials = {}) {
+  const qwenCliPath = String(credentials.qwenCliPath || DEFAULT_QWEN_CLI_PATH).trim() || DEFAULT_QWEN_CLI_PATH;
+  const versionResult = await runProcess(qwenCliPath, ["--version"], {
+    env: { ...process.env, QWEN_CODE_LANG: process.env.QWEN_CODE_LANG || "ru" },
+    shell: process.platform === "win32"
+  });
+
+  if (versionResult.code !== 0) {
+    throw new Error(versionResult.stderr || "Не удалось запустить qwen --version.");
+  }
+
+  const authResult = await runProcess(qwenCliPath, ["auth", "status"], {
+    env: { ...process.env, QWEN_CODE_LANG: process.env.QWEN_CODE_LANG || "ru" },
+    shell: process.platform === "win32"
+  });
+
+  const authText = (authResult.stdout || authResult.stderr || "").trim();
+
+  return {
+    provider: "qwen-oauth",
+    version: (versionResult.stdout || "").trim(),
+    authStatus: authText || "Qwen CLI найден. Если OAuth ещё не настроен, выполните `qwen auth qwen-oauth`."
+  };
+}
+
+async function callQwenApi(messages, settings, options = {}) {
+  const credentials = settings.credentials || {};
+  const apiKey = String(credentials.qwenApiKey || "").trim();
+  if (!apiKey) {
+    throw new Error("Заполните Qwen API Key.");
+  }
+
+  const model = String(settings.modelByProvider?.qwenApi || "qwen3-coder-plus").trim() || "qwen3-coder-plus";
+  const body = {
+    model,
+    temperature: options.temperature ?? 0.1,
+    messages,
+    stream: false
+  };
+
+  if (options.tools?.length) {
+    body.tools = options.tools;
+    body.tool_choice = options.toolChoice || "auto";
+  }
+
+  const response = await httpsRequest(`${getQwenBaseUrl(credentials)}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      Authorization: `Bearer ${apiKey}`
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      [
+        "Qwen API вернул ошибку.",
+        `HTTP статус: ${response.status} ${response.statusText}`.trim(),
+        `Ответ API: ${response.text || "<пустой ответ>"}`
+      ].join("\n")
+    );
+  }
+
+  let payload = {};
+  try {
+    payload = JSON.parse(response.text || "{}");
+  } catch {
+    payload = {};
+  }
+
+  const choice = payload?.choices?.[0] || {};
+  const message = choice?.message;
+  if (!message) {
+    throw new Error(`Qwen API не вернул choices[0].message. Ответ: ${response.text || "<пустой ответ>"}`);
+  }
+
+  return {
+    message,
+    finishReason: choice?.finish_reason || "",
+    rawText: response.text || ""
+  };
+}
+
+async function testQwenApiConnection(credentials = {}) {
+  const apiKey = String(credentials.qwenApiKey || "").trim();
+  if (!apiKey) {
+    throw new Error("Заполните Qwen API Key.");
+  }
+
+  const response = await httpsRequest(`${getQwenBaseUrl(credentials)}/models`, {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${apiKey}`
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      [
+        "Не удалось проверить Qwen API.",
+        `HTTP статус: ${response.status} ${response.statusText}`.trim(),
+        `Ответ API: ${response.text || "<пустой ответ>"}`
+      ].join("\n")
+    );
+  }
+
+  let payload = {};
+  try {
+    payload = JSON.parse(response.text || "{}");
+  } catch {
+    payload = {};
+  }
+
+  const models = Array.isArray(payload?.data) ? payload.data.map((item) => item.id).filter(Boolean) : [];
+
+  return {
+    provider: "qwen-api",
+    baseUrl: getQwenBaseUrl(credentials),
+    modelsCount: models.length,
+    models: models.slice(0, 12)
+  };
+}
+
 async function callGigaChat(messages, settings, options = {}) {
   const accessToken = options.accessToken || (await getGigaChatToken(settings.credentials || {}));
   const allowInsecureTls = Boolean(settings.credentials?.gigachatAllowInsecureTls);
@@ -1113,6 +1399,109 @@ async function tryHandleDirectCommand(prompt, workspacePath) {
   return null;
 }
 
+async function runQwenCliAgent({ prompt, workspacePath, gitProvider, attachments = [] }) {
+  const settings = store.store;
+  const workspaceOverview = buildWorkspaceOverview(workspacePath);
+  const attachmentContext = buildAttachmentContext(attachments);
+  const systemPrompt = buildSystemPrompt({
+    workspacePath,
+    gitProvider,
+    provider: "qwen-oauth"
+  });
+  const userPrompt = buildTextOnlyConversation(prompt, attachmentContext, workspaceOverview)[0].content;
+  const final = await runQwenCliPrompt(`${systemPrompt}\n\n${userPrompt}`, workspacePath, settings);
+
+  return {
+    ok: true,
+    thought: "Задача выполнена через локальный Qwen OAuth (CLI).",
+    final: final || "Готово."
+  };
+}
+
+async function runQwenApiAgent({ prompt, workspacePath, gitProvider, attachments = [] }) {
+  const settings = store.store;
+  const workspaceOverview = buildWorkspaceOverview(workspacePath);
+  const attachmentContext = buildAttachmentContext(attachments);
+  const conversation = [
+    {
+      role: "system",
+      content: buildSystemPrompt({
+        workspacePath,
+        gitProvider,
+        provider: "qwen-api"
+      })
+    },
+    ...buildTextOnlyConversation(prompt, attachmentContext, workspaceOverview)
+  ];
+  const tools = buildOpenAITools();
+  let lastThought = "";
+
+  for (let step = 0; step < 14; step += 1) {
+    const { message, finishReason, rawText } = await callQwenApi(conversation, settings, {
+      tools,
+      toolChoice: "auto"
+    });
+    const contentText = extractQwenText(message?.content);
+    const toolCalls = Array.isArray(message?.tool_calls) ? message.tool_calls : [];
+
+    if (toolCalls.length > 0) {
+      conversation.push({
+        role: "assistant",
+        content: contentText,
+        tool_calls: toolCalls
+      });
+
+      for (const toolCall of toolCalls) {
+        const toolName = toolCall?.function?.name;
+        const args = parseFunctionArguments(toolCall?.function?.arguments);
+        const toolResult = await executeToolCall(workspacePath, { tool: toolName, args }, gitProvider);
+
+        conversation.push({
+          role: "tool",
+          tool_call_id: toolCall.id,
+          content: JSON.stringify(toolResult)
+        });
+      }
+
+      if (contentText) {
+        lastThought = contentText;
+      }
+      continue;
+    }
+
+    if (contentText) {
+      const legacyReply = parseLegacyAction(contentText);
+      if (legacyReply?.type === "final") {
+        return {
+          ok: true,
+          thought: legacyReply.thought || lastThought,
+          final: legacyReply.final || "Готово."
+        };
+      }
+
+      return {
+        ok: true,
+        thought: lastThought,
+        final: contentText
+      };
+    }
+
+    if (finishReason) {
+      return {
+        ok: false,
+        thought: lastThought,
+        final: `Qwen API не вернул текстовый ответ. finish_reason=${finishReason}\n\nRaw response:\n${rawText}`
+      };
+    }
+  }
+
+  return {
+    ok: false,
+    thought: lastThought,
+    final: "Лимит шагов агента исчерпан. Нужна дополнительная декомпозиция задачи."
+  };
+}
+
 async function runAgent({ prompt, workspacePath, gitProvider, attachments = [] }) {
   const resolvedWorkspace = ensureDirectory(workspacePath || process.cwd());
   const hasAttachments = Array.isArray(attachments) && attachments.length > 0;
@@ -1122,13 +1511,33 @@ async function runAgent({ prompt, workspacePath, gitProvider, attachments = [] }
   }
 
   const settings = store.store;
+  const provider = normalizeProvider(settings.provider);
+  if (provider === "qwen-oauth") {
+    return runQwenCliAgent({
+      prompt,
+      workspacePath: resolvedWorkspace,
+      gitProvider,
+      attachments
+    });
+  }
+
+  if (provider === "qwen-api") {
+    return runQwenApiAgent({
+      prompt,
+      workspacePath: resolvedWorkspace,
+      gitProvider,
+      attachments
+    });
+  }
+
   const accessToken = await getGigaChatToken(settings.credentials || {});
   const workspaceOverview = buildWorkspaceOverview(resolvedWorkspace);
   const attachmentContext = buildAttachmentContext(attachments);
   const uploadedAttachments = hasAttachments ? await uploadAttachments(accessToken, settings.credentials || {}, attachments) : [];
   const systemPrompt = buildSystemPrompt({
     workspacePath: resolvedWorkspace,
-    gitProvider
+    gitProvider,
+    provider: "gigachat"
   });
   const functions = buildAgentFunctions();
   const conversation = buildInitialConversation(prompt, uploadedAttachments, attachmentContext, workspaceOverview);
@@ -1262,6 +1671,9 @@ function saveClipboardImage({ dataUrl, suggestedName }) {
 
 ipcMain.handle("config:get", () => store.store);
 ipcMain.handle("config:set", (_, partial) => {
+  if (partial?.credentials) {
+    partial.credentials.qwenCliApprovalMode = normalizeQwenCliApprovalMode(partial.credentials.qwenCliApprovalMode);
+  }
   store.set(partial);
   return store.store;
 });
@@ -1287,6 +1699,27 @@ ipcMain.handle("workspace:list", (_, workspacePath) => {
 });
 ipcMain.handle("git:switchProvider", async (_, { workspacePath, provider }) => {
   return withGitRemoteSwitch(ensureDirectory(workspacePath || process.cwd()), provider);
+});
+ipcMain.handle("provider:test", async (_, payload = {}) => {
+  try {
+    const provider = normalizeProvider(payload.provider || store.store.provider);
+    const credentials = payload.credentials || store.store.credentials || {};
+
+    if (provider === "qwen-oauth") {
+      const result = await testQwenCliConnection(credentials);
+      return { ok: true, ...result };
+    }
+
+    if (provider === "qwen-api") {
+      const result = await testQwenApiConnection(credentials);
+      return { ok: true, ...result };
+    }
+
+    const result = await testGigaChatConnection(credentials);
+    return { ok: true, provider: "gigachat", ...result };
+  } catch (error) {
+    return { ok: false, errorMessage: formatErrorMessage(error) };
+  }
 });
 ipcMain.handle("gigachat:test", async (_, credentials) => {
   try {
