@@ -14,6 +14,7 @@ import AuthGate from "./AuthGate";
 import ProjectPlanModal from "./ProjectPlanModal";
 import { APP_VERSION_LABEL, BUILD_NUMBER } from "../config/estimateConfig";
 import { isStoredAuthTokenValid } from "../lib/authApi";
+import projectCoreMarkUrl from "../assets/project-core-mark.svg";
 
 const ASSET_BASE = import.meta.env.BASE_URL || "/";
 

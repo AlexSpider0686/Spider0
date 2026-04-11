@@ -106,6 +106,11 @@ const DISCONTINUED_MODEL_REPLACEMENTS = {
       "NC-2000": "NC-60K.M",
       "NC-100K-IP": "NC-100K-IP.M",
     },
+    Biosmart: {
+      "BS-ACS-1": "BioSmart Prox-E",
+      "BS-ACS-2": "BioSmart KeyPass",
+      "BS-ACS-4": "BioSmart UniPass Pro 2",
+    },
   },
 };
 
@@ -389,9 +394,9 @@ const CONCRETE_MODEL_CATALOG = repairCatalogNode({
     Sigur: { controller: { 1: "E510", 2: "E210", 4: "E5100" } },
     Parsec: { controller: { 1: "NC-100K-IP.M", 2: "NC-60K.M", 4: "2x NC-60K.M" } },
     PERCo: { controller: { 1: "CT/L04.2", 2: "CT/L14.1", 4: "CR11.2" } },
-    Biosmart: { controller: { 1: "BS-ACS-1", 2: "BS-ACS-2", 4: "BS-ACS-4" } },
-    RusGuard: { controller: { 1: "ACS-102-CE-BM", 2: "ACS-202-CE-BM", 4: "ACS-402-CE-BM" } },
-    Bastion: { controller: { 1: "SPRUT PACS-02NET", 2: "SKAT AC 02NET PACS", 4: "SKAT AC 02NET PACS" } },
+    Biosmart: { controller: { 1: "BioSmart Prox-E", 2: "BioSmart KeyPass", 4: "BioSmart UniPass Pro 2" } },
+    RusGuard: { controller: { 1: "ACS-105-CE-BM", 2: "ACS-202-CE-BM", 4: "ACS-402-CE-BM" } },
+    Bastion: { controller: { 1: "SPRUT PACS-02NET", 2: "SKAT AC 02NET PACS", 4: "2x SKAT AC 02NET PACS" } },
   },
   aps: {
     "Базовый": {

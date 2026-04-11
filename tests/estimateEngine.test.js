@@ -291,6 +291,7 @@ test("non-project model catalog does not expose discontinued models", () => {
     },
     skud: {
       Parsec: ["NC-2000", "NC-100K-IP"],
+      Biosmart: ["BS-ACS-1", "BS-ACS-2", "BS-ACS-4"],
     },
   };
 
@@ -313,6 +314,12 @@ test("non-project model catalog does not expose discontinued models", () => {
 test("lifecycle replacements resolve to current non-project models", () => {
   assert.equal(getConcreteModel("aps", "Рубеж", "panel", 8), "R3-Рубеж-20П");
   assert.equal(getConcreteModel("sots", "Рубеж", "panel", 8), "R3-Рубеж-20П");
+});
+
+test("skud lifecycle replacements resolve to current non-project models", () => {
+  assert.equal(getConcreteModel("skud", "Biosmart", "controller", 1), "BioSmart Prox-E");
+  assert.equal(getConcreteModel("skud", "Biosmart", "controller", 2), "BioSmart KeyPass");
+  assert.equal(getConcreteModel("skud", "Bastion", "controller", 4), "2x SKAT AC 02NET PACS");
 });
 
 test("all configured vendors expose concrete models and prices without a loaded project", () => {
