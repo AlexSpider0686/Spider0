@@ -396,7 +396,7 @@ export async function estimateTravelFromRoute(input, options = {}) {
     mode === "air"
       ? `Вылет: ${airRoute?.fromAirport?.city || "не определен"} (${airRoute?.fromAirport?.label || "аэропорт"}), прилет: ${airRoute?.toAirport?.city || "не определен"} (${airRoute?.toAirport?.label || "аэропорт"}).`
       : airRoute?.airportClosed
-        ? "Ближайший аэропорт по маршруту закрыт или требует существенного объезда, поэтому выбран наземный транспорт."
+        ? "Ближайший аэропорт по маршруту закрыт, поэтому выбран наземный транспорт."
         : "";
 
   const normalized = recalculateTravelEstimateDraft(

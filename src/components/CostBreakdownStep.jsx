@@ -232,8 +232,8 @@ export default function CostBreakdownStep({
                 </div>
               </div>
               <div>
-                <small className="hint-inline">РњР°СЂС€СЂСѓС‚ СЃ РєР»СЋС‡РµРІС‹РјРё С‚РѕС‡РєР°РјРё</small>
-                <input value={travelEstimate.routeSummary || ""} readOnly className="readonly-field" />
+                <small className="hint-inline">Маршрут с ключевыми точками</small>
+                <textarea value={travelEstimate.routeSummary || ""} readOnly className="readonly-field travel-route-field" rows={3} />
               </div>
               {travelEstimate.airportComment ? <small className="hint-inline">{travelEstimate.airportComment}</small> : null}
               {travelEstimate.transportSourceUrl ? (
