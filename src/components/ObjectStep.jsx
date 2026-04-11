@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, Lock, Unlock, Search, ClipboardList, Camera, CheckCircle2, RefreshCcw, X } from "lucide-react";
+import { Plus, Trash2, Lock, Unlock, Search, ClipboardList, Camera, CheckCircle2, RefreshCcw, X, Download } from "lucide-react";
 import { OBJECT_TYPES, SYSTEM_TYPES } from "../config/estimateConfig";
 import { BUILDING_STATUS_OPTIONS } from "../config/costModelConfig";
 import { searchRegions } from "../config/regionsConfig";
@@ -193,6 +193,7 @@ export default function ObjectStep({
   refreshAiSurveyPhoto,
   applyAiSurveyData,
   resetAiSurveySection,
+  exportAiSurveyChecklist,
 }) {
   const [regionQuery, setRegionQuery] = useState(objectData.regionName || "");
   const [surveyModalOpen, setSurveyModalOpen] = useState(false);
@@ -721,7 +722,13 @@ export default function ObjectStep({
 
         {technicalSolution?.surveyStartedAt ? (
           <div className="calc-explain ai-checklist-footer">
-            <h4>Статус этапа</h4>
+            <div className="ai-checklist-footer__head">
+              <h4>{"\u0421\u0442\u0430\u0442\u0443\u0441 \u044d\u0442\u0430\u043f\u0430"}</h4>
+              <button className="ghost-btn ai-checklist-export-btn" type="button" onClick={exportAiSurveyChecklist}>
+                <Download size={14} />
+                {"\u0412\u044b\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u0447\u0435\u043a\u043b\u0438\u0441\u0442"}
+              </button>
+            </div>
             <div className="ai-summary-list">
               <div>
                 <CheckCircle2 size={16} />
@@ -1018,17 +1025,23 @@ export default function ObjectStep({
 
             <div className="ai-survey-modal__footer">
               <div className="hint-inline">
-                Дальнейшие алгоритмы платформы используют только загруженные данные обследования. После загрузки они участвуют в AI-техническом решении, в расчете стоимости материалов, СМР и проектирования. Для коридоров нужно загружать фото маршрутов прокладки кабеля, чтобы AI уточнил лотки, запотолочное пространство, фальш-пол и другие способы трассировки.
+                {"\u041f\u043e\u0441\u043b\u0435 \u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0438 \u0434\u0430\u043d\u043d\u044b\u0435 \u043e\u0431\u0441\u043b\u0435\u0434\u043e\u0432\u0430\u043d\u0438\u044f \u0443\u0447\u0430\u0441\u0442\u0432\u0443\u044e\u0442 \u0432 AI-\u0442\u0435\u0445\u043d\u0438\u0447\u0435\u0441\u043a\u043e\u043c \u0440\u0435\u0448\u0435\u043d\u0438\u0438, \u0440\u0430\u0441\u0447\u0435\u0442\u0435 \u043c\u0430\u0442\u0435\u0440\u0438\u0430\u043b\u043e\u0432, \u0421\u041c\u0420 \u0438 \u043f\u0440\u043e\u0435\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0438. \u0414\u043b\u044f \u043a\u043e\u0440\u0438\u0434\u043e\u0440\u043e\u0432 \u043d\u0443\u0436\u043d\u043e \u0437\u0430\u0433\u0440\u0443\u0436\u0430\u0442\u044c \u0444\u043e\u0442\u043e \u043c\u0430\u0440\u0448\u0440\u0443\u0442\u043e\u0432 \u043f\u0440\u043e\u043a\u043b\u0430\u0434\u043a\u0438 \u043a\u0430\u0431\u0435\u043b\u044f, \u0447\u0442\u043e\u0431\u044b AI \u0443\u0442\u043e\u0447\u043d\u0438\u043b \u0441\u043f\u043e\u0441\u043e\u0431 \u0442\u0440\u0430\u0441\u0441\u0438\u0440\u043e\u0432\u043a\u0438."}
               </div>
-              <button
-                className="primary-btn"
-                type="button"
-                onClick={handleApplySurvey}
-                disabled={(aiSurveyCompletion?.percent || 0) < 100}
-              >
-                <CheckCircle2 size={16} />
-                Загрузить данные
+              <div className="ai-survey-modal__footer-actions">
+                <button className="ghost-btn ai-checklist-export-btn" type="button" onClick={exportAiSurveyChecklist}>
+                  <Download size={14} />
+                {"\u0412\u044b\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u0447\u0435\u043a\u043b\u0438\u0441\u0442"}
               </button>
+                <button
+                  className="primary-btn"
+                  type="button"
+                  onClick={handleApplySurvey}
+                  disabled={(aiSurveyCompletion?.percent || 0) < 100}
+                >
+                  <CheckCircle2 size={16} />
+                  {"\u0417\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u0434\u0430\u043d\u043d\u044b\u0435"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

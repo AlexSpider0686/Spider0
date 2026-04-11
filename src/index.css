@@ -50,6 +50,18 @@ select {
     linear-gradient(180deg, #f4f8ff 0%, #edf3fb 42%, #e8eef8 100%);
 }
 
+.page-shell__watermark {
+  position: fixed;
+  left: 72px;
+  top: 280px;
+  width: min(280px, 20vw);
+  min-width: 160px;
+  opacity: 0.24;
+  filter: brightness(0.72) contrast(1.16) saturate(0.82);
+  pointer-events: none;
+  z-index: 1;
+}
+
 .bg-video-layer {
   position: fixed;
   inset: 0;
@@ -208,6 +220,21 @@ select {
   align-items: center;
   gap: 6px;
   margin-left: auto;
+}
+
+.ai-checklist-footer__head,
+.ai-survey-modal__footer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ai-checklist-export-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .ai-photo-refresh-btn {
@@ -1485,6 +1512,37 @@ body.ai-survey-open .object-photo-card {
   min-height: 28px;
 }
 
+.travel-toggle-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.travel-toggle-btn.is-active {
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  border-color: transparent;
+}
+
+.travel-toggle-btn.is-active.is-inactive {
+  background: linear-gradient(135deg, #7f96b1, #5f7592);
+}
+
+.travel-panel-body.is-hidden {
+  display: none;
+}
+
+.travel-collapsed-note {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px dashed rgba(141, 163, 196, 0.5);
+  background: rgba(244, 248, 255, 0.92);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .subpanel {
   margin-top: 10px;
   padding: 10px;
@@ -2559,6 +2617,14 @@ tbody tr:hover {
 @media (max-width: 760px) {
   .page-shell {
     padding: 14px;
+  }
+
+  .page-shell__watermark {
+    left: 18px;
+    top: 120px;
+    width: 120px;
+    min-width: 120px;
+    opacity: 0.18;
   }
 
   .build-badge {

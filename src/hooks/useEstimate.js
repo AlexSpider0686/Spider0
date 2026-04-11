@@ -27,6 +27,7 @@ import { buildNormativeRequirements } from "../lib/normativeRequirements";
 import { repairUtf8Cp1251Mojibake } from "../lib/textEncoding";
 import { applyTravelToResults, buildInitialTravelEstimate, createEmptyTravelEstimate, recalculateTravelEstimateDraft } from "../lib/travelEstimate";
 import { downloadProjectPassport, readProjectPassport } from "../lib/projectPassport";
+import { exportAiSurveyChecklist as exportAiSurveyChecklistDoc } from "../lib/aiSurveyChecklistExport";
 
 function removeById(mapObject, id) {
   if (!(id in mapObject)) return mapObject;
@@ -401,6 +402,20 @@ export default function useEstimate() {
 
   const updateTravelField = (key, value) => {
     setTravelEstimate((prev) => recalculateTravelEstimateDraft({ ...prev, enabled: true, [key]: value }, systems.length));
+  };
+
+  const setTravelEstimateEnabled = (enabled) => {
+    setTravelEstimate((prev) =>
+      recalculateTravelEstimateDraft(
+        {
+          ...prev,
+          enabled: enabled === true,
+          alerts: enabled ? prev?.alerts || [] : [],
+          notes: enabled ? prev?.notes || "" : "",
+        },
+        systems.length
+      )
+    );
   };
 
   const resetTravelEstimate = () => {
@@ -1510,6 +1525,20 @@ export default function useEstimate() {
     }
   };
 
+  const exportAiSurveyChecklist = async () => {
+    try {
+      await exportAiSurveyChecklistDoc({
+        objectData: effectiveObjectData,
+        aiSurveyPlan,
+        systems,
+      });
+      return true;
+    } catch (error) {
+      window.alert(`Ошибка выгрузки чеклиста: ${error?.message || "неизвестная ошибка"}`);
+      return false;
+    }
+  };
+
   const importProjectPassport = async (file) => {
     if (!file) return false;
 
@@ -1856,6 +1885,7 @@ export default function useEstimate() {
     updateObject,
     verifyObjectAddress,
     updateTravelField,
+    setTravelEstimateEnabled,
     runTravelEstimate,
     resetTravelEstimate,
     updateZone,
@@ -1895,6 +1925,7 @@ export default function useEstimate() {
     exportSystemSpecification,
     exportProjectPassport,
     importProjectPassport,
+    exportAiSurveyChecklist,
     setZones,
     canAddMoreSystems: systems.length < SYSTEM_TYPES.length,
   };

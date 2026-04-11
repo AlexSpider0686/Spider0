@@ -45,6 +45,7 @@ export default function CostBreakdownStep({
   effectiveObjectData = null,
   travelEstimate = {},
   updateTravelField,
+  setTravelEstimateEnabled,
   runTravelEstimate,
   resetTravelEstimate,
 }) {
@@ -56,6 +57,13 @@ export default function CostBreakdownStep({
   const avgTeamSize = activeResults.length ? activeResults.reduce((total, item) => total + (item.executionTeamSize || 0), 0) / activeResults.length : 0;
   const maxDurationDays = Math.max(...activeResults.map((item) => item.executionDurationDays || 0), 0);
   const travelEnabled = Boolean(travelEstimate?.enabled);
+  const handleActivateTravel = async () => {
+    setTravelEstimateEnabled?.(true);
+    await runTravelEstimate?.();
+  };
+  const handleDeactivateTravel = () => {
+    setTravelEstimateEnabled?.(false);
+  };
 
   return (
     <section className="panel">
@@ -132,9 +140,12 @@ export default function CostBreakdownStep({
               Умный алгоритм предлагает маршрут туда и обратно, длительность в пути, проживание и суточные. После расчета все параметры доступны для ручной корректировки.
             </p>
           </div>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button className="primary-btn" type="button" onClick={runTravelEstimate}>
+          <div className="travel-toggle-row">
+            <button className={`ghost-btn travel-toggle-btn ${travelEnabled ? "is-active" : ""}`} type="button" onClick={handleActivateTravel}>
               Активировать умный алгоритм
+            </button>
+            <button className={`ghost-btn travel-toggle-btn ${!travelEnabled ? "is-active is-inactive" : ""}`} type="button" onClick={handleDeactivateTravel}>
+              Деактивировать умный алгоритм
             </button>
             {travelEnabled ? (
               <button className="ghost-btn" type="button" onClick={resetTravelEstimate}>
@@ -143,6 +154,8 @@ export default function CostBreakdownStep({
             ) : null}
           </div>
         </div>
+
+        <div className={`travel-panel-body ${travelEnabled ? "" : "is-hidden"}`}>
 
         <div className="grid-two" style={{ marginTop: 12 }}>
           <div className="input-card">
@@ -345,6 +358,10 @@ export default function CostBreakdownStep({
             Общая стоимость командировочного выезда добавляется к стоимости работ после расчета коэффициентов и надбавок и распределяется по системам равномерно:
             {` ${rub(travelEstimate.perSystemCost || 0)} на систему.`}
           </small>
+        ) : null}
+        </div>
+        {!travelEnabled ? (
+          <div className="travel-collapsed-note">Раздел командировочного выезда свернут. Нажмите «Активировать умный алгоритм», чтобы развернуть блок и сразу запустить расчет.</div>
         ) : null}
       </div>
 

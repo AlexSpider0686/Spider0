@@ -139,6 +139,7 @@ export default function EstimatorApp() {
 
   return (
     <div className="page-shell">
+      <img className="page-shell__watermark" src={projectCoreMarkUrl} alt="" aria-hidden="true" />
       <div className="bg-video-layer" aria-hidden>
         <div className="bg-video-fallback" />
         {!videoUnavailable ? (
@@ -255,6 +256,7 @@ export default function EstimatorApp() {
             effectiveObjectData={vm.effectiveObjectData}
             travelEstimate={vm.travelEstimate}
             updateTravelField={vm.updateTravelField}
+            setTravelEstimateEnabled={vm.setTravelEstimateEnabled}
             runTravelEstimate={vm.runTravelEstimate}
             resetTravelEstimate={vm.resetTravelEstimate}
           />
