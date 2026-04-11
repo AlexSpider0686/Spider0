@@ -17,7 +17,7 @@ import {
 import { calculateProtectedArea } from "../lib/protectedArea";
 import { verifyObjectAddress as verifyObjectAddressOnline } from "../lib/addressVerification";
 import { createProjectIdentity } from "../lib/projectIdentity";
-import { analyzeInspectionPhoto } from "../lib/aiPhotoInspectionStrict";
+import { aggregateInspectionPhotoResults, analyzeInspectionPhoto } from "../lib/aiPhotoInspectionStrict";
 import { buildAiSurveyPlan, calculateAiSurveyCompletion } from "../lib/aiTechnicalChecklist";
 import { buildAiTechnicalRecommendations } from "../lib/aiTechnicalConfigurator";
 import { buildAiProjectRisks } from "../lib/aiProjectRiskEngine";
@@ -1747,6 +1747,13 @@ export default function useEstimate() {
             planRecognition: item?.planRecognition || null,
           })),
         };
+      } else if ((prompt.type === "surface_scan" || prompt.type === "corridor_scan") && files.length > 1) {
+        result =
+          aggregateInspectionPhotoResults({
+            prompt,
+            results: perFileResults,
+            files,
+          }) || perFileResults[0];
       }
 
       setTechnicalSolution((prev) => {

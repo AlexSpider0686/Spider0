@@ -30,7 +30,7 @@ async function loadImage(file) {
   }
 }
 
-function clampCanvasSize(image, maxSize = 180) {
+function clampCanvasSize(image, maxSize = 224) {
   const scale = Math.min(
     maxSize / Math.max(image.naturalWidth || 1, 1),
     maxSize / Math.max(image.naturalHeight || 1, 1),
@@ -133,6 +133,7 @@ function analyzeSceneColors(imageData, width, height) {
   let vividLike = 0;
   let neutralLike = 0;
   let decorativeLike = 0;
+  let darkLike = 0;
 
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
@@ -151,6 +152,7 @@ function analyzeSceneColors(imageData, width, height) {
       if (saturation > 0.42 && max > 120) vividLike += 1;
       if (Math.abs(r - g) < 18 && Math.abs(g - b) < 18 && max > 70 && saturation < 0.12) neutralLike += 1;
       if (r > 130 && saturation > 0.45 && (g > 60 || b > 60)) decorativeLike += 1;
+      if (max < 62) darkLike += 1;
     }
   }
 
@@ -161,6 +163,7 @@ function analyzeSceneColors(imageData, width, height) {
       vividRatio: 0,
       neutralRatio: 0,
       decorativeRatio: 0,
+      darkRatio: 0,
     };
   }
 
@@ -170,6 +173,81 @@ function analyzeSceneColors(imageData, width, height) {
     vividRatio: vividLike / pixelCount,
     neutralRatio: neutralLike / pixelCount,
     decorativeRatio: decorativeLike / pixelCount,
+    darkRatio: darkLike / pixelCount,
+  };
+}
+
+function analyzeImageQuality(imageData, width, height, metaWidth, metaHeight) {
+  let pixelCount = 0;
+  let brightnessSum = 0;
+  let brightnessSqSum = 0;
+  let strongEdges = 0;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const index = (y * width + x) * 4;
+      const brightness = computeBrightness(imageData[index], imageData[index + 1], imageData[index + 2]);
+      brightnessSum += brightness;
+      brightnessSqSum += brightness * brightness;
+      pixelCount += 1;
+
+      if (x + 1 < width) {
+        const rightIndex = (y * width + (x + 1)) * 4;
+        const rightBrightness = computeBrightness(
+          imageData[rightIndex],
+          imageData[rightIndex + 1],
+          imageData[rightIndex + 2]
+        );
+        if (Math.abs(brightness - rightBrightness) > 36) {
+          strongEdges += 1;
+        }
+      }
+
+      if (y + 1 < height) {
+        const bottomIndex = ((y + 1) * width + x) * 4;
+        const bottomBrightness = computeBrightness(
+          imageData[bottomIndex],
+          imageData[bottomIndex + 1],
+          imageData[bottomIndex + 2]
+        );
+        if (Math.abs(brightness - bottomBrightness) > 36) {
+          strongEdges += 1;
+        }
+      }
+    }
+  }
+
+  if (!pixelCount) {
+    return {
+      sharpnessScore: 0,
+      exposureScore: 0,
+      detailScore: 0,
+      resolutionScore: 0,
+      meanBrightness: 0,
+      contrast: 0,
+    };
+  }
+
+  const meanBrightness = brightnessSum / pixelCount;
+  const variance = Math.max(brightnessSqSum / pixelCount - meanBrightness * meanBrightness, 0);
+  const contrast = Math.sqrt(variance);
+  const edgeDensity = strongEdges / pixelCount;
+  const resolutionMinSide = Math.min(metaWidth || 0, metaHeight || 0);
+
+  const sharpnessScore = Math.min(1, Math.max(0, (edgeDensity - 0.01) / 0.08));
+  const exposureScore =
+    meanBrightness < 46 || meanBrightness > 228 ? 0 : Math.min(1, 1 - Math.abs(meanBrightness - 150) / 118);
+  const detailScore = Math.min(1, Math.max(0, contrast / 42));
+  const resolutionScore =
+    resolutionMinSide >= 1100 ? 1 : resolutionMinSide <= 360 ? 0.2 : 0.2 + ((resolutionMinSide - 360) / 740) * 0.8;
+
+  return {
+    sharpnessScore: Number(sharpnessScore.toFixed(2)),
+    exposureScore: Number(exposureScore.toFixed(2)),
+    detailScore: Number(detailScore.toFixed(2)),
+    resolutionScore: Number(Math.min(Math.max(resolutionScore, 0), 1).toFixed(2)),
+    meanBrightness: Number(meanBrightness.toFixed(1)),
+    contrast: Number(contrast.toFixed(1)),
   };
 }
 
@@ -294,7 +372,7 @@ async function getImageMeta(file) {
     return { width: 0, height: 0, orientation: "unknown", features: null };
   }
 
-  const { width, height } = clampCanvasSize(image, 180);
+  const { width, height } = clampCanvasSize(image, 224);
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -319,6 +397,7 @@ async function getImageMeta(file) {
     orientation: (image.naturalWidth || 0) >= (image.naturalHeight || 0) ? "landscape" : "portrait",
     features: {
       sceneColors: analyzeSceneColors(imageData, width, height),
+      imageQuality: analyzeImageQuality(imageData, width, height, image.naturalWidth || 0, image.naturalHeight || 0),
       verticalProfile,
       spatialLayout: summarizeSpatialLayout(verticalProfile, width, height),
       topRegion: analyzeRegion(imageData, width, 0, width, 0, Math.max(8, Math.round(height * 0.34))),
@@ -343,6 +422,7 @@ function scoreSurfaceSuitability(tokens, meta) {
   const middle = meta?.features?.middleRegion;
   const bottom = meta?.features?.bottomRegion;
   const sceneColors = meta?.features?.sceneColors;
+  const imageQuality = meta?.features?.imageQuality;
 
   if (!top || !wall || !middle || !bottom) {
     return { score: 0, reasons: ["Недостаточно данных изображения."] };
@@ -355,6 +435,18 @@ function scoreSurfaceSuitability(tokens, meta) {
   if ((meta.width || 0) >= 500 && (meta.height || 0) >= 500) {
     score += 0.08;
     reasons.push("Достаточное разрешение снимка.");
+  }
+  if ((imageQuality?.resolutionScore || 0) >= 0.7) {
+    score += 0.08;
+    reasons.push("Кадр достаточно детализирован для распознавания поверхностей.");
+  }
+  if ((imageQuality?.sharpnessScore || 0) >= 0.48) {
+    score += 0.1;
+    reasons.push("Фото достаточно резкое, контуры помещения читаются уверенно.");
+  }
+  if ((imageQuality?.exposureScore || 0) >= 0.58) {
+    score += 0.08;
+    reasons.push("Экспозиция кадра подходит для определения материалов и потолка.");
   }
   if (brightnessGap >= 12) {
     score += 0.18;
@@ -396,6 +488,19 @@ function scoreSurfaceSuitability(tokens, meta) {
   if (wall.edgeDensity < 0.01 && top.edgeDensity < 0.01) {
     score -= 0.14;
     reasons.push("Почти нет признаков поверхностей помещения.");
+  }
+
+  if ((imageQuality?.sharpnessScore || 0) < 0.2) {
+    score -= 0.2;
+    reasons.push("Фото смазано или слишком мягкое: геометрия помещения читается плохо.");
+  }
+  if ((imageQuality?.exposureScore || 0) < 0.18) {
+    score -= 0.16;
+    reasons.push("Фото слишком тёмное или пересвеченное для надёжного распознавания.");
+  }
+  if ((imageQuality?.detailScore || 0) < 0.24) {
+    score -= 0.12;
+    reasons.push("В кадре не хватает локальных деталей для уверенного анализа.");
   }
 
   if (sceneColors) {
@@ -595,9 +700,10 @@ function buildSurfaceSummary(wallMaterial, ceilingType, heightEstimate) {
 function inferCorridorRouting(meta, ceilingType) {
   const features = meta?.features || {};
   const sceneColors = features.sceneColors || {};
-  const layout = features.layout || {};
-  const top = features.top || {};
-  const middle = features.middle || {};
+  const layout = features.spatialLayout || {};
+  const top = features.topRegion || {};
+  const middle = features.middleRegion || {};
+  const bottom = features.bottomRegion || {};
   const methods = [];
 
   if ((middle.horizontalEdgeDensity || 0) > 0.03 || (middle.lineDensity || 0) > 0.2) methods.push("В лотке");
@@ -612,6 +718,197 @@ function inferCorridorRouting(meta, ceilingType) {
     hasRaisedFloor: methods.includes("Под фальш-полом"),
     hasCeilingVoid: methods.includes("В запотолочном пространстве"),
     hasTrayRouting: methods.includes("В лотке"),
+  };
+}
+
+function inferCorridorRoutingStable(meta, ceilingType) {
+  const features = meta?.features || {};
+  const sceneColors = features.sceneColors || {};
+  const layout = features.spatialLayout || {};
+  const top = features.topRegion || {};
+  const middle = features.middleRegion || {};
+  const bottom = features.bottomRegion || {};
+  const methods = [];
+
+  if ((middle.horizontalEdgeDensity || 0) > 0.028 || (middle.contrast || 0) > 26) methods.push("В лотке");
+  if ((layout.boundaryConfidence || 0) > 0.24 && (top.brightness || 0) < 176 && ceilingType !== "РћС‚РєСЂС‹С‚С‹Р№") {
+    methods.push("В запотолочном пространстве");
+  }
+  if ((sceneColors.darkRatio || 0) > 0.2 && (bottom.brightness || 0) < 104 && (bottom.contrast || 0) > 18) {
+    methods.push("Под фальш-полом");
+  }
+  if ((middle.verticalEdgeDensity || 0) > 0.025 && (middle.horizontalEdgeDensity || 0) < 0.02) methods.push("В коробе");
+  if ((middle.verticalEdgeDensity || 0) > 0.03 && (sceneColors.neutralRatio || 0) > 0.55) methods.push("В гофре/трубе");
+  if (!methods.length) methods.push("Открыто по основанию");
+
+  return {
+    methods: [...new Set(methods)],
+    hasRaisedFloor: methods.includes("Под фальш-полом"),
+    hasCeilingVoid: methods.includes("В запотолочном пространстве"),
+    hasTrayRouting: methods.includes("В лотке"),
+  };
+}
+
+function pickWeightedWinner(entries) {
+  const weights = new Map();
+  entries.forEach(({ value, weight }) => {
+    if (!value) return;
+    weights.set(value, (weights.get(value) || 0) + Math.max(weight || 0, 0.01));
+  });
+  let winner = null;
+  let winnerWeight = -1;
+  for (const [value, weight] of weights.entries()) {
+    if (weight > winnerWeight) {
+      winner = value;
+      winnerWeight = weight;
+    }
+  }
+  return { value: winner, totalWeight: winnerWeight, distinctCount: weights.size };
+}
+
+function averageWeighted(entries) {
+  const valid = entries.filter((item) => Number.isFinite(item?.value));
+  if (!valid.length) return null;
+  const totalWeight = valid.reduce((sum, item) => sum + Math.max(item.weight || 0, 0.01), 0);
+  const value =
+    valid.reduce((sum, item) => sum + item.value * Math.max(item.weight || 0, 0.01), 0) / Math.max(totalWeight, 0.01);
+  return Number(value.toFixed(1));
+}
+
+export function aggregateInspectionPhotoResults({ prompt, results = [], files = [] }) {
+  if (!prompt || !Array.isArray(results) || !results.length) return null;
+
+  const acceptedFiles = results
+    .map((result, index) => ({
+      result,
+      fileName: files[index]?.name || `photo-${index + 1}`,
+      weight: Math.max(Number(result?.confidence) || 0, 0.1),
+    }))
+    .filter((item) => item.result?.accepted !== false);
+
+  const fileResults = results.map((item, index) => ({
+    fileName: files[index]?.name || `photo-${index + 1}`,
+    accepted: item?.accepted !== false,
+    summary: item?.summary,
+    detections: item?.detections || [],
+  }));
+
+  if (!acceptedFiles.length) {
+    return {
+      ...(results[0] || null),
+      fileResults,
+    };
+  }
+
+  if (prompt.type === "surface_scan") {
+    const wall = pickWeightedWinner(
+      acceptedFiles.map(({ result, weight }) => ({
+        value: result?.suggestedAnswers?.[0]?.value?.[0] || null,
+        weight,
+      }))
+    );
+    const ceiling = pickWeightedWinner(
+      acceptedFiles.map(({ result, weight }) => ({
+        value: result?.suggestedAnswers?.[1]?.value?.[0] || null,
+        weight,
+      }))
+    );
+    const height = averageWeighted(
+      acceptedFiles
+        .filter(({ result }) => Number.isFinite(result?.estimatedCeilingHeight))
+        .map(({ result, weight }) => ({
+          value: Number(result.estimatedCeilingHeight),
+          weight: weight * Math.max(Number(result.estimatedCeilingHeightConfidence) || 0.4, 0.2),
+        }))
+    );
+    const avgConfidence =
+      acceptedFiles.reduce((sum, item) => sum + (Number(item.result?.confidence) || 0), 0) / Math.max(acceptedFiles.length, 1);
+    const agreementScore =
+      (wall.distinctCount <= 1 ? 0.08 : 0) +
+      (ceiling.distinctCount <= 1 ? 0.08 : 0) +
+      (height != null ? 0.05 : 0);
+    const confidence = Number(Math.min(0.97, avgConfidence + agreementScore).toFixed(2));
+    const wallMaterial = wall.value || "Смешанный";
+    const ceilingType = ceiling.value || "Смешанный";
+
+    return {
+      accepted: true,
+      confidence,
+      summary:
+        acceptedFiles.length > 1
+          ? `AI сопоставил ${acceptedFiles.length} фотографий и выбрал устойчивые признаки помещения: стены — ${wallMaterial}, потолок — ${ceilingType}${height != null ? `, высота — около ${height} м` : ""}.`
+          : buildSurfaceSummary(wallMaterial, ceilingType, height != null ? { value: height } : null),
+      detections: [
+        `Принято фото: ${acceptedFiles.length} из ${results.length}`,
+        `Стены: ${wallMaterial}`,
+        `Потолок: ${ceilingType}`,
+        height != null ? `Высота помещения: около ${height} м` : "Высота помещения: нужен ручной ввод",
+        `Усреднённая уверенность: ${Math.round(confidence * 100)}%`,
+      ],
+      suggestedAnswers: [
+        prompt.targetQuestionIds[0] ? { questionId: prompt.targetQuestionIds[0], value: [wallMaterial] } : null,
+        prompt.targetQuestionIds[1] ? { questionId: prompt.targetQuestionIds[1], value: [ceilingType] } : null,
+        height != null && prompt.targetQuestionIds[2] ? { questionId: prompt.targetQuestionIds[2], value: height } : null,
+      ].filter(Boolean),
+      estimatedCeilingHeight: height,
+      estimatedCeilingHeightConfidence: height != null ? confidence : null,
+      needsManualCeilingHeight: height == null,
+      fileResults,
+    };
+  }
+
+  if (prompt.type === "corridor_scan") {
+    const methodWeights = new Map();
+    acceptedFiles.forEach(({ result, weight }) => {
+      const methods = Array.isArray(result?.suggestedAnswers?.[0]?.value) ? result.suggestedAnswers[0].value : [];
+      methods.forEach((method) => {
+        methodWeights.set(method, (methodWeights.get(method) || 0) + weight);
+      });
+    });
+    const totalWeight = acceptedFiles.reduce((sum, item) => sum + item.weight, 0);
+    const threshold = totalWeight / Math.max(acceptedFiles.length > 1 ? 2 : 1, 1);
+    const methods = Array.from(methodWeights.entries())
+      .filter(([, weight]) => weight >= threshold)
+      .sort((a, b) => b[1] - a[1])
+      .map(([value]) => value);
+    const pickBoolean = (index) =>
+      acceptedFiles.reduce((sum, item) => sum + (item.result?.suggestedAnswers?.[index]?.value ? item.weight : 0), 0) >= totalWeight * 0.5;
+    const hasRaisedFloor = pickBoolean(1);
+    const hasCeilingVoid = pickBoolean(2);
+    const hasTrayRouting = pickBoolean(3);
+    const avgConfidence =
+      acceptedFiles.reduce((sum, item) => sum + (Number(item.result?.confidence) || 0), 0) / Math.max(acceptedFiles.length, 1);
+    const confidence = Number(Math.min(0.96, avgConfidence + (methods.length ? 0.06 : 0)).toFixed(2));
+    const stableMethods = methods.length ? methods : ["Открыто по основанию"];
+
+    return {
+      accepted: true,
+      confidence,
+      summary:
+        acceptedFiles.length > 1
+          ? `AI сверил ${acceptedFiles.length} фотографий маршрута и подтвердил наиболее вероятные способы прокладки: ${stableMethods.join(", ")}.`
+          : `Определены вероятные способы прокладки: ${stableMethods.join(", ")}.`,
+      detections: [
+        `Принято фото: ${acceptedFiles.length} из ${results.length}`,
+        `Способ прокладки: ${stableMethods.join(", ")}`,
+        hasTrayRouting ? "Определены признаки лотковых трасс" : "Явные признаки лотков не найдены",
+        hasCeilingVoid ? "Определено запотолочное пространство" : "Запотолочное пространство не подтверждено",
+        hasRaisedFloor ? "Определен фальш-пол" : "Фальш-пол не подтвержден",
+        `Усреднённая уверенность: ${Math.round(confidence * 100)}%`,
+      ],
+      suggestedAnswers: [
+        prompt.targetQuestionIds[0] ? { questionId: prompt.targetQuestionIds[0], value: stableMethods } : null,
+        prompt.targetQuestionIds[1] ? { questionId: prompt.targetQuestionIds[1], value: hasRaisedFloor } : null,
+        prompt.targetQuestionIds[2] ? { questionId: prompt.targetQuestionIds[2], value: hasCeilingVoid } : null,
+        prompt.targetQuestionIds[3] ? { questionId: prompt.targetQuestionIds[3], value: hasTrayRouting } : null,
+      ].filter(Boolean),
+      fileResults,
+    };
+  }
+
+  return {
+    ...acceptedFiles[0].result,
+    fileResults,
   };
 }
 
@@ -729,7 +1026,7 @@ async function executeAnalysis({ file, prompt, zones, systems, objectData, photo
       };
     }
 
-    const corridorRouting = prompt?.type === "corridor_scan" ? inferCorridorRouting(meta, ceilingType) : null;
+    const corridorRouting = prompt?.type === "corridor_scan" ? inferCorridorRoutingStable(meta, ceilingType) : null;
     const detections =
       prompt?.type === "corridor_scan" && corridorRouting
         ? [

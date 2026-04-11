@@ -878,7 +878,7 @@ export default function ObjectStep({
                               className="file-upload-input"
                               type="file"
                               accept="image/*"
-                              multiple={prompt.type === "evacuation_plan"}
+                              multiple
                               onChange={async (event) => {
                                 const files = Array.from(event.target.files || []);
                                 if (!files.length) return;

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { calculateSystem } from "../src/lib/estimate.js";
 import { calculateSystemWithBreakdown } from "../src/lib/systemCalculators/index.js";
 import { estimateSystemQuantities } from "../src/lib/system-estimator.js";
+import { aggregateInspectionPhotoResults } from "../src/lib/aiPhotoInspectionStrict.js";
 import { getConcreteModel, getEditableModelOptions, isLifecycleModelAllowed, resolveModelPriceOverride } from "../src/lib/equipment.js";
 import { repairUtf8Cp1251Mojibake } from "../src/lib/textEncoding.js";
 import { DEFAULT_BUDGET, DEFAULT_SYSTEM, DEFAULT_ZONE, VENDORS } from "../src/config/estimateConfig.js";
@@ -84,6 +85,99 @@ test("partial work shares apply height, night and weekend coefficients proportio
   assert.ok(partial.laborBase > base.laborBase);
   assert.ok(full.laborBase > partial.laborBase);
   assert.ok((partial.trace?.weekendWorkCoef || 1) > 1);
+});
+
+test("inspection photo aggregation raises confidence and picks the stable surface result", () => {
+  const prompt = {
+    type: "surface_scan",
+    targetQuestionIds: ["wall-question", "ceiling-question", "height-question"],
+  };
+
+  const aggregated = aggregateInspectionPhotoResults({
+    prompt,
+    files: [{ name: "room-1.jpg" }, { name: "room-2.jpg" }, { name: "room-3.jpg" }],
+    results: [
+      {
+        accepted: true,
+        confidence: 0.72,
+        suggestedAnswers: [
+          { questionId: "wall-question", value: ["Бетон"] },
+          { questionId: "ceiling-question", value: ["Армстронг"] },
+          { questionId: "height-question", value: 3.2 },
+        ],
+        estimatedCeilingHeight: 3.2,
+        estimatedCeilingHeightConfidence: 0.73,
+      },
+      {
+        accepted: true,
+        confidence: 0.76,
+        suggestedAnswers: [
+          { questionId: "wall-question", value: ["Бетон"] },
+          { questionId: "ceiling-question", value: ["Армстронг"] },
+          { questionId: "height-question", value: 3.1 },
+        ],
+        estimatedCeilingHeight: 3.1,
+        estimatedCeilingHeightConfidence: 0.75,
+      },
+      {
+        accepted: false,
+        confidence: 0.21,
+        suggestedAnswers: [],
+      },
+    ],
+  });
+
+  assert.equal(aggregated.accepted, true);
+  assert.equal(aggregated.suggestedAnswers[0].value[0], "Бетон");
+  assert.equal(aggregated.suggestedAnswers[1].value[0], "Армстронг");
+  assert.equal(aggregated.estimatedCeilingHeight, 3.1);
+  assert.ok(aggregated.confidence >= 0.8);
+  assert.equal(aggregated.fileResults.length, 3);
+});
+
+test("inspection photo aggregation keeps only stable corridor routing methods", () => {
+  const prompt = {
+    type: "corridor_scan",
+    targetQuestionIds: ["routing-question", "raised-floor", "ceiling-void", "tray-routing"],
+  };
+
+  const aggregated = aggregateInspectionPhotoResults({
+    prompt,
+    files: [{ name: "corridor-1.jpg" }, { name: "corridor-2.jpg" }, { name: "corridor-3.jpg" }],
+    results: [
+      {
+        accepted: true,
+        confidence: 0.74,
+        suggestedAnswers: [
+          { questionId: "routing-question", value: ["В лотке", "В запотолочном пространстве"] },
+          { questionId: "raised-floor", value: false },
+          { questionId: "ceiling-void", value: true },
+          { questionId: "tray-routing", value: true },
+        ],
+      },
+      {
+        accepted: true,
+        confidence: 0.78,
+        suggestedAnswers: [
+          { questionId: "routing-question", value: ["В лотке"] },
+          { questionId: "raised-floor", value: false },
+          { questionId: "ceiling-void", value: false },
+          { questionId: "tray-routing", value: true },
+        ],
+      },
+      {
+        accepted: false,
+        confidence: 0.14,
+        suggestedAnswers: [],
+      },
+    ],
+  });
+
+  assert.equal(aggregated.accepted, true);
+  assert.deepEqual(aggregated.suggestedAnswers[0].value, ["В лотке"]);
+  assert.equal(aggregated.suggestedAnswers[1].value, false);
+  assert.equal(aggregated.suggestedAnswers[2].value, false);
+  assert.equal(aggregated.suggestedAnswers[3].value, true);
 });
 
 test("calculateSystemWithBreakdown returns resource rows and positive totals", () => {
