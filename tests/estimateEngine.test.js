@@ -277,6 +277,14 @@ test("model override recalculates unit price from the selected concrete model", 
 
 test("non-project model catalog does not expose discontinued models", () => {
   const banned = {
+    aps: {
+      "Базовый": ["Сигнал-20П исп.01"],
+      Болид: ["Сигнал-20П исп.01"],
+    },
+    sots: {
+      "Базовый": ["Сигнал-20П исп.01"],
+      Болид: ["Сигнал-20П исп.01"],
+    },
     skud: {
       Parsec: ["NC-2000", "NC-100K-IP"],
     },
