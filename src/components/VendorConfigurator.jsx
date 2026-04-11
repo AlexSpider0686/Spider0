@@ -1,5 +1,6 @@
 import React from "react";
 import { getVendorEquipment } from "../config/vendorConfig";
+import { repairReactTextTree } from "../lib/repairReactTree";
 
 function renderOptions(items) {
   return items.map((item) => (
@@ -17,7 +18,7 @@ export default function VendorConfigurator({ system, onChange, projectBasedMode 
   const equipment = getVendorEquipment(system.type, system.vendor);
   if (!equipment) return null;
 
-  return (
+  return repairReactTextTree(
     <div className="equipment-config">
       <div className="equipment-header">
         <div className="label-with-tooltip">

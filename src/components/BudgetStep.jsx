@@ -7,6 +7,7 @@ import { buildCoefficientLayer } from "../lib/coefficient-engine";
 import { buildRiskGuardInsight, getCoefficientShareLabel, getCoefficientSharePercent } from "../lib/budget-risk-guard";
 import { repairTextTree } from "../lib/textEncoding";
 import { buildProjectCrewPlan } from "../lib/crewPlan";
+import { repairReactTextTree } from "../lib/repairReactTree";
 
 const sliderFields = [
   { key: "cableCoef", min: 0.7, max: 1.5, step: 0.01 },
@@ -268,7 +269,7 @@ function getCurrentCoefficientCost({ fieldKey, budget, totals, systemResults, ob
 }
 
 function buildShareInput(field, budget, updateBudget) {
-  return (
+  return repairReactTextTree(
     <div className="budget-share-input">
       <label>{field.label}</label>
       <input
@@ -282,6 +283,39 @@ function buildShareInput(field, budget, updateBudget) {
       <small className="hint-inline">{field.hint}</small>
     </div>
   );
+}
+
+function buildShareRecommendations({ objectData, zones, systems }) {
+  const safeObject = objectData || {};
+  const safeZones = zones || [];
+  const safeSystems = systems || [];
+  const objectType = safeObject.objectType;
+  const buildingStatus = safeObject.buildingStatus;
+  const maxZoneCeiling = Math.max(...safeZones.map((zone) => toNumber(zone?.ceilingHeight, 0)), toNumber(safeObject?.ceilingHeight, 0), 0);
+  const maxFloors = Math.max(...safeZones.map((zone) => toNumber(zone?.floors, 0)), toNumber(safeObject?.floors, 0), 1);
+  const operationalSensitiveObject = buildingStatus === "operational" && ["public", "transport", "energy"].includes(objectType);
+  const fireSystemsCount = safeSystems.filter((system) => ["aps", "soue"].includes(system?.type)).length;
+  const integratedSystemsCount = safeSystems.filter((system) => ["sot", "sots", "skud", "ssoi"].includes(system?.type)).length;
+
+  return {
+    heightWorkSharePercent: {
+      value: clamp(maxZoneCeiling >= 6 ? 55 : maxZoneCeiling >= 4.5 ? 35 : maxZoneCeiling >= 3.6 ? 18 : 0, 0, 100),
+      reason: `Опирается на максимальную высоту зон ${num(maxZoneCeiling, 1)} м и фронт высотного монтажа.`,
+    },
+    nightWorkSharePercent: {
+      value: clamp(operationalSensitiveObject ? (integratedSystemsCount >= 2 ? 30 : 18) : 0, 0, 100),
+      reason: operationalSensitiveObject
+        ? "Для действующего объекта часть работ обычно переносится в ночные технологические окна."
+        : "Ночные работы по умолчанию не требуются, если дневной монтаж не ограничен.",
+    },
+    weekendWorkSharePercent: {
+      value: clamp(operationalSensitiveObject ? (fireSystemsCount > 0 ? 22 : 14) : 0, 0, 100),
+      reason:
+        operationalSensitiveObject || maxFloors >= 4
+          ? "Часть работ в выходные снижает конфликт с эксплуатацией и ускоряет доступ к зонам."
+          : "Работы в выходные по умолчанию не требуются для спокойного режима доступа.",
+    },
+  };
 }
 
 export default function BudgetStep({ budget, updateBudget, objectData, effectiveObjectData, zones = [], systems = [], systemResults = [], totals = {} }) {
@@ -310,12 +344,35 @@ export default function BudgetStep({ budget, updateBudget, objectData, effective
       }),
     [systemResults, budget, calcObjectData]
   );
+  const shareRecommendations = useMemo(
+    () =>
+      buildShareRecommendations({
+        objectData: calcObjectData,
+        zones,
+        systems,
+      }),
+    [calcObjectData, zones, systems]
+  );
 
   const profitabilityRub = toNumber(totals.totalProfit, 0);
   const vatRub = toNumber(totals.totalVat, 0);
   const crewPlan = useMemo(() => buildProjectCrewPlan(systemResults, calcObjectData, totals), [systemResults, calcObjectData, totals]);
+  const handleApplyRecommendedWorkCoefficients = () => {
+    const patches = {
+      heightCoef: recommendations.heightCoef?.value,
+      heightWorkSharePercent: shareRecommendations.heightWorkSharePercent?.value,
+      nightWorkCoef: recommendations.nightWorkCoef?.value,
+      nightWorkSharePercent: shareRecommendations.nightWorkSharePercent?.value,
+      weekendWorkCoef: recommendations.weekendWorkCoef?.value,
+      weekendWorkSharePercent: shareRecommendations.weekendWorkSharePercent?.value,
+    };
 
-  return (
+    Object.entries(patches).forEach(([key, value]) => {
+      if (value !== undefined) updateBudget(key, value);
+    });
+  };
+
+  return repairReactTextTree(
     <section className="panel">
       <div className="panel-header">
         <div>
@@ -324,6 +381,30 @@ export default function BudgetStep({ budget, updateBudget, objectData, effective
             Формула работ: базовая стоимость работ × коэффициенты условий + отчисления ФОТ + утилизация + СИЗ + АХР; затем применяется региональный коэффициент.
             Для ночных, высотных и выходных работ коэффициент можно применять только к нужной доле объема, а не ко всем 100% работ.
           </p>
+        </div>
+      </div>
+      <div className="calc-explain" style={{ marginBottom: 18 }}>
+        <div className="aps-ops-header">
+          <h3>Рекомендуемые значения по условиям работ</h3>
+          <button className="ghost-btn" type="button" onClick={handleApplyRecommendedWorkCoefficients}>
+            Применить рекомендуемые значения
+          </button>
+        </div>
+        <div className="grid-three" style={{ marginTop: 12 }}>
+          {shareFields.map((field) => {
+            const shareRecommendation = shareRecommendations[field.shareKey];
+            const coefficientRecommendation = recommendations[field.key];
+            return (
+              <div className="input-card" key={`recommended-${field.shareKey}`}>
+                <label>{field.label}</label>
+                <strong>{num(shareRecommendation?.value || 0, 0)}%</strong>
+                <small className="hint-inline">
+                  Нормативный коэффициент: x{num(coefficientRecommendation?.value || 1, 2)}.
+                </small>
+                <small className="hint-inline">{shareRecommendation?.reason || field.hint}</small>
+              </div>
+            );
+          })}
         </div>
       </div>
       <div className="grid-three">
