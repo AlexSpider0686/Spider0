@@ -345,6 +345,44 @@ async function geocodeAddress(addressLine, fetchImpl) {
   };
 }
 
+function extractSettlementCandidate(addressLine = "") {
+  const normalized = String(addressLine || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) return "";
+
+  const chunks = normalized
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  const settlementChunk =
+    chunks.find((item) => /\b(г\.?|город|пос\.?|поселок|посёлок|с\.?|село|д\.?|деревня|х\.?|хутор|ст\.?|станица)\b/iu.test(item)) ||
+    chunks.find((item) => !/\b(ул\.?|улица|проспект|пр-т|шоссе|пер\.?|переулок|наб\.?|набережная|б-р|бульвар|д\.?|дом|корп\.?|корпус|стр\.?|строение|оф\.?|кв\.?|пом\.?)\b/iu.test(item)) ||
+    "";
+
+  return settlementChunk.replace(/^\s*Россия\s*$/iu, "").trim();
+}
+
+async function geocodeAddressWithFallback(addressLine, fallbackLine, fetchImpl) {
+  const primary = String(addressLine || "").trim();
+  const fallback = String(fallbackLine || "").trim();
+
+  try {
+    const point = await geocodeAddress(primary, fetchImpl);
+    return { ...point, queryUsed: primary, fallbackUsed: false };
+  } catch (error) {
+    if (!fallback || fallback === primary) throw error;
+    const point = await geocodeAddress(fallback, fetchImpl);
+    return {
+      ...point,
+      queryUsed: fallback,
+      fallbackUsed: true,
+      fallbackReason: error?.message || "primary_geocode_failed",
+    };
+  }
+}
+
 async function getDrivingRoute(originPoint, destinationPoint, fetchImpl) {
   const url = `https://router.project-osrm.org/route/v1/driving/${originPoint.lon},${originPoint.lat};${destinationPoint.lon},${destinationPoint.lat}?overview=false`;
   const response = await fetchImpl(url, {
@@ -371,13 +409,15 @@ export async function estimateTravelFromRoute(input, options = {}) {
   const systemsCount = Math.max(ceil(input?.systemsCount), 0);
   const originAddress = String(input?.originAddress || "").trim();
   const destinationAddress = String(input?.destinationAddress || "").trim();
+  const destinationLocality =
+    String(input?.destinationLocality || "").trim() || extractSettlementCandidate(destinationAddress);
   const crewSize = Math.max(ceil(input?.crewSize), 1);
   const workDurationDays = Math.max(ceil(input?.workDurationDays), 1);
   const perDiemPerPersonDay = Math.max(toNumber(input?.perDiemPerPersonDay, DEFAULT_PER_DIEM), 0);
 
   const [originPoint, destinationPoint] = await Promise.all([
     geocodeAddress(originAddress, fetchImpl),
-    geocodeAddress(destinationAddress, fetchImpl),
+    geocodeAddressWithFallback(destinationAddress, destinationLocality, fetchImpl),
   ]);
   const drivingRoute = await getDrivingRoute(originPoint, destinationPoint, fetchImpl);
   const directDistanceKm = round(haversineKm(originPoint, destinationPoint), 1);
@@ -441,6 +481,9 @@ export async function estimateTravelFromRoute(input, options = {}) {
         tutuHotels: TUTU_REFERENCE_LINKS.hotel,
         originGeocoded: originPoint.label,
         destinationGeocoded: destinationPoint.label,
+        destinationQueryUsed: destinationPoint.queryUsed || destinationAddress,
+        destinationFallbackUsed: Boolean(destinationPoint.fallbackUsed),
+        destinationFallbackLocality: destinationPoint.fallbackUsed ? destinationLocality : "",
       },
     },
     systemsCount

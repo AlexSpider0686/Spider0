@@ -88,6 +88,18 @@ async function loadImageData(path) {
   }
 }
 
+function downloadBlob(fileName, blob) {
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
 function normalizeWidths(widths, totalWidth) {
   const prepared = widths.map((value) => safeNum(value, 0));
   const sum = prepared.reduce((acc, value) => acc + value, 0);
@@ -1090,8 +1102,15 @@ export async function exportEstimatePptx({ objectData, budget, systemResults, to
   );
   addGanttSlide(slide6, safeSystems, safeObject, safeTotals);
 
+  const fileName = safeFileName(safeObject.projectName);
+  if (typeof window !== "undefined" && typeof document !== "undefined") {
+    const blob = await pptx.write({ outputType: "blob", compression: false });
+    downloadBlob(fileName, blob);
+    return;
+  }
+
   await pptx.writeFile({
-    fileName: safeFileName(safeObject.projectName),
+    fileName,
     compression: false,
   });
 }

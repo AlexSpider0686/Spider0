@@ -475,16 +475,157 @@ const CONCRETE_MODEL_FALLBACK = {
 
 const MANAGEMENT_MODEL_FALLBACK = {
   server: {
-    compact: "iRU Rock 1206",
-    rack: "Dell PowerEdge R350",
-    enterprise: "Dell PowerEdge R550",
-    default: "Dell PowerEdge R350",
+    compact: "iRU Rock 1206 / совместимый сервер управления",
+    rack: "iRU Rock G2212 / совместимый сервер управления",
+    enterprise: "DEPO Storm 3450 / совместимый сервер управления",
+    default: "iRU Rock G2212 / совместимый сервер управления",
   },
   arm: {
     compact: "iRU Office 310 MT",
     rack: "iRU Office 515 MT",
     enterprise: "iRU Office 715 MT",
     default: "iRU Office 515 MT",
+  },
+};
+
+const MANAGEMENT_MODEL_BY_VENDOR = {
+  aps: {
+    "Болид": {
+      server: {
+        compact: "Orion Pro Server Compact",
+        rack: "Orion Pro Server",
+        enterprise: "Orion Pro Server Cluster",
+        default: "Orion Pro Server",
+      },
+      arm: {
+        compact: "Orion Pro ARM Compact",
+        rack: "Orion Pro ARM",
+        enterprise: "Orion Pro ARM Dispatch",
+        default: "Orion Pro ARM",
+      },
+    },
+    "Рубеж": {
+      server: {
+        compact: "FireSec 3 Server Compact",
+        rack: "FireSec 3 Server",
+        enterprise: "FireSec 3 Server Cluster",
+        default: "FireSec 3 Server",
+      },
+      arm: {
+        compact: "FireSec 3 ARM Compact",
+        rack: "FireSec 3 ARM",
+        enterprise: "FireSec 3 Dispatch ARM",
+        default: "FireSec 3 ARM",
+      },
+    },
+    "Аргус-Спектр": {
+      server: {
+        compact: "Стрелец-Интеграл Server Compact",
+        rack: "Стрелец-Интеграл Server",
+        enterprise: "Стрелец-Интеграл Server Cluster",
+        default: "Стрелец-Интеграл Server",
+      },
+      arm: {
+        compact: "Стрелец-Интеграл ARM Compact",
+        rack: "Стрелец-Интеграл ARM",
+        enterprise: "Стрелец-Интеграл ARM Dispatch",
+        default: "Стрелец-Интеграл ARM",
+      },
+    },
+  },
+  soue: {
+    "Болид": {
+      server: { compact: "Orion Pro Server Compact", rack: "Orion Pro Server", enterprise: "Orion Pro Server Cluster", default: "Orion Pro Server" },
+      arm: { compact: "Orion Pro ARM Compact", rack: "Orion Pro ARM", enterprise: "Orion Pro ARM Dispatch", default: "Orion Pro ARM" },
+    },
+    "Рубеж": {
+      server: { compact: "FireSec 3 Server Compact", rack: "FireSec 3 Server", enterprise: "FireSec 3 Server Cluster", default: "FireSec 3 Server" },
+      arm: { compact: "FireSec 3 ARM Compact", rack: "FireSec 3 ARM", enterprise: "FireSec 3 Dispatch ARM", default: "FireSec 3 ARM" },
+    },
+    "Аргус-Спектр": {
+      server: { compact: "Стрелец-Интеграл Server Compact", rack: "Стрелец-Интеграл Server", enterprise: "Стрелец-Интеграл Server Cluster", default: "Стрелец-Интеграл Server" },
+      arm: { compact: "Стрелец-Интеграл ARM Compact", rack: "Стрелец-Интеграл ARM", enterprise: "Стрелец-Интеграл ARM Dispatch", default: "Стрелец-Интеграл ARM" },
+    },
+  },
+  sots: {
+    "Болид": {
+      server: { compact: "Orion Pro Server Compact", rack: "Orion Pro Server", enterprise: "Orion Pro Server Cluster", default: "Orion Pro Server" },
+      arm: { compact: "Orion Pro ARM Compact", rack: "Orion Pro ARM", enterprise: "Orion Pro ARM Dispatch", default: "Orion Pro ARM" },
+    },
+    "Рубеж": {
+      server: { compact: "R3-Рубеж Server Compact", rack: "R3-Рубеж Server", enterprise: "R3-Рубеж Server Cluster", default: "R3-Рубеж Server" },
+      arm: { compact: "R3-Рубеж ARM Compact", rack: "R3-Рубеж ARM", enterprise: "R3-Рубеж ARM Dispatch", default: "R3-Рубеж ARM" },
+    },
+    "Аргус-Спектр": {
+      server: { compact: "Стрелец-Интеграл Server Compact", rack: "Стрелец-Интеграл Server", enterprise: "Стрелец-Интеграл Server Cluster", default: "Стрелец-Интеграл Server" },
+      arm: { compact: "Стрелец-Интеграл ARM Compact", rack: "Стрелец-Интеграл ARM", enterprise: "Стрелец-Интеграл ARM Dispatch", default: "Стрелец-Интеграл ARM" },
+    },
+  },
+  sot: {
+    Hikvision: {
+      server: { compact: "HikCentral Professional Workstation", rack: "HikCentral Professional Server", enterprise: "HikCentral Enterprise Server", default: "HikCentral Professional Server" },
+      arm: { compact: "HikCentral Client ARM", rack: "HikCentral Operator Station", enterprise: "HikCentral Dispatch ARM", default: "HikCentral Operator Station" },
+    },
+    Dahua: {
+      server: { compact: "DSS Express Workstation", rack: "DSS Professional Server", enterprise: "DSS Professional Enterprise Server", default: "DSS Professional Server" },
+      arm: { compact: "DSS Client ARM", rack: "DSS Operator Station", enterprise: "DSS Dispatch ARM", default: "DSS Operator Station" },
+    },
+    TRASSIR: {
+      server: { compact: "NeuroStation Compact", rack: "NeuroStation 8800R", enterprise: "NeuroStation Cluster", default: "NeuroStation 8800R" },
+      arm: { compact: "TRASSIR Client Compact", rack: "TRASSIR Operator Station", enterprise: "TRASSIR Dispatch ARM", default: "TRASSIR Operator Station" },
+    },
+    Axis: {
+      server: { compact: "AXIS Camera Station S12", rack: "AXIS Camera Station Server", enterprise: "AXIS Camera Station Enterprise Server", default: "AXIS Camera Station Server" },
+      arm: { compact: "AXIS Client ARM", rack: "AXIS Operator Station", enterprise: "AXIS Dispatch ARM", default: "AXIS Operator Station" },
+    },
+    Uniview: {
+      server: { compact: "EZStation Compact Server", rack: "Uniview VMS Server", enterprise: "Uniview VMS Enterprise Server", default: "Uniview VMS Server" },
+      arm: { compact: "EZStation Client ARM", rack: "EZStation Operator Station", enterprise: "EZStation Dispatch ARM", default: "EZStation Operator Station" },
+    },
+  },
+  ssoi: {
+    TRASSIR: {
+      server: { compact: "NeuroStation Compact", rack: "NeuroStation 8800R", enterprise: "NeuroStation Cluster", default: "NeuroStation 8800R" },
+      arm: { compact: "TRASSIR Client Compact", rack: "TRASSIR Operator Station", enterprise: "TRASSIR Dispatch ARM", default: "TRASSIR Operator Station" },
+    },
+    "ISS (Интеллект)": {
+      server: { compact: "Интеллект XServer S", rack: "Интеллект XServer L", enterprise: "Интеллект XServer XL", default: "Интеллект XServer L" },
+      arm: { compact: "Интеллект ARM Compact", rack: "Интеллект Operator Station", enterprise: "Интеллект Dispatch ARM", default: "Интеллект Operator Station" },
+    },
+    Macroscop: {
+      server: { compact: "Macroscop NVR Mini", rack: "Macroscop NVR 32", enterprise: "Macroscop Ultra 64", default: "Macroscop NVR 32" },
+      arm: { compact: "Macroscop Client Compact", rack: "Macroscop Operator Station", enterprise: "Macroscop Dispatch ARM", default: "Macroscop Operator Station" },
+    },
+    AxxonSoft: {
+      server: { compact: "Axxon PSIM S", rack: "Axxon PSIM L", enterprise: "Axxon PSIM XL", default: "Axxon PSIM L" },
+      arm: { compact: "Axxon Client ARM", rack: "Axxon Operator Station", enterprise: "Axxon Dispatch ARM", default: "Axxon Operator Station" },
+    },
+  },
+  skud: {
+    Sigur: {
+      server: { compact: "Sigur Server Compact", rack: "Sigur Server", enterprise: "Sigur Server Cluster", default: "Sigur Server" },
+      arm: { compact: "Sigur Client ARM", rack: "Sigur Operator Station", enterprise: "Sigur Dispatch ARM", default: "Sigur Operator Station" },
+    },
+    Parsec: {
+      server: { compact: "ParsecNET 3 Server Compact", rack: "ParsecNET 3 Server", enterprise: "ParsecNET 3 Server Cluster", default: "ParsecNET 3 Server" },
+      arm: { compact: "ParsecNET 3 Client", rack: "ParsecNET 3 Operator Station", enterprise: "ParsecNET 3 Dispatch ARM", default: "ParsecNET 3 Operator Station" },
+    },
+    PERCo: {
+      server: { compact: "PERCo-Web Server Compact", rack: "PERCo-Web Server", enterprise: "PERCo-Web Server Cluster", default: "PERCo-Web Server" },
+      arm: { compact: "PERCo-Web Client", rack: "PERCo-Web Operator Station", enterprise: "PERCo-Web Dispatch ARM", default: "PERCo-Web Operator Station" },
+    },
+    Biosmart: {
+      server: { compact: "BioSmart Studio Server Compact", rack: "BioSmart Studio Server", enterprise: "BioSmart Studio Server Cluster", default: "BioSmart Studio Server" },
+      arm: { compact: "BioSmart Client ARM", rack: "BioSmart Operator Station", enterprise: "BioSmart Dispatch ARM", default: "BioSmart Operator Station" },
+    },
+    RusGuard: {
+      server: { compact: "RusGuard Server Compact", rack: "RusGuard Server", enterprise: "RusGuard Server Cluster", default: "RusGuard Server" },
+      arm: { compact: "RusGuard Client ARM", rack: "RusGuard Operator Station", enterprise: "RusGuard Dispatch ARM", default: "RusGuard Operator Station" },
+    },
+    Bastion: {
+      server: { compact: "SPRUT Access Server Compact", rack: "SPRUT Access Server", enterprise: "SPRUT Access Server Cluster", default: "SPRUT Access Server" },
+      arm: { compact: "SPRUT Access Client", rack: "SPRUT Access Operator Station", enterprise: "SPRUT Access Dispatch ARM", default: "SPRUT Access Operator Station" },
+    },
   },
 };
 
@@ -600,13 +741,14 @@ function resolveManagementUnitPrice(systemType, unitType, marketRatios, priceMul
   return resolveUnitPrice(basePrice, basePrice, marketRatios, aliasKeys, priceMultiplier);
 }
 
-function resolveManagementModel(unitType, modelTier) {
-  const unitCatalog = MANAGEMENT_MODEL_FALLBACK[unitType];
+function resolveManagementModel(systemType, vendor, unitType, modelTier) {
+  const vendorCatalog = MANAGEMENT_MODEL_BY_VENDOR?.[systemType]?.[vendor]?.[unitType];
+  const unitCatalog = vendorCatalog || MANAGEMENT_MODEL_FALLBACK[unitType];
   if (!unitCatalog) return "";
   return unitCatalog[modelTier] || unitCatalog.default || "";
 }
 
-function appendManagementInfrastructure(details, systemType, quantityContext, marketRatios, priceMultiplier) {
+function appendManagementInfrastructure(details, systemType, vendor, quantityContext, marketRatios, priceMultiplier) {
   const managementPlan = quantityContext?.secondary?.managementPlan;
   if (!managementPlan) return;
 
@@ -617,7 +759,7 @@ function appendManagementInfrastructure(details, systemType, quantityContext, ma
 
   if (serverQty > 0) {
     const unitPrice = resolveManagementUnitPrice(systemType, "server", marketRatios, priceMultiplier * tierMultiplier);
-    const model = resolveManagementModel("server", managementPlan.modelTier);
+    const model = resolveManagementModel(systemType, vendor, "server", managementPlan.modelTier);
     pushItem(details, {
       code: "SRV",
       name: `Сервер управления ${systemType.toUpperCase()}`,
@@ -632,7 +774,7 @@ function appendManagementInfrastructure(details, systemType, quantityContext, ma
 
   if (armQty > 0) {
     const unitPrice = resolveManagementUnitPrice(systemType, "arm", marketRatios, priceMultiplier);
-    const model = resolveManagementModel("arm", managementPlan.modelTier);
+    const model = resolveManagementModel(systemType, vendor, "arm", managementPlan.modelTier);
     pushItem(details, {
       code: "ARM",
       name: `АРМ оператора ${systemType.toUpperCase()}`,
@@ -1042,7 +1184,7 @@ export function calculateEquipment(
     });
   }
 
-  appendManagementInfrastructure(details, system.type, quantityContext, marketRatios, priceMultiplier);
+  appendManagementInfrastructure(details, system.type, system.vendor, quantityContext, marketRatios, priceMultiplier);
 
   if (!details.length) {
     return {

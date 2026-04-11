@@ -1317,6 +1317,32 @@ export default async function handler(req, res) {
     return;
   }
 
-  const results = await resolveVendorPrices(requests);
-  res.status(200).json({ results, fetchedAt: new Date().toISOString() });
+  try {
+    const results = await resolveVendorPrices(requests);
+    res.status(200).json({ results, fetchedAt: new Date().toISOString() });
+  } catch (error) {
+    const fallbackResults = requests.map((entry) => ({
+      key: entry?.key,
+      price: entry?.fallbackPrice ?? null,
+      status: "fallback",
+      reason: "price_collection_error",
+      sourceCount: 0,
+      checkedSources: Array.isArray(entry?.sourceUrls) ? entry.sourceUrls.filter(Boolean).length : entry?.sourceUrl ? 1 : 0,
+      usedSources: [],
+      matchedSources: [],
+      matchedSourceHosts: [],
+      unitHints: [],
+      selectionStrategy: "error_fallback",
+      modelToken: buildModelTokenFromEntry(entry),
+      recheckRequired: true,
+      priceConfidence: 0,
+      error: error?.message || "price_collection_failed",
+    }));
+
+    res.status(200).json({
+      results: fallbackResults,
+      fetchedAt: new Date().toISOString(),
+      warning: error?.message || "price_collection_failed",
+    });
+  }
 }

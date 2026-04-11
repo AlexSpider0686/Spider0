@@ -243,7 +243,7 @@ function resolveEquipmentSourceLink(item, result, system, manufacturerWebsite = 
   const matched = keys.find((key) => linkIndex.has(key));
   if (matched) return linkIndex.get(matched) || "";
 
-  return system?.vendor && system.vendor !== "Р‘Р°Р·РѕРІС‹Р№" ? manufacturerWebsite : "";
+  return "";
 }
 
 function buildTechnicalSpecSourceMeta(row, result, system, manufacturerWebsite = "") {
@@ -259,7 +259,7 @@ function buildTechnicalSpecSourceMeta(row, result, system, manufacturerWebsite =
   const sourceLabel = TECHNICAL_SOURCE_LABELS[row?.source] || (row?.source === "survey_ai" ? "AI" : "—");
   if (searchUrl) {
     return {
-      label: TECHNICAL_SOURCE_LABELS[row?.source] || "поиск",
+      label: `${TECHNICAL_SOURCE_LABELS[row?.source] || "поиск"} / поиск позиции`,
       url: searchUrl,
     };
   }

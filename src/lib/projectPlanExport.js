@@ -323,7 +323,14 @@ async function exportPptx(plan) {
   slide5._contextImageData = governanceImageData;
   governance(slide5, plan);
 
-  await pptx.writeFile({ fileName: `${filePart(plan.summary.projectName, "project")}_project_plan.pptx` });
+  const fileName = `${filePart(plan.summary.projectName, "project")}_project_plan.pptx`;
+  if (typeof window !== "undefined" && typeof document !== "undefined") {
+    const blob = await pptx.write({ outputType: "blob" });
+    downloadBlob(fileName, blob);
+    return;
+  }
+
+  await pptx.writeFile({ fileName });
 }
 
 async function exportMpp(payload) {

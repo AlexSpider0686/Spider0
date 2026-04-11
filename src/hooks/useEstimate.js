@@ -423,9 +423,15 @@ export default function useEstimate() {
   };
 
   const runTravelEstimate = async () => {
+    const verifiedAddressLabel = String(addressVerification?.result?.verifiedLabel || "").trim();
+    const verifiedDisplayName = String(addressVerification?.result?.displayName || "").trim();
+    const localityCandidate = [verifiedAddressLabel, verifiedDisplayName, objectData.address]
+      .map((value) => String(value || "").trim())
+      .find(Boolean);
     const payload = {
       originAddress: travelEstimate.originAddress || "",
       destinationAddress: travelEstimate.destinationAddress || objectData.address || "",
+      destinationLocality: localityCandidate || "",
       crewSize: travelEstimate.crewSize || initializedTravelEstimate.crewSize,
       workDurationDays: travelEstimate.workDurationDays || initializedTravelEstimate.workDurationDays,
       perDiemPerPersonDay: travelEstimate.perDiemPerPersonDay || initializedTravelEstimate.perDiemPerPersonDay,

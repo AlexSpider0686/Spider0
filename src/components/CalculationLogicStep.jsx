@@ -5,6 +5,20 @@ import { num, rub, toNumber } from "../lib/estimate";
 import { buildCoefficientLayer } from "../lib/coefficient-engine";
 import { repairReactTextTree } from "../lib/repairReactTree";
 
+function formatSourceHost(url) {
+  const value = String(url || "").trim();
+  if (!value) return "нет ссылки";
+  try {
+    return new URL(value).hostname.replace(/^www\./i, "");
+  } catch {
+    return value;
+  }
+}
+
+function normalizeMatchKey(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
 function percent(value) {
   return `${num(toNumber(value, 0), 1)}%`;
 }
@@ -271,6 +285,66 @@ export default function CalculationLogicStep({
         .filter(Boolean),
     [systems, systemResults, vendorPriceSnapshots]
   );
+  const vendorPricingPositionRows = useMemo(
+    () =>
+      (systems || [])
+        .map((system, index) => {
+          const snapshot = vendorPriceSnapshots?.[system.id];
+          const result = systemResults?.[index];
+          if (!result) return null;
+
+          const marketEntries = Array.isArray(result?.equipmentData?.marketEntries) ? result.equipmentData.marketEntries : [];
+          const details = Array.isArray(result?.equipmentData?.details) ? result.equipmentData.details : [];
+          const marketIndex = new Map();
+
+          marketEntries.forEach((entry) => {
+            [entry?.equipmentLabel, entry?.equipmentKey, entry?.model, entry?.name]
+              .map(normalizeMatchKey)
+              .filter(Boolean)
+              .forEach((candidate) => {
+                if (!marketIndex.has(candidate)) marketIndex.set(candidate, entry);
+              });
+          });
+
+          const positions = details
+            .filter((item) => item?.category !== "material")
+            .slice(0, 8)
+            .map((item) => {
+              const marketEntry =
+                [item?.name, item?.model, item?.code, `${item?.name || ""} ${item?.model || ""}`]
+                  .map(normalizeMatchKey)
+                  .filter(Boolean)
+                  .map((candidate) => marketIndex.get(candidate))
+                  .find(Boolean) || null;
+              const sourceUrl = String((item?.usedSources || [])[0] || item?.sourceUrl || (marketEntry?.usedSources || [])[0] || "").trim();
+
+              return {
+                name: item?.name || item?.code || "Позиция",
+                model: item?.model || marketEntry?.model || marketEntry?.modelToken || "",
+                qty: toNumber(item?.qty, 0),
+                unit: item?.unit || "шт",
+                unitPrice: toNumber(item?.unitPrice ?? marketEntry?.price ?? item?.price, 0),
+                total: toNumber(item?.total, toNumber(item?.qty, 0) * toNumber(item?.unitPrice, 0)),
+                sourceUrl,
+                sourceLabel: formatSourceHost(sourceUrl),
+                confidence: toNumber(marketEntry?.priceConfidence, 0),
+                selectionStrategy: marketEntry?.selectionStrategy || snapshot?.selectionStrategy || "",
+              };
+            })
+            .filter((item) => item.unitPrice > 0 || item.total > 0);
+
+          if (!positions.length) return null;
+
+          return {
+            systemId: system.id,
+            systemLabel: result.systemName || getSystemLabel(system.type),
+            vendor: system.vendor || "Базовый",
+            positions,
+          };
+        })
+        .filter(Boolean),
+    [systems, systemResults, vendorPriceSnapshots]
+  );
 
   const content = (
     <section className="panel">
@@ -453,6 +527,17 @@ export default function CalculationLogicStep({
                 {row.warning ? ` Предупреждение: ${row.warning}.` : ""}
               </p>
             ))}
+            {vendorPricingPositionRows.map((row) =>
+              row.positions.map((item, index) => (
+                <p key={`pricing-position-${row.systemId}-${index}`}>
+                  <strong>{row.systemLabel} / {row.vendor}:</strong> позиция {item.name}
+                  {item.model ? `, модель ${item.model}` : ""}, количество {num(item.qty, 0)} {item.unit}, цена за единицу{" "}
+                  {rub(item.unitPrice)}, сумма по проекту {rub(item.total)}. Источник: {item.sourceLabel}.
+                  {item.confidence > 0 ? ` Уверенность ${num(item.confidence * 100, 0)}%.` : ""}
+                  {item.selectionStrategy ? ` Стратегия выбора: ${item.selectionStrategy}.` : ""}
+                </p>
+              ))
+            )}
           </div>
           <p>
             Именно поэтому во вкладке `Системы` показываются проверенные источники, стратегия выбора и уровень уверенности: это

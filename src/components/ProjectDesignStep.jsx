@@ -2,6 +2,21 @@ import React from "react";
 import { num, rub } from "../lib/estimate";
 import { repairReactTextTree } from "../lib/repairReactTree";
 
+const DESIGN_METRIC_HINTS = {
+  totalHours:
+    "Сумма проектных часов по всем системам без готовой РД. Формируется из расчетного объема системы, сложности объекта, этажности, зональности, трасс и состава проектной группы.",
+  baseCost:
+    "Базовая стоимость проектирования до финального итога. Считается из трудоемкости и ставок проектной группы по системам, которые реально проектируются в этом проекте.",
+  totalDesign:
+    "Итоговая стоимость проектирования по текущему проекту. Системы с готовым проектом или загруженной проектной спецификацией сюда не добавляются.",
+  duration:
+    "Максимальный срок проектирования по системам. Зависит от трудоемкости и выбранного размера проектной группы.",
+  team:
+    "Средний выбранный состав проектной группы. При изменении состава команды срок и стоимость пересчитываются сразу.",
+  skipped:
+    "Количество систем, по которым стоимость проектирования не начисляется, потому что по ним уже есть готовый проект.",
+};
+
 function sum(array, getter) {
   return (array || []).reduce((acc, item) => acc + getter(item), 0);
 }
@@ -38,27 +53,27 @@ export default function ProjectDesignStep({ systems = [], updateSystem, systemRe
       </div>
 
       <div className="summary-grid breakdown-metrics">
-        <div className="metric-card">
+        <div className="metric-card" title={DESIGN_METRIC_HINTS.totalHours}>
           <span>Трудоемкость проектирования</span>
           <strong>{num(totalDesignHours, 1)} ч</strong>
         </div>
-        <div className="metric-card">
+        <div className="metric-card" title={DESIGN_METRIC_HINTS.baseCost}>
           <span>Базовая стоимость проектирования</span>
           <strong>{rub(sum(calculatedSystems, (item) => item.designBase || 0))}</strong>
         </div>
-        <div className="metric-card">
+        <div className="metric-card" title={DESIGN_METRIC_HINTS.totalDesign}>
           <span>Итого проектирование</span>
           <strong>{rub(totals.totalDesign || 0)}</strong>
         </div>
-        <div className="metric-card">
+        <div className="metric-card" title={DESIGN_METRIC_HINTS.duration}>
           <span>Срок проектирования</span>
           <strong>{totalDesignMonths < 1 ? `${num(Math.max(totalDesignMonths * 22, 1), 0)} раб. дн.` : `${num(totalDesignMonths, 1)} мес.`}</strong>
         </div>
-        <div className="metric-card total">
+        <div className="metric-card total" title={DESIGN_METRIC_HINTS.team}>
           <span>Средний состав группы</span>
           <strong>{num(avgTeamSize, 1)} чел.</strong>
         </div>
-        <div className="metric-card">
+        <div className="metric-card" title={DESIGN_METRIC_HINTS.skipped}>
           <span>Системы с готовым проектом</span>
           <strong>{num(skippedSystems.length, 0)}</strong>
         </div>

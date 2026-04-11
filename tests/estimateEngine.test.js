@@ -286,7 +286,8 @@ test("estimateSystemQuantities scales APS zone counts with mandatory floors", ()
   assert.ok(quantities.baseZoneCount >= 5);
   assert.equal(quantities.effectiveZoneCount, quantities.baseZoneCount);
   assert.ok((quantities.secondary?.zksps || 0) >= 5);
-  assert.ok((quantities.secondary?.servers || 0) >= 1);
+  assert.equal(quantities.secondary?.managementPlan?.deploymentMode, "arm");
+  assert.equal(quantities.secondary?.managementPlan?.serverCount || 0, 0);
 });
 
 test("estimateSystemQuantities increases SSOI load for vertically distributed zones", () => {
@@ -644,6 +645,105 @@ test("public CCTV object does not overprovision management servers", () => {
 
   assert.equal(result.secondary.managementPlan.deploymentMode, "server");
   assert.ok(result.secondary.managementPlan.serverCount <= 2);
+});
+
+test("moderate non-distributed systems keep management topology within expected server bounds", () => {
+  const cases = [
+    { systemType: "aps", maxServers: 1, activeSystemTypes: ["aps", "soue"] },
+    { systemType: "soue", maxServers: 1, activeSystemTypes: ["aps", "soue"] },
+    { systemType: "sots", maxServers: 2, activeSystemTypes: ["sots"] },
+    { systemType: "sot", maxServers: 2, activeSystemTypes: ["sot"] },
+  ];
+
+  for (const scenario of cases) {
+    const result = estimateSystemQuantities({
+      systemType: scenario.systemType,
+      zoneContexts: [
+        {
+          id: `${scenario.systemType}-zone-1`,
+          zoneType: "office",
+          zoneName: "Office",
+          areaM2: 12000,
+          floors: 4,
+          occupancyDensity: 0.08,
+          densityCoefficient: 1,
+          systemRule: {
+            mandatory: true,
+            saturationCoefficient: 1,
+            securityIntensityCoefficient: 1,
+            engineeringDensityCoefficient: 1,
+            installationComplexityCoefficient: 1,
+            routeComplexityCoefficient: 1,
+          },
+        },
+      ],
+      objectClassification: {
+        objectType: "public",
+        totalAreaM2: 12000,
+        totalFloors: 4,
+        aboveGroundFloors: 4,
+        undergroundFloors: 0,
+        architectureComplexityIndex: 1,
+        engineeringSaturationIndex: 1,
+        securityIntensityIndex: 1,
+        integrationDemandIndex: 1,
+        distributedArchitecture: false,
+      },
+      activeSystemTypes: scenario.activeSystemTypes,
+    });
+
+    assert.equal(result.secondary.managementPlan.deploymentMode, "server", `${scenario.systemType} should remain in server mode`);
+    assert.ok(
+      result.secondary.managementPlan.serverCount <= scenario.maxServers,
+      `${scenario.systemType} should not exceed ${scenario.maxServers} management server(s) on a moderate object`
+    );
+  }
+});
+
+test("management equipment uses vendor-aligned models across all system types", () => {
+  const zones = [DEFAULT_ZONE(1, "Office", "office", 7000, 5)];
+  const objectData = {
+    regionName: "Москва",
+    regionCoef: 1.2,
+    objectType: "public",
+    buildingStatus: "operational",
+    totalArea: 7000,
+    floors: 5,
+    basementFloors: 0,
+  };
+  const cases = [
+    { systemType: "aps", vendor: "Болид", expectedModelPart: "Orion Pro" },
+    { systemType: "soue", vendor: "Рубеж", expectedModelPart: "FireSec 3" },
+    { systemType: "sots", vendor: "Рубеж", expectedModelPart: "R3-Рубеж" },
+    { systemType: "sot", vendor: "Hikvision", expectedModelPart: "HikCentral" },
+    { systemType: "ssoi", vendor: "TRASSIR", expectedModelPart: "NeuroStation" },
+    { systemType: "skud", vendor: "Sigur", expectedModelPart: "Sigur" },
+  ];
+
+  for (const scenario of cases) {
+    const profile = getDefaultEquipmentProfiles(scenario.systemType);
+    const selectedEquipmentParams = Object.fromEntries(Object.entries(profile || {}).map(([key, value]) => [key, value.default]));
+    const system = {
+      ...DEFAULT_SYSTEM(1, scenario.systemType),
+      vendor: scenario.vendor,
+      baseVendor: scenario.vendor,
+      selectedEquipmentParams,
+    };
+    const result = calculateSystemWithBreakdown(system, zones, DEFAULT_BUDGET, objectData);
+    const managementRow = (result?.equipmentData?.details || []).find((item) => item.code === "SRV");
+
+    assert.ok(managementRow, `${scenario.systemType}/${scenario.vendor} should include a management server row`);
+    assert.match(
+      String(managementRow.model || ""),
+      new RegExp(scenario.expectedModelPart.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"),
+      `${scenario.systemType}/${scenario.vendor} should use a vendor-aligned management model`
+    );
+    assert.doesNotMatch(
+      String(managementRow.model || ""),
+      /Dell/i,
+      `${scenario.systemType}/${scenario.vendor} should not fall back to Dell-branded management hardware`
+    );
+  }
 });
 
 test("VAT is not applied to design total", () => {

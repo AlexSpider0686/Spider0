@@ -11,6 +11,7 @@ export async function resolveTravelEstimate(payload = {}) {
   return estimateTravelFromRoute({
     originAddress,
     destinationAddress,
+    destinationLocality: payload?.destinationLocality,
     crewSize: payload?.crewSize,
     workDurationDays: payload?.workDurationDays,
     perDiemPerPersonDay: payload?.perDiemPerPersonDay,

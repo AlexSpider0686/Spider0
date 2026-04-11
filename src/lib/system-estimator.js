@@ -376,7 +376,7 @@ function buildManagementPlan({
   const publicCriticalObject = ["public", "transport", "production", "energy"].includes(objectType);
   const lifeSafetySystem = ["aps", "soue"].includes(systemType);
   const integratedSecuritySystem = ["ssoi", "sot", "skud", "sots"].includes(systemType);
-  const legislationDriven = lifeSafetySystem || (publicCriticalObject && integratedSecuritySystem);
+  const legislationDriven = systemType === "ssoi" || (publicCriticalObject && integratedSecuritySystem && systemType === "ssoi");
   const mustUseDedicatedServer =
     legislationDriven ||
     distributedArchitecture ||
@@ -421,7 +421,7 @@ function buildManagementPlan({
     serverCount = Math.max(demandServerCount, 1);
 
     const redundancyRequired =
-      (lifeSafetySystem && (distributedArchitecture || totalAreaM2 >= 28000 || totalFloors >= 8 || heavyLoad)) ||
+      (lifeSafetySystem && (distributedArchitecture || totalAreaM2 >= 28000 || totalFloors >= 8 || normalizedServerLoad >= 1.55)) ||
       (integratedSecuritySystem && (distributedArchitecture || heavyLoad) && activeSystemTypes.length >= 4) ||
       totalAreaM2 >= profile.serverRequiredArea * 2.2 ||
       totalFloors >= profile.serverRequiredFloors + 3 ||

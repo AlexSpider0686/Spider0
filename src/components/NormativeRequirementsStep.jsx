@@ -35,6 +35,12 @@ function estimateBudgetImpact(row, result) {
   if (row.appliedImpact.minManagementMode === "server") {
     impact += equipmentBase * 0.05 + workBase * 0.01;
   }
+  if (row.appliedImpact.oklCostPerMeter > 0) {
+    impact += toNumber(result.cable, 0) * row.appliedImpact.oklCostPerMeter;
+  }
+  if (row.appliedImpact.oklWorkFactor > 0) {
+    impact += workBase * row.appliedImpact.oklWorkFactor;
+  }
 
   return Math.round(impact);
 }
