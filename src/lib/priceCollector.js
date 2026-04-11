@@ -146,6 +146,11 @@ function buildSourceTargets(source, item, queries, manufacturerUrls) {
   }
 
   for (const query of dedupeStrings(queries).slice(0, 2)) {
+    const supplierTemplates = Array.isArray(source?.supplierTargets) ? source.supplierTargets : [];
+    for (const template of supplierTemplates) {
+      const target = String(template || "").replace("{query}", encodeURIComponent(query));
+      if (target) targets.push(target);
+    }
     targets.push(buildTinkoSearchUrl(query));
     targets.push(buildLuisSearchUrl(query));
     targets.push(buildGarantSearchUrl(query));
@@ -263,13 +268,6 @@ function buildApiEndpoints() {
     typeof import.meta !== "undefined" && import.meta?.env ? import.meta.env.VITE_PRICE_API_URL : undefined;
   const isBrowser = typeof window !== "undefined";
   const endpoints = [fromEnv, isBrowser ? "/api/vendor-prices" : ""];
-
-  if (isBrowser) {
-    const currentHost = String(window.location.hostname || "").toLowerCase();
-    if (currentHost !== "spider0.vercel.app") {
-      endpoints.push("https://spider0.vercel.app/api/vendor-prices");
-    }
-  }
 
   return [...new Set(endpoints.map((item) => String(item || "").trim()).filter(Boolean))];
 }

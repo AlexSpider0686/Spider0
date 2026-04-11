@@ -22,7 +22,7 @@ import { buildAiSurveyPlan, calculateAiSurveyCompletion } from "../lib/aiTechnic
 import { buildAiTechnicalRecommendations } from "../lib/aiTechnicalConfigurator";
 import { buildAiProjectRisks } from "../lib/aiProjectRiskEngine";
 import { aggregatePlanRecognitions } from "../lib/evacuationPlanRecognition";
-import { downloadSystemSpecificationExcel } from "../lib/specExport";
+import { downloadAllSystemsSpecificationExcel, downloadSystemSpecificationExcel } from "../lib/specExport";
 import { buildNormativeRequirements } from "../lib/normativeRequirements";
 import { repairUtf8Cp1251Mojibake } from "../lib/textEncoding";
 import { applyTravelToResults, buildInitialTravelEstimate, createEmptyTravelEstimate, recalculateTravelEstimateDraft } from "../lib/travelEstimate";
@@ -878,6 +878,13 @@ export default function useEstimate() {
     }
   };
 
+  const refreshAllVendorPricing = async () => {
+    for (const system of systems) {
+      await refreshVendorPricing(system);
+    }
+    return true;
+  };
+
   const importApsProjectPdf = async (systemId, file) => {
     const system = systems.find((item) => item.id === systemId);
     if (!system) {
@@ -1501,6 +1508,16 @@ export default function useEstimate() {
     return true;
   };
 
+  const exportAllSystemsSpecification = () => {
+    return downloadAllSystemsSpecificationExcel({
+      objectData: effectiveObjectData,
+      systems,
+      systemResults,
+      technicalRecommendations,
+      zones,
+    });
+  };
+
   const exportProjectPassport = async () => {
     try {
       await downloadProjectPassport({
@@ -1904,11 +1921,12 @@ export default function useEstimate() {
     applyNormativeRequirements,
     excludeNormativeRequirements,
     refreshVendorPricing,
-      compareVendorPrices,
-      clearVendorComparison,
-      importApsProjectPdf,
-      cancelApsProjectPdfImport,
-      clearApsProjectPdf,
+    refreshAllVendorPricing,
+    compareVendorPrices,
+    clearVendorComparison,
+    importApsProjectPdf,
+    cancelApsProjectPdfImport,
+    clearApsProjectPdf,
     updateApsProjectItem,
     addApsProjectItem,
     removeApsProjectItemById,
@@ -1923,6 +1941,7 @@ export default function useEstimate() {
     generateProjectPlan,
     exportEstimateCsv,
     exportSystemSpecification,
+    exportAllSystemsSpecification,
     exportProjectPassport,
     importProjectPassport,
     exportAiSurveyChecklist,

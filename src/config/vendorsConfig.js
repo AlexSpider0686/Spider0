@@ -318,7 +318,10 @@ export function getVendorNames(systemType) {
 export const MANUFACTURER_SOURCES = {
   sot: {
     Базовый: { website: "https://www.hikvision.com" },
-    Hikvision: { website: "https://www.hikvision.com" },
+    Hikvision: {
+      website: "https://www.hikvision.com",
+      supplierTargets: ["https://www.hikvision-shop.ru/search/?q={query}"],
+    },
     Dahua: {
       website: "https://www.dahua.market",
       searchWebsite: "https://www.dahua.market",
@@ -339,6 +342,7 @@ export const MANUFACTURER_SOURCES = {
       website: "https://products.rubezh.ru",
       searchPathTemplate: "/search/?q={query}",
       preferSearch: true,
+      supplierTargets: ["https://www.hikvision-shop.ru/search/?q={query}"],
     },
     Болид: {
       website: "https://shop.bolid.ru",
@@ -378,6 +382,7 @@ export const MANUFACTURER_SOURCES = {
       website: "https://products.rubezh.ru",
       searchPathTemplate: "/search/?q={query}",
       preferSearch: true,
+      supplierTargets: ["https://www.hikvision-shop.ru/search/?q={query}"],
     },
     "Аргус-Спектр": { website: "https://argus-spectr.ru" },
     Simplex: { website: "https://www.johnsoncontrols.com/fire-detection/simplex" },
@@ -415,6 +420,11 @@ MANUFACTURER_SOURCES.skud.Parsec = {
   website: "https://www.parsec.ru",
   searchPathTemplate: "/search/?q={query}",
   preferSearch: true,
+};
+
+MANUFACTURER_SOURCES.sot["Базовый"] = {
+  website: "https://www.hikvision.com",
+  supplierTargets: ["https://www.hikvision-shop.ru/search/?q={query}"],
 };
 
 MANUFACTURER_SOURCES.soue["\u0411\u0430\u0437\u043e\u0432\u044b\u0439"] = {

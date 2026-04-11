@@ -305,9 +305,9 @@ const CONCRETE_MODEL_CATALOG = repairCatalogNode({
     },
   },
   skud: {
-    "Базовый": { controller: { 1: "NC-100K-IP", 2: "NC-2000", 4: "NC-8000" } },
+    "Базовый": { controller: { 1: "Sigur E2", 2: "Sigur E210", 4: "Sigur E510" } },
     Sigur: { controller: { 1: "E510", 2: "E210", 4: "E5100" } },
-    Parsec: { controller: { 1: "NC-100K-IP", 2: "NC-2000", 4: "NC-8000" } },
+    Parsec: { controller: { 1: "NC-100K-IP", 2: "NC-60K.M", 4: "2x NC-60K.M" } },
     PERCo: { controller: { 1: "CT/L04.2", 2: "CT/L14.1", 4: "CR11.2" } },
     Biosmart: { controller: { 1: "BS-ACS-1", 2: "BS-ACS-2", 4: "BS-ACS-4" } },
     RusGuard: { controller: { 1: "ACS-102-CE-BM", 2: "ACS-202-CE-BM", 4: "ACS-402-CE-BM" } },

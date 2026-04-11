@@ -51,15 +51,7 @@ select {
 }
 
 .page-shell__watermark {
-  position: fixed;
-  left: 58px;
-  top: 218px;
-  width: min(370px, 26vw);
-  min-width: 230px;
-  opacity: 0.62;
-  filter: drop-shadow(0 12px 22px rgba(33, 59, 87, 0.14));
-  pointer-events: none;
-  z-index: 2;
+  display: none;
 }
 
 .bg-video-layer {

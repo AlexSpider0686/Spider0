@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Building2, Layers, Wallet, Download, PieChart, FileText, Ruler, ShieldAlert, CalendarRange, Scale, Upload } from "lucide-react";
 import useEstimate from "../hooks/useEstimate";
-import projectCoreMarkUrl from "../assets/project-core-mark.svg";
 import ObjectStep from "./ObjectStep";
 import SystemsStep from "./SystemsStep";
 import ProjectDesignStep from "./ProjectDesignStep";
@@ -139,7 +138,6 @@ export default function EstimatorApp() {
 
   return (
     <div className="page-shell">
-      <img className="page-shell__watermark" src={projectCoreMarkUrl} alt="" aria-hidden="true" />
       <div className="bg-video-layer" aria-hidden>
         <div className="bg-video-fallback" />
         {!videoUnavailable ? (

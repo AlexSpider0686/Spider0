@@ -140,12 +140,12 @@ export const VENDOR_EQUIPMENT = repairCatalogNode({
     Базовый: {
       controller: {
         channels: [1, 2, 4],
-        basePrices: { 1: 14800, 2: 23600, 4: 39200 },
+        basePrices: { 1: 16200, 2: 28400, 4: 48600 },
       },
       note: "Ключевое оборудование СКУД: контроллеры доступа.",
     },
     Sigur: { controller: { channels: [1, 2, 4], basePrices: { 1: 16200, 2: 25400, 4: 42400 } } },
-    Parsec: { controller: { channels: [1, 2, 4], basePrices: { 1: 17400, 2: 26800, 4: 44800 } } },
+    Parsec: { controller: { channels: [1, 2, 4], basePrices: { 1: 19800, 2: 54400, 4: 108800 } } },
     PERCo: { controller: { channels: [1, 2, 4], basePrices: { 1: 16800, 2: 26000, 4: 43800 } } },
     Biosmart: { controller: { channels: [1, 2, 4], basePrices: { 1: 18600, 2: 29500, 4: 49600 } } },
     RusGuard: { controller: { channels: [1, 2, 4], basePrices: { 1: 17100, 2: 27400, 4: 46200 } } },

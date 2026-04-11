@@ -3,6 +3,7 @@ import { COEFFICIENT_GUIDE, SYSTEM_TYPES } from "../config/estimateConfig";
 import { LABOR_MARKET_GUARDRAILS, LABOR_UNIT_RATES } from "../config/costModelConfig";
 import { num, rub, toNumber } from "../lib/estimate";
 import { buildCoefficientLayer } from "../lib/coefficient-engine";
+import { repairReactTextTree } from "../lib/repairReactTree";
 
 function percent(value) {
   return `${num(toNumber(value, 0), 1)}%`;
@@ -14,6 +15,11 @@ function coef(value) {
 
 function getSystemLabel(systemType) {
   return SYSTEM_TYPES.find((item) => item.code === systemType)?.name || systemType;
+}
+
+function formatHostList(hosts = []) {
+  const normalized = [...new Set((hosts || []).map((item) => String(item || "").trim()).filter(Boolean))];
+  return normalized.length ? normalized.join(", ") : "нет данных";
 }
 
 function formatDesignDurationExact(monthsExact) {
@@ -37,7 +43,16 @@ function summarizeAiGuard(systemResults) {
   return { maxRisk, maxUplift, maxOverpricingRisk, maxUnderpricingRisk, totalMarketFloor };
 }
 
-export default function CalculationLogicStep({ objectData, effectiveObjectData, systems, systemResults, budget, totals, projectRisks = [] }) {
+export default function CalculationLogicStep({
+  objectData,
+  effectiveObjectData,
+  systems,
+  systemResults,
+  budget,
+  totals,
+  projectRisks = [],
+  vendorPriceSnapshots = {},
+}) {
   const calcObjectData = effectiveObjectData || objectData;
   const coefficientLayer = useMemo(
     () =>
@@ -226,8 +241,38 @@ export default function CalculationLogicStep({ objectData, effectiveObjectData, 
       }),
     [systemResults, systems]
   );
+  const vendorPricingRows = useMemo(
+    () =>
+      (systems || [])
+        .map((system, index) => {
+          const snapshot = vendorPriceSnapshots?.[system.id];
+          const result = systemResults?.[index];
+          if (!snapshot || !result) return null;
+          const entries = Array.isArray(snapshot.entries) ? snapshot.entries : [];
+          const checkedHosts = [...new Set(entries.flatMap((entry) => entry?.checkedSourceHosts || []).filter(Boolean))];
+          const matchedHosts = [...new Set(entries.flatMap((entry) => entry?.matchedSourceHosts || entry?.usedSourceHosts || []).filter(Boolean))];
+          const sourceCount = entries.filter((entry) => Number(entry?.sourceCount || 0) > 0).length;
+          const avgConfidence = entries.length
+            ? entries.reduce((sum, entry) => sum + toNumber(entry?.priceConfidence, 0), 0) / entries.length
+            : 0;
 
-  return (
+          return {
+            systemId: system.id,
+            systemLabel: result.systemName || getSystemLabel(system.type),
+            vendor: system.vendor || "Базовый",
+            checkedHosts,
+            matchedHosts,
+            sourceCount,
+            totalEntries: entries.length,
+            avgConfidence,
+            warning: snapshot.warning || "",
+          };
+        })
+        .filter(Boolean),
+    [systems, systemResults, vendorPriceSnapshots]
+  );
+
+  const content = (
     <section className="panel">
       <div className="panel-header">
         <div>
@@ -382,7 +427,41 @@ export default function CalculationLogicStep({ objectData, effectiveObjectData, 
             ) : null}
           </div>
         </article>
+        <article className="logic-card">
+          <h3>4. Откуда берутся цены оборудования</h3>
+          <p>
+            По текущему проекту цены собираются по каждой ключевой позиции отдельно. Платформа формирует поисковые запросы из
+            вендора, модели, артикула и названия позиции, после чего опрашивает сайт производителя и поставщиков, подключенных к
+            проекту.
+          </p>
+          <p>
+            В контур источников входят сайт производителя, Tinko, Luis, Garant, Ganimed и дополнительные вендорные витрины. Для
+            отдельных брендов используются специальные источники, например `hikvision-shop.ru` и `dahua.market`. Если по системе
+            загружен проект, приоритет получают строки распознанной проектной спецификации, а цены собираются уже по ним.
+          </p>
+          <p>
+            Алгоритм сначала ищет точные совпадения по артикулу и модели. Если найдено несколько релевантных предложений, в расчет
+            берется усредненная цена по валидным источникам после отсечения выбросов. Если точного совпадения нет, используется
+            поиск по модели и названию позиции с проверкой единицы измерения и защитой от слишком низких или слишком высоких цен.
+          </p>
+          <div className="logic-equipment-list">
+            {vendorPricingRows.map((row) => (
+              <p key={`pricing-${row.systemId}`}>
+                <strong>{row.systemLabel} / {row.vendor}:</strong> проверено хостов {row.checkedHosts.length}, позиции с
+                подтвержденной ценой {row.sourceCount} из {row.totalEntries}, средняя уверенность {num(row.avgConfidence * 100, 0)}%.
+                Проверенные хосты: {formatHostList(row.checkedHosts)}. Хосты, подтвердившие цену: {formatHostList(row.matchedHosts)}.
+                {row.warning ? ` Предупреждение: ${row.warning}.` : ""}
+              </p>
+            ))}
+          </div>
+          <p>
+            Именно поэтому во вкладке `Системы` показываются проверенные источники, стратегия выбора и уровень уверенности: это
+            краткая расшифровка того, как по текущему объекту собрался итоговый ценник.
+          </p>
+        </article>
       </div>
     </section>
   );
+
+  return repairReactTextTree(content);
 }

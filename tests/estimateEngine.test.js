@@ -266,13 +266,13 @@ test("model override recalculates unit price from the selected concrete model", 
     "skud",
     "Parsec",
     "CTRL",
-    "NC-8000",
+    "NC-60K.M",
     "NC-100K-IP",
-    17400
+    19800
   );
 
-  assert.equal(override.model, "NC-8000");
-  assert.ok(override.unitPrice > 17400);
+  assert.equal(override.model, "NC-60K.M");
+  assert.ok(override.unitPrice > 19800);
 });
 
 test("all configured vendors expose concrete models and prices without a loaded project", () => {

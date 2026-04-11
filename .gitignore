@@ -9,3 +9,4 @@ repair_and_install_m365_f.ps1
 tmp_aps.pdf
 desktop/codex-gigachat-shell/release-build/
 presentations/~$*.pptx
+tmp_presentation/

@@ -460,6 +460,7 @@ export default function SystemsStep({
   updateSystem,
   systemResults,
   refreshVendorPricing,
+  refreshAllVendorPricing,
   compareVendorPrices,
   clearVendorComparison,
   vendorPriceSnapshots,
@@ -477,6 +478,7 @@ export default function SystemsStep({
   technicalRecommendations,
   updateTechnicalSpecOverride,
   exportSystemSpecification,
+  exportAllSystemsSpecification,
 }) {
   const usedTypeMap = new Map(systems.map((item) => [item.id, item.type]));
   const [manualDraftBySystem, setManualDraftBySystem] = useState({});
@@ -485,6 +487,8 @@ export default function SystemsStep({
   const [showCoefficientsBySystem, setShowCoefficientsBySystem] = useState({});
   const [refreshingBySystem, setRefreshingBySystem] = useState({});
   const [comparingBySystem, setComparingBySystem] = useState({});
+  const [refreshingAll, setRefreshingAll] = useState(false);
+  const [exportingAll, setExportingAll] = useState(false);
   const [statusNow, setStatusNow] = useState(Date.now());
 
   useEffect(() => {
@@ -542,6 +546,26 @@ export default function SystemsStep({
     }
   };
 
+  const handleRefreshAll = async () => {
+    if (refreshingAll) return;
+    setRefreshingAll(true);
+    try {
+      await refreshAllVendorPricing?.();
+    } finally {
+      setRefreshingAll(false);
+    }
+  };
+
+  const handleExportAll = async () => {
+    if (exportingAll) return;
+    setExportingAll(true);
+    try {
+      await exportAllSystemsSpecification?.();
+    } finally {
+      setExportingAll(false);
+    }
+  };
+
   const content = (
     <section className="panel">
       <div className="panel-header">
@@ -549,9 +573,17 @@ export default function SystemsStep({
           <h2>РЎРёСЃС‚РµРјС‹</h2>
           <p>РќР° РѕРґРЅРѕРј РѕР±СЉРµРєС‚Рµ РјРѕР¶РµС‚ Р±С‹С‚СЊ С‚РѕР»СЊРєРѕ РѕРґРЅР° СЃРёСЃС‚РµРјР° РєР°Р¶РґРѕРіРѕ РІРёРґР°.</p>
         </div>
-        <button className="primary-btn" onClick={addSystem} type="button" disabled={!canAddMoreSystems}>
-          <Plus size={16} /> + РЎРёСЃС‚РµРјР°
-        </button>
+        <div className="action-cell" style={{ justifyContent: "flex-end", flexWrap: "wrap", gap: 10 }}>
+          <button className="ghost-btn" onClick={handleRefreshAll} type="button" disabled={refreshingAll || !systems.length}>
+            <RefreshCcw size={16} /> {refreshingAll ? "Обновляем цены..." : "Обновить цены"}
+          </button>
+          <button className="ghost-btn" onClick={handleExportAll} type="button" disabled={exportingAll || !systems.length}>
+            <Download size={16} /> {exportingAll ? "Готовим файл..." : "Выгрузить спецификацию"}
+          </button>
+          <button className="primary-btn" onClick={addSystem} type="button" disabled={!canAddMoreSystems}>
+            <Plus size={16} /> + РЎРёСЃС‚РµРјР°
+          </button>
+        </div>
       </div>
 
       <div className="stack">
