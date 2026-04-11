@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { calculateSystem } from "../src/lib/estimate.js";
 import { calculateSystemWithBreakdown } from "../src/lib/systemCalculators/index.js";
 import { estimateSystemQuantities } from "../src/lib/system-estimator.js";
-import { getConcreteModel, getEditableModelOptions, resolveModelPriceOverride } from "../src/lib/equipment.js";
+import { getConcreteModel, getEditableModelOptions, isLifecycleModelAllowed, resolveModelPriceOverride } from "../src/lib/equipment.js";
 import { repairUtf8Cp1251Mojibake } from "../src/lib/textEncoding.js";
 import { DEFAULT_BUDGET, DEFAULT_SYSTEM, DEFAULT_ZONE, VENDORS } from "../src/config/estimateConfig.js";
 import { getDefaultEquipmentProfiles } from "../src/config/equipmentCatalog.js";
@@ -273,6 +273,29 @@ test("model override recalculates unit price from the selected concrete model", 
 
   assert.equal(override.model, "NC-60K.M");
   assert.ok(override.unitPrice > 19800);
+});
+
+test("non-project model catalog does not expose discontinued models", () => {
+  const banned = {
+    skud: {
+      Parsec: ["NC-2000", "NC-100K-IP"],
+    },
+  };
+
+  for (const [systemType, vendorMap] of Object.entries(banned)) {
+    for (const [vendor, models] of Object.entries(vendorMap)) {
+      for (const itemCode of ["CTRL", "CAM", "NVR", "SW", "HDD", "SEN", "DET", "PANEL", "SPK", "AMP"]) {
+        const options = getEditableModelOptions(systemType, vendor, itemCode);
+        for (const bannedModel of models) {
+          assert.ok(
+            options.every((item) => item.model !== bannedModel),
+            `${systemType}/${vendor} still exposes discontinued model ${bannedModel}`
+          );
+          assert.equal(isLifecycleModelAllowed(systemType, vendor, bannedModel), false);
+        }
+      }
+    }
+  }
 });
 
 test("all configured vendors expose concrete models and prices without a loaded project", () => {

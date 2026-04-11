@@ -84,6 +84,23 @@ function sanitizeDisplayText(value) {
   return repairUtf8Cp1251Mojibake(String(value ?? ""));
 }
 
+const DISCONTINUED_MODEL_REPLACEMENTS = {
+  skud: {
+    Parsec: {
+      "NC-2000": "NC-60K.M",
+      "NC-100K-IP": "NC-100K-IP.M",
+    },
+  },
+};
+
+function normalizeLifecycleModel(systemType, vendor, model) {
+  const safeModel = sanitizeDisplayText(model).trim();
+  if (!safeModel) return "";
+  const vendorMap = DISCONTINUED_MODEL_REPLACEMENTS?.[systemType]?.[vendor];
+  if (!vendorMap) return safeModel;
+  return sanitizeDisplayText(vendorMap[safeModel] || safeModel).trim();
+}
+
 const CONCRETE_MODEL_CATALOG = repairCatalogNode({
   sot: {
     "Р‘Р°Р·РѕРІС‹Р№": {
@@ -307,7 +324,7 @@ const CONCRETE_MODEL_CATALOG = repairCatalogNode({
   skud: {
     "Базовый": { controller: { 1: "Sigur E2", 2: "Sigur E210", 4: "Sigur E510" } },
     Sigur: { controller: { 1: "E510", 2: "E210", 4: "E5100" } },
-    Parsec: { controller: { 1: "NC-100K-IP", 2: "NC-60K.M", 4: "2x NC-60K.M" } },
+    Parsec: { controller: { 1: "NC-100K-IP.M", 2: "NC-60K.M", 4: "2x NC-60K.M" } },
     PERCo: { controller: { 1: "CT/L04.2", 2: "CT/L14.1", 4: "CR11.2" } },
     Biosmart: { controller: { 1: "BS-ACS-1", 2: "BS-ACS-2", 4: "BS-ACS-4" } },
     RusGuard: { controller: { 1: "ACS-102-CE-BM", 2: "ACS-202-CE-BM", 4: "ACS-402-CE-BM" } },
@@ -575,7 +592,7 @@ export function getConcreteModel(systemType, vendor, itemType, optionKey) {
     if (!itemCatalog || typeof itemCatalog !== "object") return "";
     const resolvedOptionKey =
       Object.keys(itemCatalog).find((key) => sanitizeDisplayText(key) === normalizedOptionKey || String(key) === String(optionKey)) || optionKey;
-    return sanitizeDisplayText(itemCatalog?.[resolvedOptionKey] || "");
+    return normalizeLifecycleModel(systemType, vendor, itemCatalog?.[resolvedOptionKey] || "");
   };
 
   return resolveFromCatalog(systemCatalog) || resolveFromCatalog(fallbackSystemCatalog);
@@ -649,15 +666,17 @@ export function getEditableModelOptions(systemType, vendor, itemCode) {
 
 export function resolveModelPriceOverride(systemType, vendor, itemCode, nextModel, currentModel, currentUnitPrice) {
   const options = getEditableModelOptions(systemType, vendor, itemCode);
-  const nextOption = options.find((item) => item.model === nextModel);
+  const normalizedNextModel = normalizeLifecycleModel(systemType, vendor, nextModel);
+  const normalizedCurrentModel = normalizeLifecycleModel(systemType, vendor, currentModel);
+  const nextOption = options.find((item) => item.model === normalizedNextModel);
   if (!nextOption) {
     return {
-      model: sanitizeDisplayText(nextModel),
+      model: normalizedNextModel,
       unitPrice: Math.max(toNumber(currentUnitPrice, 0), 0),
     };
   }
 
-  const currentOption = options.find((item) => item.model === currentModel);
+  const currentOption = options.find((item) => item.model === normalizedCurrentModel);
   const currentBasePrice = toNumber(currentOption?.basePrice, 0);
   const currentPrice = Math.max(toNumber(currentUnitPrice, 0), 0);
   const appliedRatio = currentBasePrice > 0 && currentPrice > 0 ? currentPrice / currentBasePrice : 1;
@@ -666,6 +685,10 @@ export function resolveModelPriceOverride(systemType, vendor, itemCode, nextMode
     model: nextOption.model,
     unitPrice: Math.max(Number((nextOption.basePrice * appliedRatio).toFixed(2)), 0),
   };
+}
+
+export function isLifecycleModelAllowed(systemType, vendor, model) {
+  return normalizeLifecycleModel(systemType, vendor, model) === sanitizeDisplayText(model).trim();
 }
 
 function resolveQuantity(systemType, itemType, quantityContext, fallbackQty) {
