@@ -53,6 +53,54 @@ test("project price requests keep exact Bastion product pages for multiplied mod
   assert.ok(urls.some((url) => String(url).includes("/products/8885")), "exact Bastion product page is missing for multiplied model");
 });
 
+test("APS Bolid requests use exact product pages for verified detector models", () => {
+  const requests = buildProjectPriceRequests(
+    { id: "aps-1", type: "aps", vendor: "Болид" },
+    {
+      equipmentData: {
+        details: [
+          {
+            code: "DET",
+            name: "Пожарный извещатель",
+            model: "ДИП-34А-03",
+            unitPrice: 1521,
+            unit: "шт",
+            isKey: true,
+          },
+        ],
+      },
+    }
+  );
+
+  assert.equal(requests.length, 1);
+  const urls = requests[0].sourceUrls.map((item) => (typeof item === "string" ? item : item?.url)).filter(Boolean);
+  assert.ok(urls.some((url) => String(url).includes("tovar_711608757.html")), "exact Bolid detector page is missing");
+});
+
+test("SOUE Roxton requests use exact product pages for verified speaker models", () => {
+  const requests = buildProjectPriceRequests(
+    { id: "soue-1", type: "soue", vendor: "Roxton" },
+    {
+      equipmentData: {
+        details: [
+          {
+            code: "SPK",
+            name: "Оповещатель СОУЭ",
+            model: "PA-620T",
+            unitPrice: 3170,
+            unit: "шт",
+            isKey: true,
+          },
+        ],
+      },
+    }
+  );
+
+  assert.equal(requests.length, 1);
+  const urls = requests[0].sourceUrls.map((item) => (typeof item === "string" ? item : item?.url)).filter(Boolean);
+  assert.ok(urls.some((url) => String(url).includes("/katalog/gromkogovoriteli/potolochnye/pa-620t")), "exact Roxton speaker page is missing");
+});
+
 test("Bastion SKUD stays in workstation mode for a moderate object", () => {
   const system = {
     ...DEFAULT_SYSTEM(1, "skud"),
