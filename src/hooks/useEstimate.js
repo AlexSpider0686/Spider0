@@ -273,6 +273,75 @@ export default function useEstimate() {
       }),
     [surveyPlanObjectData, zones, systems, recalculatedArea]
   );
+
+  const getAutoCalculatedSurveyAnswer = (question) => {
+    if (!question?.autoCalculate) return undefined;
+
+    if (question.autoCalculate === "aps-zksps-zones") {
+      return Math.max(
+        estimateSurveyZoneCount({
+          systemType: "aps",
+          objectData: surveyPlanObjectData,
+          zones,
+          photoAnalyses: technicalSolution.photoAnalyses,
+        }) || 1,
+        1
+      );
+    }
+
+    return undefined;
+  };
+
+  useEffect(() => {
+    if (!technicalSolution?.surveyStartedAt) return;
+
+    setTechnicalSolution((prev) => {
+      const validQuestions = aiSurveyPlan?.allQuestions || [];
+      const validIds = new Set(validQuestions.map((question) => question.id));
+      const nextAnswers = {};
+      let changed = false;
+
+      Object.entries(prev.answers || {}).forEach(([key, value]) => {
+        if (validIds.has(key)) {
+          nextAnswers[key] = value;
+        } else {
+          changed = true;
+        }
+      });
+
+      validQuestions.forEach((question) => {
+        if (question.enabledByQuestionId && nextAnswers[question.enabledByQuestionId] !== true) {
+          if (question.id in nextAnswers) {
+            delete nextAnswers[question.id];
+            changed = true;
+          }
+          return;
+        }
+
+        if (nextAnswers[question.id] !== undefined) return;
+
+        const autoValue = getAutoCalculatedSurveyAnswer(question);
+        if (autoValue !== undefined) {
+          nextAnswers[question.id] = autoValue;
+          changed = true;
+          return;
+        }
+
+        if (question.defaultValue !== undefined) {
+          nextAnswers[question.id] = Array.isArray(question.defaultValue) ? [...question.defaultValue] : question.defaultValue;
+          changed = true;
+        }
+      });
+
+      if (!changed) return prev;
+
+      return {
+        ...prev,
+        answers: nextAnswers,
+      };
+    });
+  }, [aiSurveyPlan, surveyPlanObjectData, zones, technicalSolution.photoAnalyses, technicalSolution.surveyStartedAt]);
+
   const aiSurveyCompletion = useMemo(
     () => calculateAiSurveyCompletion(aiSurveyPlan, technicalSolution.answers),
     [aiSurveyPlan, technicalSolution.answers]
@@ -1659,19 +1728,10 @@ export default function useEstimate() {
   const autoCalculateAiSurveyAnswer = (questionId) => {
     const question = (aiSurveyPlan?.allQuestions || []).find((item) => item.id === questionId);
     if (!question?.autoCalculate) return null;
-
-    if (question.autoCalculate === "aps-zksps-zones") {
-      const nextValue = estimateSurveyZoneCount({
-        systemType: "aps",
-        objectData: surveyPlanObjectData,
-        zones,
-        photoAnalyses: technicalSolution.photoAnalyses,
-      });
-      updateAiSurveyAnswer(questionId, Math.max(nextValue || 1, 1));
-      return Math.max(nextValue || 1, 1);
-    }
-
-    return null;
+    const nextValue = getAutoCalculatedSurveyAnswer(question);
+    if (nextValue === undefined || nextValue === null) return null;
+    updateAiSurveyAnswer(questionId, nextValue);
+    return nextValue;
   };
 
   const analyzeAiSurveyPhoto = async (prompt, fileInput) => {

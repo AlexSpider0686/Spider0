@@ -443,10 +443,17 @@ function buildManagementPlan({
   }
 
   let armCount = Math.max(mayUseArmOnly ? safeCeil(normalizedOperatorLoad, 1) : 1, serverCount > 0 ? 1 : 0);
-  if (
-    (mayUseArmOnly && normalizedOperatorLoad > 1.05) ||
-    (serverCount > 0 && (distributedArchitecture || normalizedOperatorLoad > 1.2 || activeSystemTypes.length >= 5 || heavyLoad))
-  ) {
+  const secondArmRequiredForServerMode =
+    distributedArchitecture ||
+    activeSystemTypes.length >= 5 ||
+    normalizedOperatorLoad > (lifeSafetySystem ? 1.55 : 1.2) ||
+    (heavyLoad && !lifeSafetySystem) ||
+    (lifeSafetySystem &&
+      (totalAreaM2 >= profile.serverRequiredArea * 1.9 ||
+        totalFloors >= profile.serverRequiredFloors + 3 ||
+        integrationPoints >= profile.armIntegrationLimit * 2.5));
+
+  if ((mayUseArmOnly && normalizedOperatorLoad > 1.05) || (serverCount > 0 && secondArmRequiredForServerMode)) {
     armCount += 1;
   }
   armCount = clamp(armCount, 1, profile.maxArms);
