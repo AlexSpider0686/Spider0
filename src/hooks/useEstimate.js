@@ -3,7 +3,7 @@ import { DEFAULT_BUDGET, DEFAULT_SYSTEM, DEFAULT_ZONE, OBJECT_TYPES, SYSTEM_TYPE
 import { buildEstimateRows, downloadCsv, num, toNumber } from "../lib/estimate";
 import { calculateEstimateEngine } from "../lib/estimateEngine";
 import { buildZonesFromPreset, normalizeZoneAreas, rebalanceZoneAreasWithLocks, validateZoneDistribution } from "../lib/zoneEngine";
-import { fetchPricesByRequests, fetchVendorPrices, summarizePriceSnapshot } from "../lib/priceCollector";
+import { buildProjectPriceRequests, fetchPricesByRequests, fetchVendorPrices, summarizePriceSnapshot } from "../lib/priceCollector";
 import { VENDOR_EQUIPMENT } from "../config/vendorConfig";
 import { DEFAULT_REGION_NAME, getRegionCoef } from "../config/regionsConfig";
 import { validateEstimateInput } from "../lib/input-normalization";
@@ -712,6 +712,9 @@ export default function useEstimate() {
 
   const refreshVendorPricing = async (system) => {
     const apsSnapshot = apsProjectSnapshots?.[system?.id];
+    const systemIndex = systems.findIndex((item) => item.id === system?.id);
+    const targetedRequests =
+      systemIndex >= 0 ? buildProjectPriceRequests(system, baseSystemResults?.[systemIndex] || systemResults?.[systemIndex]) : [];
     setVendorComparisonsBySystem((prev) => removeById(prev, system?.id));
     setVendorPricingProgressBySystem((prev) => ({
       ...prev,
@@ -829,6 +832,7 @@ export default function useEstimate() {
 
     try {
       const snapshot = await fetchVendorPrices(system.type, system.vendor, {
+        requests: targetedRequests,
         timeoutMs: 180000,
         onProgress: (progress) => {
           const processed = Number(progress?.processed || 0);
@@ -885,9 +889,8 @@ export default function useEstimate() {
   };
 
   const refreshAllVendorPricing = async () => {
-    for (const system of systems) {
-      await refreshVendorPricing(system);
-    }
+    const systemsSnapshot = [...systems];
+    await Promise.allSettled(systemsSnapshot.map((system) => refreshVendorPricing(system)));
     return true;
   };
 

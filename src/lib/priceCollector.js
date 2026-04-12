@@ -263,6 +263,101 @@ export function buildPriceRequests(systemType, vendorName) {
   });
 }
 
+const ITEM_CODE_TO_MARKET_KEY = {
+  CAM: "camera",
+  NVR: "recorder",
+  HDD: "hdd",
+  SW: "switch",
+  CTRL: "controller",
+  SEN: "sensor",
+  DET: "detector",
+  PANEL: "panel",
+  SPK: "speaker",
+  AMP: "amplifier",
+  SRV: "recorder",
+  ARM: "controller",
+};
+
+const EXACT_PRODUCT_PATHS = {
+  skud: {
+    Bastion: {
+      "SKAT AC 02NET PACS": "/products/8885",
+      "SPRUT PACS-02NET": "/products/553",
+      "SPRUT PACS-01SA": "/products/554",
+      "SPRUT Access Server": "/products/skat-ac-soft",
+      "SPRUT Access Server Compact": "/products/skat-ac-soft",
+      "SPRUT Access Server Cluster": "/products/skat-ac-soft",
+      "SPRUT Access Client": "/products/skat-ac-soft",
+      "SPRUT Access Operator Station": "/products/skat-ac-soft",
+      "SPRUT Access Dispatch ARM": "/products/skat-ac-soft",
+    },
+  },
+};
+
+function resolveExactSourcePath(systemType, vendorName, model) {
+  return EXACT_PRODUCT_PATHS?.[systemType]?.[vendorName]?.[String(model || "").trim()] || "";
+}
+
+function buildPrimaryArticleToken(value) {
+  const article = extractArticleTokens(value)
+    .filter((token) => token.length >= 7)
+    .sort((left, right) => right.length - left.length)[0];
+  return article || "";
+}
+
+function buildProjectRequestQuery(vendorName, item = {}) {
+  return dedupeStrings([
+    shortenSearchText(`${vendorName} ${item.model || ""}`, 96),
+    shortenSearchText(`${vendorName} ${item.name || ""}`, 96),
+    shortenSearchText(item.model || "", 80),
+    shortenSearchText(item.name || "", 80),
+  ])[0] || shortenSearchText(`${vendorName} ${item.model || item.name || ""}`, 96);
+}
+
+export function buildProjectPriceRequests(system, systemResult) {
+  const systemType = String(system?.type || "").trim().toLowerCase();
+  const vendorName = String(system?.vendor || "").trim();
+  if (!systemType || !vendorName) return [];
+
+  const source = getManufacturerSource(systemType, vendorName);
+  const detailRows = Array.isArray(systemResult?.equipmentData?.details) ? systemResult.equipmentData.details : [];
+  const keyRows = detailRows.filter((item) => item?.model && item?.unitPrice > 0);
+
+  return keyRows.map((item, index) => {
+    const searchQuery = buildProjectRequestQuery(vendorName, item);
+    const sourcePath = resolveExactSourcePath(systemType, vendorName, item?.model);
+    const manufacturerUrls = buildManufacturerSearchTargets(
+      source,
+      {
+        label: item?.name || item?.label || item?.model || `position_${index + 1}`,
+        searchTerm: item?.model || item?.name || "",
+        sourcePath,
+      },
+      searchQuery
+    );
+    const sourceUrls = buildSourceTargets(source, { sourcePath }, [searchQuery, item?.model, item?.name], manufacturerUrls);
+    const itemCode = String(item?.code || "").trim().toUpperCase();
+
+    return {
+      key: `${systemType}:${vendorName}:${itemCode || index}:${String(item?.model || item?.name || "").trim()}`,
+      equipmentKey: ITEM_CODE_TO_MARKET_KEY[itemCode] || itemCode.toLowerCase() || `item_${index + 1}`,
+      equipmentLabel: String(item?.model || item?.name || item?.label || `Позиция ${index + 1}`).trim(),
+      sourceUrls,
+      manufacturerWebsite: source?.website || "",
+      fallbackPrice: Number(item?.unitPrice) || null,
+      influenceWeight: item?.isKey ? 1 : 0.6,
+      searchQuery,
+      modelToken: String(item?.model || "").trim(),
+      primaryArticleToken: buildPrimaryArticleToken(item?.model || item?.name || ""),
+      unit: item?.unit || "шт",
+      kind: "equipment",
+      itemCode,
+      projectModel: String(item?.model || "").trim(),
+      projectName: String(item?.name || item?.label || "").trim(),
+    };
+  });
+}
+
 function buildApiEndpoints() {
   const fromEnv =
     typeof import.meta !== "undefined" && import.meta?.env ? import.meta.env.VITE_PRICE_API_URL : undefined;
@@ -566,7 +661,8 @@ export async function fetchPricesByRequests(requests = [], options = {}) {
 }
 
 export async function fetchVendorPrices(systemType, vendorName, options = {}) {
-  const requests = buildPriceRequests(systemType, vendorName);
+  const requests =
+    Array.isArray(options?.requests) && options.requests.length ? options.requests : buildPriceRequests(systemType, vendorName);
   const isAlarmSystem = systemType === "sots" || systemType === "aps" || systemType === "soue";
   const snapshot = await fetchPricesByRequests(requests, {
     ...options,

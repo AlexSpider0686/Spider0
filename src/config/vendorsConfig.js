@@ -422,6 +422,12 @@ MANUFACTURER_SOURCES.skud.Parsec = {
   preferSearch: true,
 };
 
+MANUFACTURER_SOURCES.skud.Bastion = {
+  website: "https://bast.ru",
+  searchWebsite: "https://g1.bast.ru",
+  searchPathTemplates: ["/catalog/kontrol-dostupa/?q={query}", "/search/?q={query}"],
+};
+
 MANUFACTURER_SOURCES.sot["Базовый"] = {
   website: "https://www.hikvision.com",
   supplierTargets: ["https://www.hikvision-shop.ru/search/?q={query}"],

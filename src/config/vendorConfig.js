@@ -149,7 +149,7 @@ export const VENDOR_EQUIPMENT = repairCatalogNode({
     PERCo: { controller: { channels: [1, 2, 4], basePrices: { 1: 16800, 2: 26000, 4: 43800 } } },
     Biosmart: { controller: { channels: [1, 2, 4], basePrices: { 1: 18600, 2: 29500, 4: 49600 } } },
     RusGuard: { controller: { channels: [1, 2, 4], basePrices: { 1: 17100, 2: 27400, 4: 46200 } } },
-    Bastion: { controller: { channels: [1, 2, 4], basePrices: { 1: 15800, 2: 24900, 4: 41800 } } },
+    Bastion: { controller: { channels: [1, 2, 4], basePrices: { 1: 4040, 2: 6000, 4: 12000 } } },
   },
   aps: {
     Базовый: {

@@ -354,6 +354,10 @@ async function exportMpp(payload) {
     } catch {
       // Keep the default message when response parsing fails.
     }
+    if (res.status === 501) {
+      message =
+        "Формат .mpp недоступен в web-контуре: удаленный сервер не может использовать локально установленный Microsoft Project. Для реального .mpp нужен локальный Windows-контур Project.Core.";
+    }
     throw new Error(message);
   }
 

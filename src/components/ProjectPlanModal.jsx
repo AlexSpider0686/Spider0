@@ -4,7 +4,9 @@ import { AlertCircle, CalendarRange, FileSpreadsheet, Presentation, X } from "lu
 function isHostedWebContour() {
   if (typeof window === "undefined") return false;
   const host = String(window.location.hostname || "").toLowerCase();
-  return host.endsWith(".vercel.app");
+  if (!host) return false;
+  if (host === "localhost" || host === "127.0.0.1") return false;
+  return host.endsWith(".vercel.app") || host.endsWith(".amvera.io");
 }
 
 export default function ProjectPlanModal({ open, onClose, onSelectFormat }) {

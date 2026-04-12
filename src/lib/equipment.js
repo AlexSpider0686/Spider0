@@ -37,6 +37,15 @@ const MANAGEMENT_UNIT_DEFAULTS = {
   skud: { serverPrice: 208000, armPrice: 128000 },
 };
 
+const MANAGEMENT_UNIT_VENDOR_OVERRIDES = {
+  skud: {
+    Bastion: {
+      serverPrice: 19000,
+      armPrice: 6000,
+    },
+  },
+};
+
 const CATEGORY_PRICE_GUARDRAILS = {
   cameras: { min: 0.82, max: 1.32 },
   camera: { min: 0.82, max: 1.32 },
@@ -734,9 +743,17 @@ function resolveUnitPrice(basePrice, fallbackUnitPrice, marketRatios, aliasKeys,
   return Math.max(reference * ratio * Math.max(toNumber(priceMultiplier, 1), 0.01), 0);
 }
 
-function resolveManagementUnitPrice(systemType, unitType, marketRatios, priceMultiplier = 1) {
+function resolveManagementUnitPrice(systemType, vendor, unitType, marketRatios, priceMultiplier = 1) {
   const defaults = MANAGEMENT_UNIT_DEFAULTS[systemType] || MANAGEMENT_UNIT_DEFAULTS.ssoi;
-  const basePrice = unitType === "server" ? defaults.serverPrice : defaults.armPrice;
+  const vendorDefaults = MANAGEMENT_UNIT_VENDOR_OVERRIDES?.[systemType]?.[vendor] || null;
+  const effectiveDefaults =
+    vendorDefaults && (vendorDefaults.serverPrice || vendorDefaults.armPrice)
+      ? {
+          serverPrice: toNumber(vendorDefaults.serverPrice, defaults.serverPrice),
+          armPrice: toNumber(vendorDefaults.armPrice, defaults.armPrice),
+        }
+      : defaults;
+  const basePrice = unitType === "server" ? effectiveDefaults.serverPrice : effectiveDefaults.armPrice;
   const aliasKeys = unitType === "server" ? MARKET_KEY_ALIASES.recorder : MARKET_KEY_ALIASES.controller;
   return resolveUnitPrice(basePrice, basePrice, marketRatios, aliasKeys, priceMultiplier);
 }
@@ -758,7 +775,7 @@ function appendManagementInfrastructure(details, systemType, vendor, quantityCon
     managementPlan.modelTier === "enterprise" ? 1.28 : managementPlan.modelTier === "rack" ? 1.14 : managementPlan.modelTier === "compact" ? 0.9 : 1;
 
   if (serverQty > 0) {
-    const unitPrice = resolveManagementUnitPrice(systemType, "server", marketRatios, priceMultiplier * tierMultiplier);
+    const unitPrice = resolveManagementUnitPrice(systemType, vendor, "server", marketRatios, priceMultiplier * tierMultiplier);
     const model = resolveManagementModel(systemType, vendor, "server", managementPlan.modelTier);
     pushItem(details, {
       code: "SRV",
@@ -773,7 +790,7 @@ function appendManagementInfrastructure(details, systemType, vendor, quantityCon
   }
 
   if (armQty > 0) {
-    const unitPrice = resolveManagementUnitPrice(systemType, "arm", marketRatios, priceMultiplier);
+    const unitPrice = resolveManagementUnitPrice(systemType, vendor, "arm", marketRatios, priceMultiplier);
     const model = resolveManagementModel(systemType, vendor, "arm", managementPlan.modelTier);
     pushItem(details, {
       code: "ARM",

@@ -730,9 +730,14 @@ test("management equipment uses vendor-aligned models across all system types", 
       selectedEquipmentParams,
     };
     const result = calculateSystemWithBreakdown(system, zones, DEFAULT_BUDGET, objectData);
-    const managementRow = (result?.equipmentData?.details || []).find((item) => item.code === "SRV");
+    const managementRow =
+      (result?.equipmentData?.details || []).find((item) => item.code === "SRV") ||
+      (scenario.systemType === "skud" ? (result?.equipmentData?.details || []).find((item) => item.code === "ARM") : null);
 
-    assert.ok(managementRow, `${scenario.systemType}/${scenario.vendor} should include a management server row`);
+    assert.ok(
+      managementRow,
+      `${scenario.systemType}/${scenario.vendor} should include a vendor-aligned management row`
+    );
     assert.match(
       String(managementRow.model || ""),
       new RegExp(scenario.expectedModelPart.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"),

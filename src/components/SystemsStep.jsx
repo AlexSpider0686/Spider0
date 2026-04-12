@@ -219,9 +219,9 @@ function buildSourceLinkIndex(result) {
   const index = new Map();
 
   entries.forEach((entry) => {
-    const sourceLink = String((entry?.usedSources || [])[0] || "").trim();
+    const sourceLink = String((entry?.usedSources || [])[0] || (entry?.matchedSources || [])[0] || "").trim();
     if (!sourceLink) return;
-    [entry?.equipmentLabel, entry?.equipmentKey].filter(Boolean).forEach((rawKey) => {
+    [entry?.equipmentLabel, entry?.equipmentKey, entry?.projectModel, entry?.projectName, entry?.modelToken].filter(Boolean).forEach((rawKey) => {
       const key = String(rawKey).trim().toLowerCase();
       if (key && !index.has(key)) {
         index.set(key, sourceLink);
@@ -255,15 +255,7 @@ function buildTechnicalSpecSourceMeta(row, result, system, manufacturerWebsite =
     };
   }
 
-  const searchUrl = buildSearchLink(row?.model || row?.name || "");
   const sourceLabel = TECHNICAL_SOURCE_LABELS[row?.source] || (row?.source === "survey_ai" ? "AI" : "—");
-  if (searchUrl) {
-    return {
-      label: `${TECHNICAL_SOURCE_LABELS[row?.source] || "поиск"} / поиск позиции`,
-      url: searchUrl,
-    };
-  }
-
   return {
     label: sourceLabel,
     url: "",
@@ -620,7 +612,7 @@ export default function SystemsStep({
           const marketMetrics = summarizePriceSnapshot(displaySnapshot);
           const pricedSourceCount = marketMetrics.pricedSourceCount;
           const checkedSourceCount = marketMetrics.checkedSourceCount;
-          const checkedSourceHosts = marketMetrics.checkedSourceHosts.slice(0, 10);
+          const checkedSourceHosts = marketMetrics.checkedSourceHosts;
           const recheckRequiredCount = marketMetrics.recheckRequiredCount;
           const avgConfidence = marketMetrics.confidencePercent;
           const strategy =
@@ -1471,14 +1463,14 @@ export default function SystemsStep({
                     <table>
                       <thead>
                         <tr>
-                          <th>РџРѕР·РёС†РёСЏ</th>
-                          <th>РљР°С‚РµРіРѕСЂРёСЏ</th>
-                          <th>РСЃС‚РѕС‡РЅРёРє</th>
-                          <th>РћСЃРЅРѕРІР°РЅРёРµ</th>
-                          <th>РљРѕР»-РІРѕ</th>
-                          <th>Р•Рґ. РёР·Рј</th>
-                          <th>Р¦РµРЅР°</th>
-                          <th>РЎСѓРјРјР°</th>
+                          <th>Позиция</th>
+                          <th>Категория</th>
+                          <th>Источник</th>
+                          <th>Основание</th>
+                          <th>Кол-во</th>
+                          <th>Ед. изм</th>
+                          <th>Цена</th>
+                          <th>Сумма</th>
                         </tr>
                       </thead>
                       <tbody>
