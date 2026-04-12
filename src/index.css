@@ -1505,6 +1505,13 @@ body.ai-survey-open .object-photo-card {
   line-height: 1.35;
 }
 
+.spec-price-warning {
+  margin: 0 0 10px;
+  color: #163a63;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .travel-stay-grid {
   display: grid;
   gap: 10px;
@@ -1675,6 +1682,11 @@ body.ai-survey-open .object-photo-card {
 
 .warn-inline {
   color: #dc2626;
+  font-weight: 700;
+}
+
+.price-over-manufacturer {
+  color: var(--danger);
   font-weight: 700;
 }
 

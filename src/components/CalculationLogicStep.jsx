@@ -4,6 +4,7 @@ import { LABOR_MARKET_GUARDRAILS, LABOR_UNIT_RATES } from "../config/costModelCo
 import { num, rub, toNumber } from "../lib/estimate";
 import { buildCoefficientLayer } from "../lib/coefficient-engine";
 import { repairReactTextTree } from "../lib/repairReactTree";
+import { repairUtf8Cp1251Mojibake } from "../lib/textEncoding";
 
 function downloadCsvFile(fileName, content) {
   if (typeof window === "undefined") return;
@@ -19,7 +20,7 @@ function downloadCsvFile(fileName, content) {
 }
 
 function csvCell(value) {
-  const text = String(value ?? "");
+  const text = repairUtf8Cp1251Mojibake(String(value ?? ""));
   if (/[",;\n]/.test(text)) {
     return `"${text.replace(/"/g, '""')}"`;
   }
@@ -36,6 +37,24 @@ function formatSourceHost(url) {
   }
 }
 
+function isGenericSourceUrl(url) {
+  const value = String(url || "").trim();
+  if (!value) return true;
+  try {
+    const parsed = new URL(value);
+    const pathname = parsed.pathname.toLowerCase();
+    const query = parsed.search.toLowerCase();
+    return pathname.includes("/search") || pathname.includes("/catalog") || query.includes("q=") || query.includes("search=");
+  } catch {
+    return /search|catalog/i.test(value);
+  }
+}
+
+function pickBestSourceUrl(candidateUrls = []) {
+  const urls = [...new Set((candidateUrls || []).map((item) => String(item || "").trim()).filter(Boolean))];
+  return urls.find((url) => !isGenericSourceUrl(url)) || urls[0] || "";
+}
+
 function normalizeMatchKey(value) {
   return String(value || "").trim().toLowerCase();
 }
@@ -50,6 +69,10 @@ function coef(value) {
 
 function getSystemLabel(systemType) {
   return SYSTEM_TYPES.find((item) => item.code === systemType)?.name || systemType;
+}
+
+function t(value) {
+  return repairUtf8Cp1251Mojibake(String(value ?? ""));
 }
 
 function formatHostList(hosts = []) {
@@ -236,58 +259,92 @@ export default function CalculationLogicStep({
       (systemResults || []).flatMap((row) => {
         const rates = row?.laborDetails?.unitRates || {};
         const breakdown = row?.laborDetails?.workBreakdown || {};
+        const chargePercents = row?.laborDetails?.chargePercents || {};
+        const charges = row?.laborDetails?.workChargesBeforeRegion || {};
         const systemLabel = row?.systemName || getSystemLabel(row?.systemType);
         const entries = [
-          ["РЎРњР ", "РњРѕРЅС‚Р°Р¶ РѕСЃРЅРѕРІРЅС‹С… СЌР»РµРјРµРЅС‚РѕРІ", row?.primaryUnitLabel || "РµРґ.", breakdown.primaryUnits, rates.mountPrimary],
-          ["РЎРњР ", "РњРѕРЅС‚Р°Р¶ РєРѕРЅС‚СЂРѕР»Р»РµСЂРѕРІ Рё СѓР·Р»РѕРІ", "РµРґ.", breakdown.controllerUnits, rates.controllerMount],
-          ["РЎРњР ", "РљР°Р±РµР»СЊРЅС‹Рµ СЂР°Р±РѕС‚С‹", "Рј", breakdown.cableLengthM, rates.cablePerMeter],
-          ["РџРќР ", "РџРќР  РѕСЃРЅРѕРІРЅС‹С… СЌР»РµРјРµРЅС‚РѕРІ", row?.primaryUnitLabel || "РµРґ.", breakdown.primaryUnits, rates.pnrPrimary],
-          ["РџРќР ", "РџРќР  Р°РєС‚РёРІРЅС‹С… СЌР»РµРјРµРЅС‚РѕРІ", "РµРґ.", breakdown.activeElements, rates.pnrActiveElement],
-          ["РРЅС‚РµРіСЂР°С†РёСЏ", "РРЅС‚РµРіСЂР°С†РёРѕРЅРЅС‹Рµ СЂР°Р±РѕС‚С‹", "С‚РѕС‡РєР°", breakdown.integrationPoints, rates.integrationPoint],
-          ["РљРќРЎ", "РњРѕРЅС‚Р°Р¶ РљРќРЎ РїРѕ С‚СЂР°СЃСЃРµ", "Рј", breakdown.knsLengthM, rates.knsPerMeter],
-          ["РљРќРЎ", "Р Р°Р±РѕС‡РёРµ РµРґРёРЅРёС†С‹ РљРќРЎ", "СѓСЃР». РµРґ.", breakdown.knsWorkUnits, toNumber(rates.knsPerMeter, 0) * 0.22],
-          ["РџСЂРѕРµРєС‚РёСЂРѕРІР°РЅРёРµ", "РџСЂРѕРµРєС‚РЅС‹Рµ СЂР°Р±РѕС‚С‹", "С‡", row?.designHours, rates.designHour],
+          ["base", "СМР", "Монтаж основных элементов", row?.primaryUnitLabel || "ед.", breakdown.primaryUnits, rates.mountPrimary, 0, "Количество основных элементов × базовая ставка монтажа"],
+          ["base", "СМР", "Монтаж контроллеров и узлов", "ед.", breakdown.controllerUnits, rates.controllerMount, 0, "Количество контроллеров/узлов × ставка монтажа контроллера"],
+          ["base", "СМР", "Кабельные работы", "м", breakdown.cableLengthM, rates.cablePerMeter, 0, "Длина трасс × ставка кабельных работ"],
+          ["base", "ПНР", "ПНР основных элементов", row?.primaryUnitLabel || "ед.", breakdown.primaryUnits, rates.pnrPrimary, 0, "Количество основных элементов × ставка ПНР"],
+          ["base", "ПНР", "ПНР активных элементов", "ед.", breakdown.activeElements, rates.pnrActiveElement, 0, "Количество активных элементов × ставка ПНР активного элемента"],
+          ["base", "Интеграция", "Интеграционные работы", "точка", breakdown.integrationPoints, rates.integrationPoint, 0, "Количество точек интеграции × ставка интеграции"],
+          ["base", "КНС", "Монтаж КНС по трассе", "м", breakdown.knsLengthM, rates.knsPerMeter, 0, "Длина КНС × ставка КНС"],
+          ["base", "КНС", "Рабочие единицы КНС", "усл. ед.", breakdown.knsWorkUnits, toNumber(rates.knsPerMeter, 0) * 0.22, 0, "Рабочие единицы КНС × 22% от ставки КНС"],
+          ["base", "Проектирование", "Проектные работы", "ч", row?.designHours, rates.designHour, 0, "Проектные часы × базовая часовая ставка"],
+          ["coefficient", "Работы", "Коэффициент условий и статуса", "коэф.", 1, Math.max(toNumber(breakdown.conditionFactor, 1) * toNumber(breakdown.exploitedFactor, 1) - 1, 0), toNumber(breakdown.computedWorkBase, 0), "База работ × (коэффициент условий × коэффициент статуса - 1)"],
+          ["charge", "Начисления", "ОПР", "%", toNumber(chargePercents.overhead, 0), 0.01, toNumber(row?.laborDetails?.workAfterConditions, 0), "Работы после условий × % ОПР"],
+          ["charge", "Начисления", "ФОТ/налоги", "%", toNumber(chargePercents.payrollTaxes, 0), 0.01, toNumber(row?.laborDetails?.workAfterConditions, 0), "Работы после условий × % ФОТ/налогов"],
+          ["charge", "Начисления", "Утилизация", "%", toNumber(chargePercents.utilization, 0), 0.01, toNumber(row?.laborDetails?.workAfterConditions, 0), "Работы после условий × % утилизации"],
+          ["charge", "Начисления", "СИЗ", "%", toNumber(chargePercents.ppe, 0), 0.01, toNumber(row?.laborDetails?.workAfterConditions, 0), "Работы после условий × % СИЗ"],
+          ["charge", "Начисления", "АХР", "%", toNumber(chargePercents.admin, 0), 0.01, toNumber(row?.laborDetails?.workAfterConditions, 0), "Работы после условий × % АХР"],
+          ["coefficient", "Регион", "Региональный коэффициент", "коэф.", 1, Math.max(toNumber(breakdown.regionalFactor, 1) - 1, 0), toNumber(row?.laborDetails?.workTotalBeforeRegion, 0), "Работы до регионального коэффициента × (региональный коэффициент - 1)"],
         ];
 
         return entries
-          .map(([workGroup, workType, unit, qtyRaw, rateRaw], index) => {
+          .map(([rowType, workGroup, workType, unit, qtyRaw, rateRaw, baseRaw, formulaText], index) => {
             const qty = toNumber(qtyRaw, 0);
             const rate = toNumber(rateRaw, 0);
+            const base = toNumber(baseRaw, 0);
+            const baseAmount = rowType === "base" ? qty * rate : base * rate * qty;
+            const amountFromCharges =
+              workType === "ОПР"
+                ? toNumber(charges.overhead, baseAmount)
+                : workType === "ФОТ/налоги"
+                  ? toNumber(charges.payrollTaxes, baseAmount)
+                  : workType === "Утилизация"
+                    ? toNumber(charges.utilization, baseAmount)
+                    : workType === "СИЗ"
+                      ? toNumber(charges.ppe, baseAmount)
+                      : workType === "АХР"
+                        ? toNumber(charges.admin, baseAmount)
+                        : baseAmount;
             return {
               id: `${row?.systemId || row?.systemType}-${index}`,
               systemLabel,
               systemType: row?.systemType || "",
+              rowType,
               workGroup,
               workType,
               unit,
               qty,
               rate,
-              baseAmount: qty * rate,
-              formula: `${num(qty, unit === "Рј" || unit === "С‡" || unit === "СѓСЃР». РµРґ." ? 1 : 0)} Г— ${rub(rate)}`,
-              source: row?.laborDetails?.modelSource?.unitRatesConfig || "Р’РЅСѓС‚СЂРµРЅРЅСЏСЏ РјРѕРґРµР»СЊ РµРґРёРЅРёС‡РЅС‹С… СЂР°СЃС†РµРЅРѕРє",
+              rateBase: base,
+              baseAmount: amountFromCharges,
+              formula:
+                rowType === "base"
+                  ? `${num(qty, unit === "м" || unit === "ч" || unit === "усл. ед." ? 1 : 0)} × ${rub(rate)}`
+                  : base > 0
+                    ? `${rub(base)} × ${num(qty, unit === "%" ? 2 : 1)} × ${num(rate * 100, 2)}%`
+                    : formulaText,
+              source: row?.laborDetails?.modelSource?.unitRatesConfig || "Внутренняя модель единичных расценок",
+              basis: formulaText,
             };
           })
-          .filter((item) => item.qty > 0 && item.rate > 0);
+          .filter((item) => item.rate > 0 && (item.rowType !== "base" || item.qty > 0) && item.baseAmount > 0);
       }),
     [systemResults]
   );
   const exportWorkUnitRates = () => {
     if (!workUnitRateRows.length) return;
     const rows = [
-      ["РЎРёСЃС‚РµРјР°", "РљРѕРґ СЃРёСЃС‚РµРјС‹", "Р“СЂСѓРїРїР° СЂР°Р±РѕС‚", "Р’РёРґ СЂР°Р±РѕС‚", "Р•Рґ. РёР·Рј.", "РљРѕР»РёС‡РµСЃС‚РІРѕ", "Р‘Р°Р·РѕРІР°СЏ РµРґРёРЅРёС‡РЅР°СЏ СЂР°СЃС†РµРЅРєР°, СЂСѓР±.", "Р‘Р°Р·РѕРІР°СЏ СЃС‚РѕРёРјРѕСЃС‚СЊ, СЂСѓР±.", "Р¤РѕСЂРјСѓР»Р°", "РСЃС‚РѕС‡РЅРёРє СЂР°СЃС†РµРЅРєРё"]
+      ["Система", "Код системы", "Тип строки", "Группа работ", "Вид работ", "Ед. изм.", "Количество/норматив", "База начисления, руб.", "Базовая единичная расценка", "Стоимость элемента, руб.", "Формула", "Основание", "Источник расценки"]
         .map(csvCell)
         .join(";"),
       ...workUnitRateRows.map((row) =>
         [
           row.systemLabel,
           row.systemType,
+          row.rowType,
           row.workGroup,
           row.workType,
           row.unit,
-          num(row.qty, row.unit === "Рј" || row.unit === "С‡" || row.unit === "СѓСЃР». РµРґ." ? 1 : 0),
+          num(row.qty, row.unit === "м" || row.unit === "ч" || row.unit === "усл. ед." ? 1 : 0),
+          num(row.rateBase, 2),
           num(row.rate, 2),
           num(row.baseAmount, 2),
           row.formula,
+          row.basis,
           row.source,
         ]
           .map(csvCell)
@@ -402,7 +459,13 @@ export default function CalculationLogicStep({
                   .filter(Boolean)
                   .map((candidate) => marketIndex.get(candidate))
                   .find(Boolean) || null;
-              const sourceUrl = String((item?.usedSources || [])[0] || item?.sourceUrl || (marketEntry?.usedSources || [])[0] || "").trim();
+              const sourceUrl = pickBestSourceUrl([
+                ...(item?.matchedSources || []),
+                ...(item?.usedSources || []),
+                item?.sourceUrl,
+                ...(marketEntry?.matchedSources || []),
+                ...(marketEntry?.usedSources || []),
+              ]);
 
               return {
                 name: item?.name || item?.code || "РџРѕР·РёС†РёСЏ",
@@ -549,7 +612,7 @@ export default function CalculationLogicStep({
             <strong> {rub(detailedLaborBreakdown.totalMarkerFloor)}</strong>, AI floor <strong>{rub(detailedLaborBreakdown.totalNeuralFloor)}</strong>.
           </p>
           <div className="aps-ops-header" style={{ marginBottom: 12 }}>
-            <span className="hint-inline">РљРЅРѕРїРєР° РІС‹РіСЂСѓР¶Р°РµС‚ Р±Р°Р·РѕРІС‹Рµ РµРґРёРЅРёС‡РЅС‹Рµ СЂР°СЃС†РµРЅРєРё РїРѕ РІСЃРµРј РІРёРґР°Рј СЂР°Р±РѕС‚, СЂРµР°Р»СЊРЅРѕ СѓС‡С‚РµРЅРЅС‹Рј РІ С‚РµРєСѓС‰РµРј РїСЂРѕРµРєС‚Рµ.</span>
+            <span className="hint-inline">Кнопка выгружает все составные элементы стоимости работ: базовые операции, базу начисления, коэффициенты и отдельные начисления по текущему проекту.</span>
             <button className="ghost-btn" type="button" onClick={exportWorkUnitRates} disabled={!workUnitRateRows.length}>
               Р’С‹РіСЂСѓР·РёС‚СЊ С†РµРЅС‹
             </button>
@@ -560,22 +623,26 @@ export default function CalculationLogicStep({
                 <thead>
                   <tr>
                     <th>РЎРёСЃС‚РµРјР°</th>
+                    <th>РўРёРї СЃС‚СЂРѕРєРё</th>
                     <th>Р“СЂСѓРїРїР°</th>
                     <th>Р’РёРґ СЂР°Р±РѕС‚</th>
                     <th>РљРѕР»-РІРѕ</th>
                     <th>Р•Рґ.</th>
+                    <th>Р‘Р°Р·Р° РЅР°С‡РёСЃР»РµРЅРёСЏ</th>
                     <th>Р Р°СЃС†РµРЅРєР°</th>
-                    <th>Р‘Р°Р·Р°</th>
+                    <th>РЎС‚РѕРёРјРѕСЃС‚СЊ СЌР»РµРјРµРЅС‚Р°</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {workUnitRateRows.slice(0, 18).map((row) => (
+                  {workUnitRateRows.slice(0, 24).map((row) => (
                     <tr key={row.id}>
                       <td>{row.systemLabel}</td>
+                      <td>{row.rowType}</td>
                       <td>{row.workGroup}</td>
                       <td>{row.workType}</td>
-                      <td>{num(row.qty, row.unit === "Рј" || row.unit === "С‡" || row.unit === "СѓСЃР». РµРґ." ? 1 : 0)}</td>
+                      <td>{num(row.qty, row.unit === "м" || row.unit === "ч" || row.unit === "усл. ед." ? 1 : 0)}</td>
                       <td>{row.unit}</td>
+                      <td>{row.rateBase ? rub(row.rateBase) : "—"}</td>
                       <td>{rub(row.rate)}</td>
                       <td>{rub(row.baseAmount)}</td>
                     </tr>

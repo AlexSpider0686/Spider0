@@ -140,6 +140,44 @@ function toHost(url) {
   }
 }
 
+function getManufacturerHosts(source) {
+  return [...new Set([source?.website, source?.searchWebsite].map(toHost).filter(Boolean))];
+}
+
+function isGenericSourceUrl(url) {
+  const value = String(url || "").trim();
+  if (!value) return true;
+  try {
+    const parsed = new URL(value);
+    const pathname = parsed.pathname.toLowerCase();
+    const query = parsed.search.toLowerCase();
+    if (pathname === "/" || pathname === "") return true;
+    if (pathname.includes("/search") || pathname.includes("/catalog") || pathname.includes("/products/")) {
+      if (query.includes("q=") || query.includes("s=") || pathname.endsWith("/catalog") || pathname.endsWith("/products")) return true;
+    }
+    if (query.includes("q=") || query.includes("s=") || query.includes("search=")) return true;
+    return false;
+  } catch {
+    return /search|catalog/i.test(value);
+  }
+}
+
+function scoreSourceUrl(url, manufacturerHosts = []) {
+  const host = toHost(url);
+  const manufacturerMatch = manufacturerHosts.includes(host);
+  const generic = isGenericSourceUrl(url);
+  return (manufacturerMatch ? 100 : 0) + (generic ? 0 : 10) + Math.min(String(url || "").length / 50, 5);
+}
+
+export function pickBestSourceUrl(candidateUrls = [], manufacturerHosts = []) {
+  const unique = [...new Set((candidateUrls || []).map((item) => String(item || "").trim()).filter(Boolean))];
+  const exactFirst = unique
+    .map((url) => ({ url, score: scoreSourceUrl(url, manufacturerHosts) }))
+    .sort((left, right) => right.score - left.score);
+  const best = exactFirst.find((item) => !isGenericSourceUrl(item.url)) || exactFirst[0];
+  return best?.url || "";
+}
+
 function buildSearchLink(query) {
   const normalized = String(query || "").trim();
   return normalized ? `https://www.tinko.ru/search/?q=${encodeURIComponent(normalized)}` : "";
@@ -219,7 +257,7 @@ function buildSourceLinkIndex(result) {
   const index = new Map();
 
   entries.forEach((entry) => {
-    const sourceLink = String((entry?.usedSources || [])[0] || (entry?.matchedSources || [])[0] || "").trim();
+    const sourceLink = pickBestSourceUrl([...(entry?.matchedSources || []), ...(entry?.usedSources || []), entry?.sourceUrl]);
     if (!sourceLink) return;
     [entry?.equipmentLabel, entry?.equipmentKey, entry?.projectModel, entry?.projectName, entry?.modelToken].filter(Boolean).forEach((rawKey) => {
       const key = String(rawKey).trim().toLowerCase();
@@ -232,8 +270,9 @@ function buildSourceLinkIndex(result) {
   return index;
 }
 
-function resolveEquipmentSourceLink(item, result, system, manufacturerWebsite = "") {
-  const ownLink = String((item?.usedSources || [])[0] || item?.sourceUrl || "").trim();
+function resolveEquipmentSourceLink(item, result, system, manufacturerSource = {}) {
+  const manufacturerHosts = getManufacturerHosts(manufacturerSource);
+  const ownLink = pickBestSourceUrl([...(item?.matchedSources || []), ...(item?.usedSources || []), item?.sourceUrl], manufacturerHosts);
   if (ownLink) return ownLink;
 
   const linkIndex = buildSourceLinkIndex(result);
@@ -246,8 +285,44 @@ function resolveEquipmentSourceLink(item, result, system, manufacturerWebsite = 
   return "";
 }
 
-function buildTechnicalSpecSourceMeta(row, result, system, manufacturerWebsite = "") {
-  const directLink = resolveEquipmentSourceLink(row, result, system, manufacturerWebsite);
+function findMatchingMarketEntry(row, result) {
+  const marketEntries = Array.isArray(result?.equipmentData?.marketEntries) ? result.equipmentData.marketEntries : [];
+  const keys = [row?.name, row?.label, row?.model, row?.code, `${row?.name || ""} ${row?.model || ""}`]
+    .map((value) => String(value || "").trim().toLowerCase())
+    .filter(Boolean);
+  return (
+    keys
+      .map((key) =>
+        marketEntries.find((entry) =>
+          [entry?.equipmentLabel, entry?.equipmentKey, entry?.projectModel, entry?.projectName, entry?.modelToken]
+            .map((value) => String(value || "").trim().toLowerCase())
+            .filter(Boolean)
+            .includes(key)
+        )
+      )
+      .find(Boolean) || null
+  );
+}
+
+export function buildTechnicalSpecPriceMeta(row, result, manufacturerSource = {}) {
+  const manufacturerHosts = getManufacturerHosts(manufacturerSource);
+  const marketEntry = findMatchingMarketEntry(row, result);
+  const manufacturerMatched =
+    marketEntry && manufacturerHosts.length
+      ? manufacturerHosts.some((host) =>
+          [...(marketEntry?.matchedSourceHosts || []), ...(marketEntry?.usedSourceHosts || [])].map((item) => String(item || "").trim()).includes(host)
+        )
+      : false;
+  const manufacturerUnitPrice = manufacturerMatched ? toNumber(marketEntry?.price, 0) : 0;
+  const rowUnitPrice = toNumber(row?.unitPrice, 0);
+  return {
+    manufacturerUnitPrice,
+    isAboveManufacturer: manufacturerUnitPrice > 0 && rowUnitPrice > manufacturerUnitPrice * 1.01,
+  };
+}
+
+function buildTechnicalSpecSourceMeta(row, result, system, manufacturerSource = {}) {
+  const directLink = resolveEquipmentSourceLink(row, result, system, manufacturerSource);
   if (directLink) {
     return {
       label: toHost(directLink) || "ссылка",
@@ -593,8 +668,8 @@ export default function SystemsStep({
           const snapshot = projectBasedMode ? apsSnapshot?.priceSnapshot || vendorPriceSnapshots?.[system.id] : vendorPriceSnapshots?.[system.id];
           const unitAuditRows = (apsSnapshot?.items || []).filter((item) => (item?.unitAudit?.status || "unknown") !== "match");
           const manufacturerSource = getManufacturerSource(system.type, system.vendor);
-            const manufacturerWebsite = manufacturerSource?.website || "";
-            const manufacturerHost = toHost(manufacturerWebsite);
+            const manufacturerHosts = getManufacturerHosts(manufacturerSource);
+            const manufacturerHost = manufacturerHosts[0] || "";
             const isRefreshing = Boolean(refreshingBySystem[system.id]);
             const isComparing = Boolean(comparingBySystem[system.id]);
             const isApsImportLoading = apsStatus?.state === "loading";
@@ -619,13 +694,13 @@ export default function SystemsStep({
             displaySnapshot?.entries && displaySnapshot.entries.length
               ? displaySnapshot.entries.map((item) => item.selectionStrategy).filter(Boolean).slice(0, 1)[0] || "average_all_sources"
               : "average_all_sources";
-          const manufacturerChecked = manufacturerHost ? checkedSourceHosts.includes(manufacturerHost) : false;
-          const manufacturerMatchedUrls = manufacturerHost
+          const manufacturerChecked = manufacturerHosts.length ? manufacturerHosts.some((host) => checkedSourceHosts.includes(host)) : false;
+          const manufacturerMatchedUrls = manufacturerHosts.length
             ? [
                 ...new Set(
                   (displaySnapshot?.entries || [])
                     .flatMap((item) => item.matchedSources || item.usedSources || [])
-                    .filter((url) => toHost(url) === manufacturerHost)
+                    .filter((url) => manufacturerHosts.includes(toHost(url)))
                 ),
               ]
             : [];
@@ -1459,6 +1534,17 @@ export default function SystemsStep({
                     </div>
                   ) : null}
 
+                  {(() => {
+                    const hasPricesAboveManufacturer = (technicalRecommendation.specRows || []).some((row) =>
+                      buildTechnicalSpecPriceMeta(row, result, manufacturerSource).isAboveManufacturer
+                    );
+                    return hasPricesAboveManufacturer ? (
+                      <p className="spec-price-warning">
+                        Красным шрифтом выделены цены, которые выше, чем на сайте производителя.
+                      </p>
+                    ) : null;
+                  })()}
+
                   <div className="table-wrap compact ai-configurator-table">
                     <table>
                       <thead>
@@ -1509,7 +1595,7 @@ export default function SystemsStep({
                             <td>{row.category === "equipment" ? "РћР±РѕСЂСѓРґРѕРІР°РЅРёРµ" : "РњР°С‚РµСЂРёР°Р»С‹"}</td>
                             <td>
                               {(() => {
-                                const sourceMeta = buildTechnicalSpecSourceMeta(row, result, system, manufacturerWebsite);
+                                const sourceMeta = buildTechnicalSpecSourceMeta(row, result, system, manufacturerSource);
                                 return sourceMeta.url ? (
                                   <a href={sourceMeta.url} target="_blank" rel="noreferrer" className="hint-inline">
                                     {sourceMeta.label}
@@ -1534,7 +1620,9 @@ export default function SystemsStep({
                               />
                             </td>
                             <td>{row.unit}</td>
-                            <td>{rub(row.unitPrice || 0)}</td>
+                            <td className={buildTechnicalSpecPriceMeta(row, result, manufacturerSource).isAboveManufacturer ? "price-over-manufacturer" : ""}>
+                              {rub(row.unitPrice || 0)}
+                            </td>
                             <td>{rub(row.total || 0)}</td>
                           </tr>
                           );

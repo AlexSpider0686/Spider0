@@ -183,6 +183,16 @@ function toSourceHost(url) {
   }
 }
 
+function getManufacturerHosts(sourceOrRequest = {}) {
+  return [
+    ...new Set(
+      [sourceOrRequest?.manufacturerWebsite, sourceOrRequest?.website, sourceOrRequest?.searchWebsite]
+        .map(toSourceHost)
+        .filter(Boolean)
+    ),
+  ];
+}
+
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
@@ -254,6 +264,7 @@ export function buildPriceRequests(systemType, vendorName) {
       equipmentLabel: item.label,
       sourceUrls,
       manufacturerWebsite: source?.website || "",
+      searchWebsite: source?.searchWebsite || "",
       fallbackPrice: item.fallbackUnitPrice || null,
       influenceWeight: item.influenceWeight,
       searchQuery,
@@ -344,6 +355,7 @@ export function buildProjectPriceRequests(system, systemResult) {
       equipmentLabel: String(item?.model || item?.name || item?.label || `Позиция ${index + 1}`).trim(),
       sourceUrls,
       manufacturerWebsite: source?.website || "",
+      searchWebsite: source?.searchWebsite || "",
       fallbackPrice: Number(item?.unitPrice) || null,
       influenceWeight: item?.isKey ? 1 : 0.6,
       searchQuery,
@@ -545,11 +557,11 @@ export async function fetchPricesByRequests(requests = [], options = {}) {
     const fallback = Number(request?.fallbackPrice);
     const fetchedRaw = Number(result?.price);
     const fetched = normalizeFetchedByUnit(request, fetchedRaw, fallback);
-    const manufacturerHost = toSourceHost(request?.manufacturerWebsite || "");
+    const manufacturerHosts = getManufacturerHosts(request);
     const usedSourceHosts = [...new Set((result?.usedSources || []).map(toSourceHost).filter(Boolean))];
     const fromManufacturerSource =
       (result?.selectionStrategy || "").includes("manufacturer_source_bias") ||
-      (manufacturerHost && usedSourceHosts.includes(manufacturerHost));
+      manufacturerHosts.some((host) => usedSourceHosts.includes(host));
     if (!Number.isFinite(fetched) || fetched <= 0) {
       return {
         price: Number.isFinite(fallback) ? fallback : null,
