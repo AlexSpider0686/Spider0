@@ -598,23 +598,23 @@ export default function CalculationLogicStep({
           </p>
           <p>Р‘Р°Р·Р° СЂР°Р±РѕС‚ РїРѕ С‚РµРєСѓС‰РµРјСѓ СЂР°СЃС‡РµС‚Сѓ: <strong>{rub(totalWorkBase)}</strong>. РџРѕСЃР»Рµ РЅР°С‡РёСЃР»РµРЅРёР№ Рё РєРѕСЌС„С„РёС†РёРµРЅС‚РѕРІ: <strong>{rub(totalWorkWithCharges)}</strong>.</p>
           <p>
-            Р”РµС‚Р°Р»РёР·Р°С†РёСЏ РїРѕ С‚РµРєСѓС‰РµРјСѓ СЂР°СЃС‡РµС‚Сѓ: РЎРњР  <strong>{rub(detailedLaborBreakdown.totalSmr)}</strong>, РџРќР  <strong>{rub(detailedLaborBreakdown.totalPnr)}</strong>,
-            РёРЅС‚РµРіСЂР°С†РёСЏ <strong>{rub(detailedLaborBreakdown.totalIntegration)}</strong>, РљРќРЎ <strong>{rub(detailedLaborBreakdown.totalKns)}</strong>.
+            Детализация по текущему расчету: СМР <strong>{rub(detailedLaborBreakdown.totalSmr)}</strong>, ПНР <strong>{rub(detailedLaborBreakdown.totalPnr)}</strong>,
+            интеграция <strong>{rub(detailedLaborBreakdown.totalIntegration)}</strong>, КНС <strong>{rub(detailedLaborBreakdown.totalKns)}</strong>.
           </p>
           <p>
-            РџРѕСЃР»Рµ РєРѕСЌС„С„РёС†РёРµРЅС‚РѕРІ СѓСЃР»РѕРІРёР№ Рё СЃС‚Р°С‚СѓСЃР° Р·РґР°РЅРёСЏ: <strong>{rub(detailedLaborBreakdown.totalWorkAfterConditions)}</strong>. РќР°С‡РёСЃР»РµРЅРёСЏ:
-            РћРџР  <strong>{rub(detailedLaborBreakdown.totalOverhead)}</strong>, Р¤РћРў <strong>{rub(detailedLaborBreakdown.totalPayrollTaxes)}</strong>,
-            СѓС‚РёР»РёР·Р°С†РёСЏ <strong>{rub(detailedLaborBreakdown.totalUtilization)}</strong>, РЎРР— <strong>{rub(detailedLaborBreakdown.totalPpe)}</strong>,
-            РђРҐР  <strong>{rub(detailedLaborBreakdown.totalAdmin)}</strong>.
+            После коэффициентов условий и статуса здания: <strong>{rub(detailedLaborBreakdown.totalWorkAfterConditions)}</strong>. Начисления:
+            ОПР <strong>{rub(detailedLaborBreakdown.totalOverhead)}</strong>, ФОТ/налоги <strong>{rub(detailedLaborBreakdown.totalPayrollTaxes)}</strong>,
+            утилизация <strong>{rub(detailedLaborBreakdown.totalUtilization)}</strong>, СИЗ <strong>{rub(detailedLaborBreakdown.totalPpe)}</strong>,
+            АХР <strong>{rub(detailedLaborBreakdown.totalAdmin)}</strong>.
           </p>
           <p>
-            Р—Р°С‰РёС‚РЅС‹Рµ РїРѕСЂРѕРіРё Р±Р°Р·С‹: РїРѕ РµРґРёРЅРёС‡РЅС‹Рј СЂР°СЃС†РµРЅРєР°Рј <strong>{rub(detailedLaborBreakdown.totalRateFloor)}</strong>, РїРѕ РјР°СЂРєРµСЂСѓ
+            Защитные пороги базы: по единичным расценкам <strong>{rub(detailedLaborBreakdown.totalRateFloor)}</strong>, по маркеру
             <strong> {rub(detailedLaborBreakdown.totalMarkerFloor)}</strong>, AI floor <strong>{rub(detailedLaborBreakdown.totalNeuralFloor)}</strong>.
           </p>
           <div className="aps-ops-header" style={{ marginBottom: 12 }}>
             <span className="hint-inline">Кнопка выгружает все составные элементы стоимости работ: базовые операции, базу начисления, коэффициенты и отдельные начисления по текущему проекту.</span>
             <button className="ghost-btn" type="button" onClick={exportWorkUnitRates} disabled={!workUnitRateRows.length}>
-              Р’С‹РіСЂСѓР·РёС‚СЊ С†РµРЅС‹
+              Выгрузить цены
             </button>
           </div>
           {workUnitRateRows.length ? (
@@ -622,15 +622,15 @@ export default function CalculationLogicStep({
               <table>
                 <thead>
                   <tr>
-                    <th>РЎРёСЃС‚РµРјР°</th>
-                    <th>РўРёРї СЃС‚СЂРѕРєРё</th>
-                    <th>Р“СЂСѓРїРїР°</th>
-                    <th>Р’РёРґ СЂР°Р±РѕС‚</th>
-                    <th>РљРѕР»-РІРѕ</th>
-                    <th>Р•Рґ.</th>
-                    <th>Р‘Р°Р·Р° РЅР°С‡РёСЃР»РµРЅРёСЏ</th>
-                    <th>Р Р°СЃС†РµРЅРєР°</th>
-                    <th>РЎС‚РѕРёРјРѕСЃС‚СЊ СЌР»РµРјРµРЅС‚Р°</th>
+                    <th>Система</th>
+                    <th>Тип строки</th>
+                    <th>Группа</th>
+                    <th>Вид работ</th>
+                    <th>Кол-во</th>
+                    <th>Ед.</th>
+                    <th>База начисления</th>
+                    <th>Расценка</th>
+                    <th>Стоимость элемента</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -654,33 +654,33 @@ export default function CalculationLogicStep({
           <div className="logic-equipment-list">
             {ratesDigest.map((item) => (
               <p key={`rates-${item.systemType}`}>
-                <strong>{item.systemLabel}:</strong> РјРѕРЅС‚Р°Р¶ РѕСЃРЅРѕРІРЅРѕРіРѕ СЌР»РµРјРµРЅС‚Р° {rub(item.rates.mountPrimary)}, РџРќР  РѕСЃРЅРѕРІРЅРѕРіРѕ СЌР»РµРјРµРЅС‚Р° {rub(item.rates.pnrPrimary)},
-                РјРѕРЅС‚Р°Р¶ РєРѕРЅС‚СЂРѕР»Р»РµСЂР° {rub(item.rates.controllerMount)}, РџРќР  Р°РєС‚РёРІРЅРѕРіРѕ СЌР»РµРјРµРЅС‚Р° {rub(item.rates.pnrActiveElement)}, РєР°Р±РµР»СЊ {rub(item.rates.cablePerMeter)}/Рј,
-                РљРќРЎ {rub(item.rates.knsPerMeter)}/Рј, РёРЅС‚РµРіСЂР°С†РёСЏ {rub(item.rates.integrationPoint)}/С‚РѕС‡РєР°, РїСЂРѕРµРєС‚РёСЂРѕРІР°РЅРёРµ {rub(item.rates.designHour)}/С‡Р°СЃ.
-                РњРёРЅРёРјР°Р»СЊРЅР°СЏ Р±Р°Р·Р° РїРѕ СЃС‚Р°РІРєР°Рј: x{num(item.guard.minBaseFactor, 2)}, РјРёРЅРёРјР°Р»СЊРЅС‹Р№ РёС‚РѕРі РїРѕ РјР°СЂРєРµСЂСѓ: {rub(item.guard.minFinalPerMarker)}.
+                <strong>{item.systemLabel}:</strong> монтаж основного элемента {rub(item.rates.mountPrimary)}, ПНР основного элемента {rub(item.rates.pnrPrimary)},
+                монтаж контроллера {rub(item.rates.controllerMount)}, ПНР активного элемента {rub(item.rates.pnrActiveElement)}, кабель {rub(item.rates.cablePerMeter)}/м,
+                КНС {rub(item.rates.knsPerMeter)}/м, интеграция {rub(item.rates.integrationPoint)}/точка, проектирование {rub(item.rates.designHour)}/час.
+                Минимальная база по ставкам: x{num(item.guard.minBaseFactor, 2)}, минимальный итог по маркеру: {rub(item.guard.minFinalPerMarker)}.
               </p>
             ))}
           </div>
         </article>
 
         <article className="logic-card">
-          <h3>6. Risk Guard AI: РєРѕРЅС‚СЂРѕР»СЊ СЃР±Р°Р»Р°РЅСЃРёСЂРѕРІР°РЅРЅРѕСЃС‚Рё</h3>
-          <p>Р’ СЂР°СЃС‡РµС‚Рµ РµСЃС‚СЊ РѕС‚РґРµР»СЊРЅС‹Р№ AI-РєРѕРЅС‚СѓСЂ, РєРѕС‚РѕСЂС‹Р№ РїРµСЂРµРїСЂРѕРІРµСЂСЏРµС‚ РЎРњР +РџРќР  РЅРµ С‚РѕР»СЊРєРѕ РЅР° РЅРµРґРѕРѕС†РµРЅРµРЅРЅРѕСЃС‚СЊ, РЅРѕ Рё РЅР° РїРµСЂРµРѕС†РµРЅРµРЅРЅРѕСЃС‚СЊ. РћРЅ Р°РЅР°Р»РёР·РёСЂСѓРµС‚ PDF-override, РєР°Р±РµР»СЊРЅСѓСЋ РЅР°СЃС‹С‰РµРЅРЅРѕСЃС‚СЊ, РљРќРЎ, РїР»РѕС‚РЅРѕСЃС‚СЊ СѓР·Р»РѕРІ, РЅР°Р±РѕСЂ РѕР±РѕСЂСѓРґРѕРІР°РЅРёСЏ, СЂРµРіРёРѕРЅ Рё СѓСЃР»РѕРІРёСЏ СЂР°Р±РѕС‚.</p>
-          <p>Р•СЃР»Рё Risk Guard AI РІРёРґРёС‚ РґРёСЃР±Р°Р»Р°РЅСЃ, РѕРЅ РЅРµ РјРµРЅСЏРµС‚ РєРѕСЌС„С„РёС†РёРµРЅС‚С‹ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё, Р° РєРѕСЂСЂРµРєС‚РёСЂСѓРµС‚ Р·Р°С‰РёС‚РЅС‹Рµ РіСЂР°РЅРёС†С‹ СЂР°СЃС‡РµС‚Р° Рё РїРѕРґСЃРєР°Р·С‹РІР°РµС‚, РіРґРµ Р±СЋРґР¶РµС‚ РјРѕР¶РµС‚ Р±С‹С‚СЊ Р·Р°РЅРёР¶РµРЅ РёР»Рё РїРµСЂРµР·Р°Р»РѕР¶РµРЅ РѕС‚РЅРѕСЃРёС‚РµР»СЊРЅРѕ РїР°СЂР°РјРµС‚СЂРѕРІ РѕР±СЉРµРєС‚Р°.</p>
-          <p>РџРѕ С‚РµРєСѓС‰РµРјСѓ СЂР°СЃС‡РµС‚Сѓ РјР°РєСЃРёРјР°Р»СЊРЅС‹Р№ СЂРёСЃРє РґРёСЃР±Р°Р»Р°РЅСЃР°: <strong>{num(aiGuard.maxRisk * 100, 0)}%</strong>, СЂРёСЃРє РЅРµРґРѕРѕС†РµРЅРµРЅРЅРѕСЃС‚Рё: <strong>{num(aiGuard.maxUnderpricingRisk * 100, 0)}%</strong>, СЂРёСЃРє РїРµСЂРµРѕС†РµРЅРµРЅРЅРѕСЃС‚Рё: <strong>{num(aiGuard.maxOverpricingRisk * 100, 0)}%</strong>, СЃСѓРјРјР°СЂРЅС‹Р№ СЂС‹РЅРѕС‡РЅС‹Р№ floor: <strong>{rub(aiGuard.totalMarketFloor)}</strong>.</p>
+          <h3>6. Risk Guard AI: контроль сбалансированности</h3>
+          <p>В расчете есть отдельный AI-контур, который перепроверяет СМР+ПНР не только на недооцененность, но и на переоцененность. Он анализирует PDF-override, кабельную насыщенность, КНС, плотность узлов, набор оборудования, регион и условия работ.</p>
+          <p>Если Risk Guard AI видит дисбаланс, он не меняет коэффициенты автоматически, а корректирует защитные границы расчета и подсказывает, где бюджет может быть занижен или перезаложен относительно параметров объекта.</p>
+          <p>По текущему расчету максимальный риск дисбаланса: <strong>{num(aiGuard.maxRisk * 100, 0)}%</strong>, риск недооцененности: <strong>{num(aiGuard.maxUnderpricingRisk * 100, 0)}%</strong>, риск переоцененности: <strong>{num(aiGuard.maxOverpricingRisk * 100, 0)}%</strong>, суммарный рыночный floor: <strong>{rub(aiGuard.totalMarketFloor)}</strong>.</p>
         </article>
 
         <article className="logic-card">
-          <h3>7. AI-СЂРёСЃРєРё РїСЂРѕРµРєС‚Р°</h3>
-          <p>РћС‚РґРµР»СЊРЅС‹Р№ РјРѕРґСѓР»СЊ AI-СЂРёСЃРєРѕРІ РїСЂРѕРµРєС‚Р° РІ СЂРµР°Р»СЊРЅРѕРј РІСЂРµРјРµРЅРё Р°РЅР°Р»РёР·РёСЂСѓРµС‚ РІРµСЃСЊ СЃРѕР±СЂР°РЅРЅС‹Р№ РєРѕРЅС‚СѓСЂ: РѕР±СЉРµРєС‚, Р·РѕРЅРёСЂРѕРІР°РЅРёРµ, СЃРёСЃС‚РµРјС‹, РѕР±СЃР»РµРґРѕРІР°РЅРёРµ, РїСЂРѕРµРєС‚РЅС‹Рµ PDF-РґР°РЅРЅС‹Рµ, СЂС‹РЅРѕС‡РЅС‹Рµ СЃРёРіРЅР°Р»С‹ Рё РѕРіСЂР°РЅРёС‡РµРЅРёСЏ РјРѕРЅС‚Р°Р¶Р°.</p>
-          <p>РќР° РІС‹С…РѕРґРµ РѕРЅ РїРѕРєР°Р·С‹РІР°РµС‚ РЅРµ РѕР±С‰РёР№ СЃРїРёСЃРѕРє Р·Р°РјРµС‡Р°РЅРёР№, Р° РґРѕ РїСЏС‚Рё СЃР°РјС‹С… РєСЂРёС‚РёС‡РЅС‹С… РёРЅРґРёРІРёРґСѓР°Р»СЊРЅС‹С… СЂРёСЃРєРѕРІ РёРјРµРЅРЅРѕ РґР»СЏ С‚РµРєСѓС‰РµРіРѕ РїСЂРѕРµРєС‚Р°, С‡С‚РѕР±С‹ Р·Р°СЂР°РЅРµРµ СѓРІРёРґРµС‚СЊ РІРѕР·РјРѕР¶РЅС‹Рµ С‚РѕС‡РєРё СѓРґРѕСЂРѕР¶Р°РЅРёСЏ, СЃРґРІРёРіР° СЃСЂРѕРєРѕРІ Рё РєРѕСЂСЂРµРєС‚РёСЂРѕРІРѕРє СЃРїРµС†РёС„РёРєР°С†РёРё.</p>
-          <p>РЎРµР№С‡Р°СЃ РІ РјРѕРґСѓР»Рµ Р·Р°С„РёРєСЃРёСЂРѕРІР°РЅРѕ <strong>{projectRisks.length}</strong> РєСЂРёС‚РёС‡РЅС‹С…/РїРѕРІС‹С€РµРЅРЅС‹С… СЂРёСЃРєР°(РѕРІ).</p>
+          <h3>7. AI-риски проекта</h3>
+          <p>Отдельный модуль AI-рисков проекта в реальном времени анализирует весь собранный контур: объект, зонирование, системы, обследование, проектные PDF-данные, рыночные сигналы и ограничения монтажа.</p>
+          <p>На выходе он показывает не общий список замечаний, а до пяти самых критичных индивидуальных рисков именно для текущего проекта, чтобы заранее увидеть возможные точки удорожания, сдвига сроков и корректировок спецификации.</p>
+          <p>Сейчас в модуле зафиксировано <strong>{projectRisks.length}</strong> критичных/повышенных риска(ов).</p>
         </article>
 
         <article className="logic-card">
-          <h3>8. РљРѕСЌС„С„РёС†РёРµРЅС‚С‹ Рё РЅР°С‡РёСЃР»РµРЅРёСЏ</h3>
-          <p>РџРѕСЃР»Рµ СЂР°СЃС‡РµС‚Р° Р±Р°Р·С‹ СЂР°Р±РѕС‚ СЃРёСЃС‚РµРјР° РїСЂРёРјРµРЅСЏРµС‚ РєРѕСЌС„С„РёС†РёРµРЅС‚С‹ СѓСЃР»РѕРІРёР№ РІС‹РїРѕР»РЅРµРЅРёСЏ, РєРѕСЌС„С„РёС†РёРµРЅС‚ РґРµР№СЃС‚РІСѓСЋС‰РµРіРѕ Р·РґР°РЅРёСЏ Рё СЂРµРіРёРѕРЅР°Р»СЊРЅС‹Р№ РєРѕСЌС„С„РёС†РёРµРЅС‚. Р РµРіРёРѕРЅР°Р»СЊРЅР°СЏ С‡Р°СЃС‚СЊ РѕРіСЂР°РЅРёС‡РµРЅР° floor-Р»РѕРіРёРєРѕР№ Рё РЅРµ РјРѕР¶РµС‚ РёСЃРєСѓСЃСЃС‚РІРµРЅРЅРѕ СѓРґРµС€РµРІРёС‚СЊ С‚СЂСѓРґ РЅРёР¶Рµ Р±Р°Р·С‹.</p>
-          <p>РЎРІРѕРґРЅС‹Р№ РєРѕСЌС„С„РёС†РёРµРЅС‚ СѓСЃР»РѕРІРёР№: <strong>{coef(conditionFactor)}</strong>. РќР°С‡РёСЃР»РµРЅРёСЏ: Р¤РћРў {percent(budget.payrollTaxesPercent)}, СѓС‚РёР»РёР·Р°С†РёСЏ {percent(budget.utilizationPercent)}, РЎРР— {percent(budget.ppePercent)}, РђРҐР  {percent(budget.adminPercent)}.</p>
+          <h3>8. Коэффициенты и начисления</h3>
+          <p>После расчета базы работ система применяет коэффициенты условий выполнения, коэффициент действующего здания и региональный коэффициент. Региональная часть ограничена floor-логикой и не может искусственно удешевить труд ниже базы.</p>
+          <p>Сводный коэффициент условий: <strong>{coef(conditionFactor)}</strong>. Начисления: ФОТ {percent(budget.payrollTaxesPercent)}, утилизация {percent(budget.utilizationPercent)}, СИЗ {percent(budget.ppePercent)}, АХР {percent(budget.adminPercent)}.</p>
           {appliedObjectCoefficients.length ? (
             <div className="logic-equipment-list">
               {appliedObjectCoefficients.map((item) => (
@@ -690,40 +690,40 @@ export default function CalculationLogicStep({
               ))}
             </div>
           ) : (
-            <p>РџРѕ С‚РµРєСѓС‰РµРјСѓ РѕР±СЉРµРєС‚Сѓ РІСЃРµ СЂСѓС‡РЅС‹Рµ РєРѕСЌС„С„РёС†РёРµРЅС‚С‹ СЃС‚РѕСЏС‚ РІ Р±Р°Р·РѕРІРѕРј Р·РЅР°С‡РµРЅРёРё x1.00; РґРѕРїРѕР»РЅРёС‚РµР»СЊРЅРѕ РїСЂРёРјРµРЅСЏСЋС‚СЃСЏ С‚РѕР»СЊРєРѕ РІСЃС‚СЂРѕРµРЅРЅС‹Рµ Р±Р°Р·РѕРІС‹Рµ РЅР°СЃС‚СЂРѕР№РєРё РјРѕРґРµР»Рё.</p>
+            <p>По текущему объекту все ручные коэффициенты стоят в базовом значении x1.00; дополнительно применяются только встроенные базовые настройки модели.</p>
           )}
           <p>
-            РЎСѓРјРјР° РЅР°С‡РёСЃР»РµРЅРёР№ РїРѕ С‚РµРєСѓС‰РµРјСѓ СЂР°СЃС‡РµС‚Сѓ: <strong>{rub(totalCharges)}</strong>. Р”Рѕ СЂРµРіРёРѕРЅР°Р»СЊРЅРѕРіРѕ РєРѕСЌС„С„РёС†РёРµРЅС‚Р°:
-            <strong> {rub(totalWorkBeforeRegion)}</strong>; РїРѕСЃР»Рµ СЂРµРіРёРѕРЅР°Р»СЊРЅРѕРіРѕ РєРѕСЌС„С„РёС†РёРµРЅС‚Р°:
+            Сумма начислений по текущему расчету: <strong>{rub(totalCharges)}</strong>. До регионального коэффициента:
+            <strong> {rub(totalWorkBeforeRegion)}</strong>; после регионального коэффициента:
             <strong> {rub(totalWorkWithCharges)}</strong>.
           </p>
         </article>
 
         <article className="logic-card">
-          <h3>9. РџСЂРѕРµРєС‚РёСЂРѕРІР°РЅРёРµ</h3>
-          <p>РџСЂРѕРµРєС‚РёСЂРѕРІР°РЅРёРµ СЃС‡РёС‚Р°РµС‚СЃСЏ РѕС‚РґРµР»СЊРЅРѕ РїРѕ РєР°Р¶РґРѕР№ СЃРёСЃС‚РµРјРµ РѕС‚ СЂР°СЃС‡РµС‚РЅРѕРіРѕ РѕР±СЉРµРјР° Рё СЃР»РѕР¶РЅРѕСЃС‚Рё. Р”Р°РЅРЅС‹Рµ РѕР±СЉРµРєС‚Р° Рё AI-РѕР±СЃР»РµРґРѕРІР°РЅРёСЏ РєРѕСЂСЂРµРєС‚РёСЂСѓСЋС‚ С‚СЂСѓРґРѕРµРјРєРѕСЃС‚СЊ: СѓС‡РёС‚С‹РІР°СЋС‚СЃСЏ С‚СЂР°СЃСЃС‹, РІС‹СЃРѕС‚С‹, РѕС‚РґРµР»РєР°, РёРЅС‚РµРіСЂР°С†РёРё, РєРѕРѕСЂРґРёРЅР°С†РёСЏ РїРѕ Р·РѕРЅР°Рј Рё СЃСѓС‰РµСЃС‚РІСѓСЋС‰Р°СЏ РёРЅС„СЂР°СЃС‚СЂСѓРєС‚СѓСЂР°.</p>
-          <p>Р•СЃР»Рё РїРѕ СЃРёСЃС‚РµРјРµ РµСЃС‚СЊ РїСЂРѕРµРєС‚ РёР»Рё РѕРЅ Р·Р°РіСЂСѓР¶РµРЅ РІРѕ РІРєР»Р°РґРєРµ В«РЎРёСЃС‚РµРјС‹В», СЃС‚РѕРёРјРѕСЃС‚СЊ РїСЂРѕРµРєС‚РёСЂРѕРІР°РЅРёСЏ РїРѕ СЌС‚РѕР№ СЃРёСЃС‚РµРјРµ РЅРµ СЂР°СЃСЃС‡РёС‚С‹РІР°РµС‚СЃСЏ, Р° РЅР° РІРєР»Р°РґРєРµ В«РџСЂРѕРµРєС‚РёСЂРѕРІР°РЅРёРµВ» РІС‹РІРѕРґРёС‚СЃСЏ РїРѕРјРµС‚РєР° В«СЃС‚РѕРёРјРѕСЃС‚СЊ РЅРµ СЂР°СЃСЃС‡РёС‚С‹РІР°РµС‚СЃСЏ, РїСЂРѕРµРєС‚ РІ РЅР°Р»РёС‡РёРёВ».</p>
-          <p>РЎСѓРјРјР°СЂРЅРѕ РїРѕ СЂР°СЃСЃС‡РёС‚С‹РІР°РµРјС‹Рј СЃРёСЃС‚РµРјР°Рј: <strong>{num(totalDesignHours, 1)} С‡</strong>, СЃСЂРµРґРЅСЏСЏ РіСЂСѓРїРїР° <strong>{num(avgDesignTeam, 1)} С‡РµР».</strong>, РјР°РєСЃРёРјР°Р»СЊРЅС‹Р№ СЃСЂРѕРє <strong>{formatDesignDurationExact(maxDesignMonths)}</strong>, СЃС‚РѕРёРјРѕСЃС‚СЊ <strong>{rub(totalDesign)}</strong>.</p>
+          <h3>9. Проектирование</h3>
+          <p>Проектирование считается отдельно по каждой системе от расчетного объема и сложности. Данные объекта и AI-обследования корректируют трудоемкость: учитываются трассы, высоты, отделка, интеграции, координация по зонам и существующая инфраструктура.</p>
+          <p>Если по системе есть проект или он загружен во вкладке «Системы», стоимость проектирования по этой системе не рассчитывается, а на вкладке «Проектирование» выводится пометка «стоимость не рассчитывается, проект в наличии».</p>
+          <p>Суммарно по рассчитываемым системам: <strong>{num(totalDesignHours, 1)} ч</strong>, средняя группа <strong>{num(avgDesignTeam, 1)} чел.</strong>, максимальный срок <strong>{formatDesignDurationExact(maxDesignMonths)}</strong>, стоимость <strong>{rub(totalDesign)}</strong>.</p>
         </article>
 
         <article className="logic-card">
-          <h3>10. РС‚РѕРіРѕРІР°СЏ С„РѕСЂРјСѓР»Р° Р±СЋРґР¶РµС‚Р°</h3>
-          <p><strong>РС‚РѕРі = РћР±РѕСЂСѓРґРѕРІР°РЅРёРµ + РњР°С‚РµСЂРёР°Р»С‹ + Р Р°Р±РѕС‚С‹ + РџСЂРѕРµРєС‚РёСЂРѕРІР°РЅРёРµ + Р РµРЅС‚Р°Р±РµР»СЊРЅРѕСЃС‚СЊ + РќР”РЎ</strong></p>
-          <p>РЎРµР№С‡Р°СЃ: РѕР±РѕСЂСѓРґРѕРІР°РЅРёРµ <strong>{rub(totalEquipment)}</strong>, РјР°С‚РµСЂРёР°Р»С‹ <strong>{rub(totalMaterials)}</strong>, СЂР°Р±РѕС‚С‹ <strong>{rub(totals.totalWorks || totals.totalWork || 0)}</strong>, РїСЂРѕРµРєС‚РёСЂРѕРІР°РЅРёРµ <strong>{rub(totalDesign)}</strong>, РёС‚РѕРі РїСЂРѕРµРєС‚Р° <strong>{rub(totalProject)}</strong>.</p>
+          <h3>10. Итоговая формула бюджета</h3>
+          <p><strong>Итог = Оборудование + Материалы + Работы + Проектирование + Рентабельность + НДС</strong></p>
+          <p>Сейчас: оборудование <strong>{rub(totalEquipment)}</strong>, материалы <strong>{rub(totalMaterials)}</strong>, работы <strong>{rub(totals.totalWorks || totals.totalWork || 0)}</strong>, проектирование <strong>{rub(totalDesign)}</strong>, итог проекта <strong>{rub(totalProject)}</strong>.</p>
         </article>
 
         <article className="logic-card">
-          <h3>11. Р§С‚Рѕ РїСЂРѕРёСЃС…РѕРґРёС‚ РїСЂРё РёР·РјРµРЅРµРЅРёРё РїР°СЂР°РјРµС‚СЂРѕРІ</h3>
-          <p>Р›СЋР±РѕРµ РёР·РјРµРЅРµРЅРёРµ РѕР±СЉРµРєС‚Р°, СЃРёСЃС‚РµРј, РІРµРЅРґРѕСЂР°, PDF-СЃРїРµС†РёС„РёРєР°С†РёРё, С†РµРЅ, РѕР±СЃР»РµРґРѕРІР°РЅРёСЏ РёР»Рё Р±СЋРґР¶РµС‚Р° Р·Р°РїСѓСЃРєР°РµС‚ РїРµСЂРµСЃС‡РµС‚: РѕР±РЅРѕРІР»СЏСЋС‚СЃСЏ РѕР±СЉРµРјС‹, AI-Р°СѓРґРёС‚ С†РµРЅ, РєРѕРЅС‚СѓСЂ СЂРёСЃРєРѕРІ РїСЂРѕРµРєС‚Р°, Р±Р»РѕРє Risk Guard AI Рё РѕР±С‰РёР№ Р±СЋРґР¶РµС‚ РїСЂРѕРµРєС‚Р°.</p>
+          <h3>11. Что происходит при изменении параметров</h3>
+          <p>Любое изменение объекта, систем, вендора, PDF-спецификации, цен, обследования или бюджета запускает пересчет: обновляются объемы, AI-аудит цен, контур рисков проекта, блок Risk Guard AI и общий бюджет проекта.</p>
           <div className="logic-equipment-list">
             {systemResults.map((row, index) => (
               <p key={`${row.systemType}-logic-${index}`}>
-                <strong>{row.systemName}:</strong> РєР°Р±РµР»СЊ {num(row.cable || 0, 1)} Рј, СЂР°Р±РѕС‚С‹ {rub(row.workTotal || 0)}, РїСЂРѕРµРєС‚РёСЂРѕРІР°РЅРёРµ {row.designSkipped ? "РЅРµ СЂР°СЃСЃС‡РёС‚С‹РІР°РµС‚СЃСЏ" : rub(row.designTotal || 0)}, РёС‚РѕРі {rub(row.total || 0)}.
+                <strong>{row.systemName}:</strong> кабель {num(row.cable || 0, 1)} м, работы {rub(row.workTotal || 0)}, проектирование {row.designSkipped ? "не рассчитывается" : rub(row.designTotal || 0)}, итог {rub(row.total || 0)}.
               </p>
             ))}
             {skippedDesignRows.length ? (
               <p>
-                <strong>РЎРёСЃС‚РµРјС‹ СЃ РїСЂРѕРµРєС‚РѕРј:</strong> {skippedDesignRows.map((row) => row.systemName).join(", ")}.
+                <strong>Системы с проектом:</strong> {skippedDesignRows.map((row) => row.systemName).join(", ")}.
               </p>
             ) : null}
           </div>
