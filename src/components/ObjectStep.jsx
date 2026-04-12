@@ -88,7 +88,7 @@ function renderChecklistInput(question, value, onChange, options = {}) {
             value={value ?? ""}
             placeholder={question.placeholder || "Введите значение"}
             disabled={disabled}
-            onChange={(event) => onChange(toNumber(event.target.value))}
+            onChange={(event) => onChange(event.target.value === "" ? undefined : toNumber(event.target.value))}
           />
         </div>
       );
@@ -101,7 +101,7 @@ function renderChecklistInput(question, value, onChange, options = {}) {
         value={value ?? ""}
         placeholder={question.placeholder || "Введите значение"}
         disabled={disabled}
-        onChange={(event) => onChange(toNumber(event.target.value))}
+        onChange={(event) => onChange(event.target.value === "" ? undefined : toNumber(event.target.value))}
       />
     );
   }
@@ -141,6 +141,47 @@ function renderFieldLabelWithTooltip(label, title, body) {
       <div className="label-tooltip-popover" role="tooltip">
         <p>
           <strong>{label}:</strong> {body}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function getChecklistQuestionHelp(question, systemLabel) {
+  return {
+    title: question.helpTitle || question.label,
+    description:
+      question.helpDescription ||
+      (question.type === "boolean"
+        ? "Нужно выбрать, подтверждается ли это условие на объекте."
+        : question.type === "multiselect"
+          ? "Нужно отметить все варианты, которые реально встречаются на объекте."
+          : question.type === "number"
+            ? "Нужно указать количественное значение по обследуемому объекту."
+            : "Нужно заполнить значение по результатам обследования."),
+    impact:
+      question.helpImpact ||
+      `Ответ влияет на подбор оборудования, материалы, трудоемкость и итоговую логику расчета${systemLabel ? ` по системе ${systemLabel}` : ""}.`,
+  };
+}
+
+function renderChecklistQuestionLabel(question, systemLabel) {
+  const help = getChecklistQuestionHelp(question, systemLabel);
+  return (
+    <div className="label-with-tooltip ai-checklist-question__label">
+      <label>
+        {question.label}
+        {question.aiAutofill ? <span className="ai-inline-mark">AI</span> : null}
+      </label>
+      <span className="label-tooltip-help" tabIndex={0} role="button" title={help.title} aria-label={help.title}>
+        ?
+      </span>
+      <div className="label-tooltip-popover" role="tooltip">
+        <p>
+          <strong>{help.title}:</strong> {help.description}
+        </p>
+        <p>
+          <strong>Влияние на расчет:</strong> {help.impact}
         </p>
       </div>
     </div>
@@ -189,6 +230,7 @@ export default function ObjectStep({
   appliedSurveyAreaRefinement,
   startAiSurvey,
   updateAiSurveyAnswer,
+  autoCalculateAiSurveyAnswer,
   analyzeAiSurveyPhoto,
   refreshAiSurveyPhoto,
   applyAiSurveyData,
@@ -811,10 +853,10 @@ export default function ObjectStep({
                         const toggleQuestionId = question.enabledByQuestionId;
                         return (
                           <div className={`input-card ai-checklist-question ${enabled ? "" : "disabled"}`} key={question.id}>
-                            <label>
-                              {question.label}
-                              {question.aiAutofill ? <span className="ai-inline-mark">AI</span> : null}
-                            </label>
+                            {renderChecklistQuestionLabel(
+                              question,
+                              question.systemType ? systemNames[question.systemType] || question.systemType.toUpperCase() : ""
+                            )}
                             {renderChecklistInput(
                               question,
                               technicalSolution?.answers?.[question.id],
@@ -825,6 +867,18 @@ export default function ObjectStep({
                                 onToggle: toggleQuestionId ? (value) => updateAiSurveyAnswer(toggleQuestionId, value) : undefined,
                               }
                             )}
+                            {question.autoCalculate ? (
+                              <div className="ai-checklist-question__actions">
+                                <button
+                                  className="ghost-btn ai-checklist-autofill-btn"
+                                  type="button"
+                                  disabled={!enabled}
+                                  onClick={() => autoCalculateAiSurveyAnswer?.(question.id)}
+                                >
+                                  Рассчитать автоматически
+                                </button>
+                              </div>
+                            ) : null}
                           </div>
                         );
                       })}

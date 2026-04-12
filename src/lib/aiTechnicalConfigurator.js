@@ -389,6 +389,20 @@ function buildPricedEquipmentRows(systemType, result, apsSnapshot) {
   }));
 }
 
+export function estimateSurveyZoneCount({ systemType, objectData, zones, photoAnalyses }) {
+  const recognizedPlanData = collectRecognizedPlanData(photoAnalyses, systemType);
+  const fallbackZoneModel =
+    recognizedPlanData.totalZones > 0 || !["aps", "soue", "sots"].includes(systemType)
+      ? null
+      : calculateZoneModelWithoutPlans({
+          systemType,
+          objectData,
+          zones,
+        });
+
+  return fallbackZoneModel ? Math.max(num(fallbackZoneModel.totalZones, 0), 0) : Math.max(num(recognizedPlanData.totalZones, 0), 0);
+}
+
 function buildInfrastructureRows(systemType, result) {
   if (!result) return [];
 

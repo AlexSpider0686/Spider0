@@ -81,6 +81,10 @@ function createQuestion({
   max = null,
   enabledByQuestionId = null,
   defaultValue = undefined,
+  helpTitle = "",
+  helpDescription = "",
+  helpImpact = "",
+  autoCalculate = null,
 }) {
   return {
     id,
@@ -98,6 +102,10 @@ function createQuestion({
     max,
     enabledByQuestionId,
     defaultValue,
+    helpTitle,
+    helpDescription,
+    helpImpact,
+    autoCalculate,
   };
 }
 
@@ -408,6 +416,9 @@ export function buildAiSurveyPlan({ objectData, zones, systems, protectedArea })
         placeholder: "0",
         required: false,
         defaultValue: 0,
+        helpTitle: "Координация и привязка по зонам",
+        helpDescription: `Укажите число зон объекта, где по ${system.type.toUpperCase()} нужно отдельно увязать размещение оборудования, трассы или шкафы с архитектурой и смежными системами.`,
+        helpImpact: "Ответ влияет на объем проектирования, трудоемкость увязки решений и состав пояснений в логике расчета.",
       }),
       createQuestion({
         id: `system-${system.id}-reuse-existing-infra`,
@@ -435,6 +446,16 @@ export function buildAiSurveyPlan({ objectData, zones, systems, protectedArea })
           placeholder: "1",
           required: false,
           defaultValue: 1,
+          helpTitle: system.type === "aps" ? "Количество самостоятельных ЗКСПС" : "Количество зон оповещения",
+          helpDescription:
+            system.type === "aps"
+              ? "Это число самостоятельных зон контроля пожарной сигнализации. Его можно определить по уже действующему алгоритму анализа планировок и этажности."
+              : `Это число самостоятельных зон оповещения для ${system.type.toUpperCase()}, по которым далее подбирается логика распределения оборудования.`,
+          helpImpact:
+            system.type === "aps"
+              ? "Ответ влияет на состав оборудования АПС, количество зональных элементов, материалы, трудоемкость и пояснения в логике расчета."
+              : "Ответ влияет на зональное деление, состав оборудования, материалы и стоимость работ.",
+          autoCalculate: system.type === "aps" ? "aps-zksps-zones" : null,
         })
       );
     }
@@ -499,22 +520,25 @@ export function buildAiSurveyPlan({ objectData, zones, systems, protectedArea })
   };
 }
 
+export function getEnabledSurveyQuestions(plan, answers = {}) {
+  const questions = plan?.allQuestions || [];
+  return questions.filter((question) => {
+    if (question.enabledByQuestionId) return answers?.[question.enabledByQuestionId] === true;
+    return true;
+  });
+}
+
 export function calculateAiSurveyCompletion(plan, answers = {}) {
   const questions = plan?.allQuestions || [];
   if (!questions.length) {
     return { total: 0, completed: 0, percent: 100 };
   }
 
-  const requiredQuestions = questions.filter((question) => {
-    if (question.required === false) return false;
-    if (question.enabledByQuestionId) return answers?.[question.enabledByQuestionId] === true;
-    return true;
-  });
+  const requiredQuestions = getEnabledSurveyQuestions(plan, answers).filter((question) => question.required !== false);
 
   const completed = requiredQuestions.filter((question) => {
     const value = answers?.[question.id];
-    if ((value === "" || value === null || value === undefined) && question.defaultValue !== undefined) return true;
-    if (question.type === "number") return value !== "" && value !== null && value !== undefined;
+    if (question.type === "number") return value !== "" && value !== null && value !== undefined && Number.isFinite(Number(value));
     if (question.type === "boolean") return typeof value === "boolean";
     if (question.type === "multiselect") return Array.isArray(value) && value.length > 0;
     return Boolean(value);

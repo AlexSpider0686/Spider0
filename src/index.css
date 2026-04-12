@@ -264,6 +264,25 @@ select {
   margin-bottom: 8px;
 }
 
+.ai-checklist-question__label {
+  margin-bottom: 8px;
+  align-items: flex-start;
+}
+
+.ai-checklist-question__label label {
+  flex-wrap: wrap;
+}
+
+.ai-checklist-question__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.ai-checklist-autofill-btn {
+  padding: 6px 10px;
+}
+
 .ai-checklist-question.disabled {
   opacity: 0.62;
 }

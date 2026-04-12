@@ -19,7 +19,7 @@ import { verifyObjectAddress as verifyObjectAddressOnline } from "../lib/address
 import { createProjectIdentity } from "../lib/projectIdentity";
 import { aggregateInspectionPhotoResults, analyzeInspectionPhoto } from "../lib/aiPhotoInspectionStrict";
 import { buildAiSurveyPlan, calculateAiSurveyCompletion } from "../lib/aiTechnicalChecklist";
-import { buildAiTechnicalRecommendations } from "../lib/aiTechnicalConfigurator";
+import { buildAiTechnicalRecommendations, estimateSurveyZoneCount } from "../lib/aiTechnicalConfigurator";
 import { buildAiProjectRisks } from "../lib/aiProjectRiskEngine";
 import { aggregatePlanRecognitions } from "../lib/evacuationPlanRecognition";
 import { downloadAllSystemsSpecificationExcel, downloadSystemSpecificationExcel } from "../lib/specExport";
@@ -1656,6 +1656,24 @@ export default function useEstimate() {
     });
   };
 
+  const autoCalculateAiSurveyAnswer = (questionId) => {
+    const question = (aiSurveyPlan?.allQuestions || []).find((item) => item.id === questionId);
+    if (!question?.autoCalculate) return null;
+
+    if (question.autoCalculate === "aps-zksps-zones") {
+      const nextValue = estimateSurveyZoneCount({
+        systemType: "aps",
+        objectData: surveyPlanObjectData,
+        zones,
+        photoAnalyses: technicalSolution.photoAnalyses,
+      });
+      updateAiSurveyAnswer(questionId, Math.max(nextValue || 1, 1));
+      return Math.max(nextValue || 1, 1);
+    }
+
+    return null;
+  };
+
   const analyzeAiSurveyPhoto = async (prompt, fileInput) => {
     const files = Array.isArray(fileInput) ? fileInput : Array.from(fileInput || []).filter(Boolean);
     if (!prompt || !files.length) return null;
@@ -1948,6 +1966,7 @@ export default function useEstimate() {
     removeApsProjectItemById,
     startAiSurvey,
     updateAiSurveyAnswer,
+    autoCalculateAiSurveyAnswer,
     analyzeAiSurveyPhoto,
     refreshAiSurveyPhoto,
     applyAiSurveyData,
