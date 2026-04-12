@@ -5,6 +5,7 @@ import { num, rub, toNumber } from "../lib/estimate";
 import { buildCoefficientLayer } from "../lib/coefficient-engine";
 import { repairReactTextTree } from "../lib/repairReactTree";
 import { repairUtf8Cp1251Mojibake } from "../lib/textEncoding";
+import { pickBestSourceUrl, toSourceHost } from "../lib/sourceLinks";
 
 function downloadCsvFile(fileName, content) {
   if (typeof window === "undefined") return;
@@ -31,28 +32,10 @@ function formatSourceHost(url) {
   const value = String(url || "").trim();
   if (!value) return "";
   try {
-    return new URL(value).hostname.replace(/^www\./i, "");
+    return toSourceHost(value);
   } catch {
     return value;
   }
-}
-
-function isGenericSourceUrl(url) {
-  const value = String(url || "").trim();
-  if (!value) return true;
-  try {
-    const parsed = new URL(value);
-    const pathname = parsed.pathname.toLowerCase();
-    const query = parsed.search.toLowerCase();
-    return pathname.includes("/search") || pathname.includes("/catalog") || query.includes("q=") || query.includes("search=");
-  } catch {
-    return /search|catalog/i.test(value);
-  }
-}
-
-function pickBestSourceUrl(candidateUrls = []) {
-  const urls = [...new Set((candidateUrls || []).map((item) => String(item || "").trim()).filter(Boolean))];
-  return urls.find((url) => !isGenericSourceUrl(url)) || urls[0] || "";
 }
 
 function normalizeMatchKey(value) {

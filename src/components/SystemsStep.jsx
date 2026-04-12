@@ -6,6 +6,7 @@ import { num, rub, toNumber } from "../lib/estimate";
 import { getConcreteModel, getEditableModelOptions, resolveModelPriceOverride } from "../lib/equipment";
 import { summarizePriceSnapshot } from "../lib/priceCollector";
 import { repairReactTextTree } from "../lib/repairReactTree";
+import { resolvePreferredEquipmentSourceLink, toSourceHost } from "../lib/sourceLinks";
 import VendorConfigurator from "./VendorConfigurator";
 
 function renderApsImportStatus(status) {
@@ -127,55 +128,8 @@ function renderComparisonProgress(progress) {
   );
 }
 
-function toHost(url) {
-  if (!url) return "";
-  try {
-    return new URL(url).hostname.replace(/^www\./i, "").toLowerCase();
-  } catch {
-    return String(url)
-      .replace(/^https?:\/\//i, "")
-      .replace(/^www\./i, "")
-      .split("/")[0]
-      .toLowerCase();
-  }
-}
-
 function getManufacturerHosts(source) {
-  return [...new Set([source?.website, source?.searchWebsite].map(toHost).filter(Boolean))];
-}
-
-function isGenericSourceUrl(url) {
-  const value = String(url || "").trim();
-  if (!value) return true;
-  try {
-    const parsed = new URL(value);
-    const pathname = parsed.pathname.toLowerCase();
-    const query = parsed.search.toLowerCase();
-    if (pathname === "/" || pathname === "") return true;
-    if (pathname.includes("/search") || pathname.includes("/catalog") || pathname.includes("/products/")) {
-      if (query.includes("q=") || query.includes("s=") || pathname.endsWith("/catalog") || pathname.endsWith("/products")) return true;
-    }
-    if (query.includes("q=") || query.includes("s=") || query.includes("search=")) return true;
-    return false;
-  } catch {
-    return /search|catalog/i.test(value);
-  }
-}
-
-function scoreSourceUrl(url, manufacturerHosts = []) {
-  const host = toHost(url);
-  const manufacturerMatch = manufacturerHosts.includes(host);
-  const generic = isGenericSourceUrl(url);
-  return (manufacturerMatch ? 100 : 0) + (generic ? 0 : 10) + Math.min(String(url || "").length / 50, 5);
-}
-
-export function pickBestSourceUrl(candidateUrls = [], manufacturerHosts = []) {
-  const unique = [...new Set((candidateUrls || []).map((item) => String(item || "").trim()).filter(Boolean))];
-  const exactFirst = unique
-    .map((url) => ({ url, score: scoreSourceUrl(url, manufacturerHosts) }))
-    .sort((left, right) => right.score - left.score);
-  const best = exactFirst.find((item) => !isGenericSourceUrl(item.url)) || exactFirst[0];
-  return best?.url || "";
+  return [...new Set([source?.website, source?.searchWebsite].map(toSourceHost).filter(Boolean))];
 }
 
 function buildSearchLink(query) {
@@ -252,37 +206,9 @@ function formatSelectionStrategy(strategy) {
   return "алгоритм по умолчанию";
 }
 
-function buildSourceLinkIndex(result) {
-  const entries = Array.isArray(result?.equipmentData?.marketEntries) ? result.equipmentData.marketEntries : [];
-  const index = new Map();
-
-  entries.forEach((entry) => {
-    const sourceLink = pickBestSourceUrl([...(entry?.matchedSources || []), ...(entry?.usedSources || []), entry?.sourceUrl]);
-    if (!sourceLink) return;
-    [entry?.equipmentLabel, entry?.equipmentKey, entry?.projectModel, entry?.projectName, entry?.modelToken].filter(Boolean).forEach((rawKey) => {
-      const key = String(rawKey).trim().toLowerCase();
-      if (key && !index.has(key)) {
-        index.set(key, sourceLink);
-      }
-    });
-  });
-
-  return index;
-}
-
 function resolveEquipmentSourceLink(item, result, system, manufacturerSource = {}) {
   const manufacturerHosts = getManufacturerHosts(manufacturerSource);
-  const ownLink = pickBestSourceUrl([...(item?.matchedSources || []), ...(item?.usedSources || []), item?.sourceUrl], manufacturerHosts);
-  if (ownLink) return ownLink;
-
-  const linkIndex = buildSourceLinkIndex(result);
-  const keys = [item?.name, item?.label, item?.model, item?.code]
-    .map((value) => String(value || "").trim().toLowerCase())
-    .filter(Boolean);
-  const matched = keys.find((key) => linkIndex.has(key));
-  if (matched) return linkIndex.get(matched) || "";
-
-  return "";
+  return resolvePreferredEquipmentSourceLink(item, result, manufacturerHosts);
 }
 
 function findMatchingMarketEntry(row, result) {
@@ -325,7 +251,7 @@ function buildTechnicalSpecSourceMeta(row, result, system, manufacturerSource = 
   const directLink = resolveEquipmentSourceLink(row, result, system, manufacturerSource);
   if (directLink) {
     return {
-      label: toHost(directLink) || "ссылка",
+      label: toSourceHost(directLink) || "ссылка",
       url: directLink,
     };
   }

@@ -29,6 +29,30 @@ test("project price requests use exact Bastion product pages for SKUD models", (
   assert.ok(urls.some((url) => String(url).includes("bast.ru")), "manufacturer host is missing");
 });
 
+test("project price requests keep exact Bastion product pages for multiplied model labels", () => {
+  const requests = buildProjectPriceRequests(
+    { id: "skud-1", type: "skud", vendor: "Bastion" },
+    {
+      equipmentData: {
+        details: [
+          {
+            code: "CTRL",
+            name: "Контроллер доступа",
+            model: "2x SKAT AC 02NET PACS",
+            unitPrice: 6000,
+            unit: "шт",
+            isKey: true,
+          },
+        ],
+      },
+    }
+  );
+
+  assert.equal(requests.length, 1);
+  const urls = requests[0].sourceUrls.map((item) => (typeof item === "string" ? item : item?.url)).filter(Boolean);
+  assert.ok(urls.some((url) => String(url).includes("/products/8885")), "exact Bastion product page is missing for multiplied model");
+});
+
 test("Bastion SKUD stays in workstation mode for a moderate object", () => {
   const system = {
     ...DEFAULT_SYSTEM(1, "skud"),

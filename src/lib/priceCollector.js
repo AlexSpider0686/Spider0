@@ -305,8 +305,44 @@ const EXACT_PRODUCT_PATHS = {
   },
 };
 
+function buildModelPathCandidates(model) {
+  const raw = String(model || "").trim();
+  if (!raw) return [];
+
+  const normalized = raw.replace(/\s+/g, " ").trim();
+  const stripped = normalized
+    .replace(/^\d+\s*[xх×]\s*/i, "")
+    .replace(/^\d+\s*шт\.?\s*/i, "")
+    .trim();
+  const splitParts = stripped
+    .split(/\s*\+\s*|\s*\/\s*|\s*,\s*|\s*;\s*/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  return dedupeStrings([normalized, stripped, ...splitParts]);
+}
+
 function resolveExactSourcePath(systemType, vendorName, model) {
-  return EXACT_PRODUCT_PATHS?.[systemType]?.[vendorName]?.[String(model || "").trim()] || "";
+  const vendorPaths = EXACT_PRODUCT_PATHS?.[systemType]?.[vendorName];
+  if (!vendorPaths) return "";
+
+  const candidates = buildModelPathCandidates(model);
+  for (const candidate of candidates) {
+    if (vendorPaths[candidate]) return vendorPaths[candidate];
+  }
+
+  const normalizedCandidates = candidates.map((item) => item.toLowerCase());
+  const fuzzyMatch = Object.entries(vendorPaths).find(([key]) => {
+    const normalizedKey = String(key || "").trim().toLowerCase();
+    return normalizedCandidates.some(
+      (candidate) =>
+        candidate === normalizedKey ||
+        candidate.includes(normalizedKey) ||
+        normalizedKey.includes(candidate)
+    );
+  });
+
+  return fuzzyMatch?.[1] || "";
 }
 
 function buildPrimaryArticleToken(value) {
