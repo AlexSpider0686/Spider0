@@ -1172,6 +1172,10 @@ export async function resolveVendorPrices(requests = []) {
       const luisExactRows = luisRows.filter((item) => item.modelTokenMatched);
       const manufacturerHost = hostFromUrl(entry?.manufacturerWebsite || "");
       const manufacturerRows = manufacturerHost ? baseRows.filter((item) => item.sourceHost === manufacturerHost) : [];
+      const manufacturerExactRows =
+        modelToken && manufacturerRows.length
+          ? manufacturerRows.filter((item) => item.modelTokenMatched || item.articleMatched)
+          : [];
 
       let selectionStrategy = "average_all_sources";
       let selectionPool = baseRows;
@@ -1179,6 +1183,9 @@ export async function resolveVendorPrices(requests = []) {
       if (articleRows.length) {
         selectionPool = articleRows;
         selectionStrategy = "article_exact_match";
+      } else if (modelToken && manufacturerExactRows.length) {
+        selectionPool = manufacturerExactRows;
+        selectionStrategy = "manufacturer_exact_match";
       } else if (modelToken && modelRows.length) {
         selectionPool = modelRows;
         selectionStrategy = "model_token_match";
@@ -1196,6 +1203,7 @@ export async function resolveVendorPrices(requests = []) {
       const poolPrices = selectionPool.map((item) => item.price);
       const preferFallbackAnchoredSelection =
         selectionStrategy === "article_exact_match" ||
+        selectionStrategy === "manufacturer_exact_match" ||
         selectionStrategy === "model_token_match" ||
         selectionStrategy === "luis_api_exact_model" ||
         selectionStrategy === "luis_api_model_bias";
@@ -1205,7 +1213,9 @@ export async function resolveVendorPrices(requests = []) {
         : selectFinalPrice(poolPrices, fallbackPrice);
 
       const fallback = Number(fallbackPrice);
-        const isManufacturerAuthoritative = selectionStrategy === "manufacturer_source_bias" && manufacturerRows.length > 0;
+        const isManufacturerAuthoritative =
+          (selectionStrategy === "manufacturer_source_bias" || selectionStrategy === "manufacturer_exact_match") &&
+          manufacturerRows.length > 0;
         let manufacturerDriftRisk = false;
 
         if (Number.isFinite(fallback) && fallback > 0 && Number.isFinite(selectedPrice) && selectedPrice > 0) {

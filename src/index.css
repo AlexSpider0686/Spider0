@@ -2374,6 +2374,59 @@ body.ai-survey-open .object-photo-card {
   gap: 8px;
 }
 
+.logic-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.logic-section-btn {
+  width: 100%;
+  min-height: 62px;
+  justify-content: flex-start;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 14px 16px;
+  text-align: left;
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(238, 246, 255, 0.96)),
+    radial-gradient(circle at top right, rgba(47, 127, 241, 0.12), transparent 42%);
+  border: 1px solid rgba(111, 147, 196, 0.28);
+}
+
+.logic-section-btn__title {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.logic-section-btn__summary {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.logic-modal__card {
+  width: min(920px, 96vw);
+}
+
+.logic-modal__body {
+  margin-top: 14px;
+  max-height: min(68vh, 760px);
+  overflow: auto;
+}
+
+.logic-export-bar {
+  margin: 12px 0;
+}
+
+.logic-base-rates-table {
+  margin-bottom: 12px;
+}
+
 .logic-card {
   border: 1px solid rgba(141, 163, 196, 0.26);
   border-radius: 10px;

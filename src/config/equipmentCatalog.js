@@ -210,7 +210,7 @@ export const EQUIPMENT_CATALOG = repairCatalogNode({
       key: "panel",
       label: "Приемно-контрольный прибор",
       influenceWeight: 0.3,
-      fallbackUnitPrice: 152000,
+      fallbackUnitPrice: 4277,
       sourcePath: "/catalog/fire-panels",
       searchTerm: "ппкп пожарная сигнализация",
       profiles: {

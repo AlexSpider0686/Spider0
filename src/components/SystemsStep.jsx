@@ -626,7 +626,7 @@ export default function SystemsStep({
                 ...new Set(
                   (displaySnapshot?.entries || [])
                     .flatMap((item) => item.matchedSources || item.usedSources || [])
-                    .filter((url) => manufacturerHosts.includes(toHost(url)))
+                    .filter((url) => manufacturerHosts.includes(toSourceHost(url)))
                 ),
               ]
             : [];

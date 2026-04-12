@@ -54,6 +54,97 @@ function getSystemLabel(systemType) {
   return SYSTEM_TYPES.find((item) => item.code === systemType)?.name || systemType;
 }
 
+function getPrimaryOperationLabel(systemType, primaryUnitLabel) {
+  const normalized = String(primaryUnitLabel || "").trim().toLowerCase();
+  if (systemType === "aps") return normalized ? `Монтаж ${normalized}` : "Монтаж пожарных извещателей";
+  if (systemType === "sots") return normalized ? `Монтаж ${normalized}` : "Монтаж охранных извещателей";
+  if (systemType === "soue") return normalized ? `Монтаж ${normalized}` : "Монтаж оповещателей СОУЭ";
+  if (systemType === "sot") return normalized ? `Монтаж ${normalized}` : "Монтаж камер";
+  if (systemType === "skud") return normalized ? `Монтаж ${normalized}` : "Монтаж точек доступа";
+  if (systemType === "ssoi") return "Монтаж узлов интеграции";
+  return normalized ? `Монтаж ${normalized}` : "Монтаж основных элементов";
+}
+
+function getPnrOperationLabel(systemType, primaryUnitLabel) {
+  const normalized = String(primaryUnitLabel || "").trim().toLowerCase();
+  if (systemType === "aps") return normalized ? `ПНР ${normalized}` : "ПНР пожарных извещателей";
+  if (systemType === "sots") return normalized ? `ПНР ${normalized}` : "ПНР охранных извещателей";
+  if (systemType === "soue") return normalized ? `ПНР ${normalized}` : "ПНР оповещателей СОУЭ";
+  if (systemType === "sot") return normalized ? `ПНР ${normalized}` : "ПНР камер";
+  if (systemType === "skud") return normalized ? `ПНР ${normalized}` : "ПНР точек доступа";
+  if (systemType === "ssoi") return "ПНР узлов интеграции";
+  return normalized ? `ПНР ${normalized}` : "ПНР основных элементов";
+}
+
+export function buildBaseRateExportRows(systemResults = []) {
+  return (systemResults || []).flatMap((row) => {
+    const rates = row?.laborDetails?.unitRates || {};
+    const breakdown = row?.laborDetails?.workBreakdown || {};
+    const systemLabel = row?.systemName || getSystemLabel(row?.systemType);
+    const primaryUnitLabel = row?.primaryUnitLabel || "ед.";
+    const operations = [
+      {
+        id: `${row?.systemId || row?.systemType}-mount-primary`,
+        workName: `${systemLabel}: ${getPrimaryOperationLabel(row?.systemType, primaryUnitLabel)}`,
+        unit: primaryUnitLabel,
+        quantity: toNumber(breakdown.primaryUnits, 0),
+        unitPrice: toNumber(rates.mountPrimary, 0),
+      },
+      {
+        id: `${row?.systemId || row?.systemType}-mount-controller`,
+        workName: `${systemLabel}: Монтаж контроллеров и приборов`,
+        unit: "шт",
+        quantity: toNumber(breakdown.controllerUnits, 0),
+        unitPrice: toNumber(rates.controllerMount, 0),
+      },
+      {
+        id: `${row?.systemId || row?.systemType}-cable`,
+        workName: `${systemLabel}: Прокладка кабеля`,
+        unit: "м",
+        quantity: toNumber(breakdown.cableLengthM, 0),
+        unitPrice: toNumber(rates.cablePerMeter, 0),
+      },
+      {
+        id: `${row?.systemId || row?.systemType}-pnr-primary`,
+        workName: `${systemLabel}: ${getPnrOperationLabel(row?.systemType, primaryUnitLabel)}`,
+        unit: primaryUnitLabel,
+        quantity: toNumber(breakdown.primaryUnits, 0),
+        unitPrice: toNumber(rates.pnrPrimary, 0),
+      },
+      {
+        id: `${row?.systemId || row?.systemType}-pnr-active`,
+        workName: `${systemLabel}: ПНР активных устройств`,
+        unit: "шт",
+        quantity: toNumber(breakdown.activeElements, 0),
+        unitPrice: toNumber(rates.pnrActiveElement, 0),
+      },
+      {
+        id: `${row?.systemId || row?.systemType}-integration`,
+        workName: `${systemLabel}: Интеграционные подключения`,
+        unit: "точка",
+        quantity: toNumber(breakdown.integrationPoints, 0),
+        unitPrice: toNumber(rates.integrationPoint, 0),
+      },
+      {
+        id: `${row?.systemId || row?.systemType}-kns-cable`,
+        workName: `${systemLabel}: Монтаж КНС по трассе`,
+        unit: "м",
+        quantity: toNumber(breakdown.knsLengthM, 0),
+        unitPrice: toNumber(rates.knsPerMeter, 0),
+      },
+      {
+        id: `${row?.systemId || row?.systemType}-kns-work`,
+        workName: `${systemLabel}: Монтаж крепежа и сопутствующих КНС-операций`,
+        unit: "усл. ед.",
+        quantity: toNumber(breakdown.knsWorkUnits, 0),
+        unitPrice: Number((toNumber(rates.knsPerMeter, 0) * 0.22).toFixed(2)),
+      },
+    ];
+
+    return operations.filter((item) => item.quantity > 0 && item.unitPrice > 0);
+  });
+}
+
 function t(value) {
   return repairUtf8Cp1251Mojibake(String(value ?? ""));
 }
@@ -94,6 +185,7 @@ export default function CalculationLogicStep({
   projectRisks = [],
   vendorPriceSnapshots = {},
 }) {
+  const [activeLogicSection, setActiveLogicSection] = React.useState(null);
   const calcObjectData = effectiveObjectData || objectData;
   const coefficientLayer = useMemo(
     () =>
@@ -237,99 +329,13 @@ export default function CalculationLogicStep({
         };
       });
   }, [systemResults]);
-  const workUnitRateRows = useMemo(
-    () =>
-      (systemResults || []).flatMap((row) => {
-        const rates = row?.laborDetails?.unitRates || {};
-        const breakdown = row?.laborDetails?.workBreakdown || {};
-        const chargePercents = row?.laborDetails?.chargePercents || {};
-        const charges = row?.laborDetails?.workChargesBeforeRegion || {};
-        const systemLabel = row?.systemName || getSystemLabel(row?.systemType);
-        const entries = [
-          ["base", "СМР", "Монтаж основных элементов", row?.primaryUnitLabel || "ед.", breakdown.primaryUnits, rates.mountPrimary, 0, "Количество основных элементов × базовая ставка монтажа"],
-          ["base", "СМР", "Монтаж контроллеров и узлов", "ед.", breakdown.controllerUnits, rates.controllerMount, 0, "Количество контроллеров/узлов × ставка монтажа контроллера"],
-          ["base", "СМР", "Кабельные работы", "м", breakdown.cableLengthM, rates.cablePerMeter, 0, "Длина трасс × ставка кабельных работ"],
-          ["base", "ПНР", "ПНР основных элементов", row?.primaryUnitLabel || "ед.", breakdown.primaryUnits, rates.pnrPrimary, 0, "Количество основных элементов × ставка ПНР"],
-          ["base", "ПНР", "ПНР активных элементов", "ед.", breakdown.activeElements, rates.pnrActiveElement, 0, "Количество активных элементов × ставка ПНР активного элемента"],
-          ["base", "Интеграция", "Интеграционные работы", "точка", breakdown.integrationPoints, rates.integrationPoint, 0, "Количество точек интеграции × ставка интеграции"],
-          ["base", "КНС", "Монтаж КНС по трассе", "м", breakdown.knsLengthM, rates.knsPerMeter, 0, "Длина КНС × ставка КНС"],
-          ["base", "КНС", "Рабочие единицы КНС", "усл. ед.", breakdown.knsWorkUnits, toNumber(rates.knsPerMeter, 0) * 0.22, 0, "Рабочие единицы КНС × 22% от ставки КНС"],
-          ["base", "Проектирование", "Проектные работы", "ч", row?.designHours, rates.designHour, 0, "Проектные часы × базовая часовая ставка"],
-          ["coefficient", "Работы", "Коэффициент условий и статуса", "коэф.", 1, Math.max(toNumber(breakdown.conditionFactor, 1) * toNumber(breakdown.exploitedFactor, 1) - 1, 0), toNumber(breakdown.computedWorkBase, 0), "База работ × (коэффициент условий × коэффициент статуса - 1)"],
-          ["charge", "Начисления", "ОПР", "%", toNumber(chargePercents.overhead, 0), 0.01, toNumber(row?.laborDetails?.workAfterConditions, 0), "Работы после условий × % ОПР"],
-          ["charge", "Начисления", "ФОТ/налоги", "%", toNumber(chargePercents.payrollTaxes, 0), 0.01, toNumber(row?.laborDetails?.workAfterConditions, 0), "Работы после условий × % ФОТ/налогов"],
-          ["charge", "Начисления", "Утилизация", "%", toNumber(chargePercents.utilization, 0), 0.01, toNumber(row?.laborDetails?.workAfterConditions, 0), "Работы после условий × % утилизации"],
-          ["charge", "Начисления", "СИЗ", "%", toNumber(chargePercents.ppe, 0), 0.01, toNumber(row?.laborDetails?.workAfterConditions, 0), "Работы после условий × % СИЗ"],
-          ["charge", "Начисления", "АХР", "%", toNumber(chargePercents.admin, 0), 0.01, toNumber(row?.laborDetails?.workAfterConditions, 0), "Работы после условий × % АХР"],
-          ["coefficient", "Регион", "Региональный коэффициент", "коэф.", 1, Math.max(toNumber(breakdown.regionalFactor, 1) - 1, 0), toNumber(row?.laborDetails?.workTotalBeforeRegion, 0), "Работы до регионального коэффициента × (региональный коэффициент - 1)"],
-        ];
-
-        return entries
-          .map(([rowType, workGroup, workType, unit, qtyRaw, rateRaw, baseRaw, formulaText], index) => {
-            const qty = toNumber(qtyRaw, 0);
-            const rate = toNumber(rateRaw, 0);
-            const base = toNumber(baseRaw, 0);
-            const baseAmount = rowType === "base" ? qty * rate : base * rate * qty;
-            const amountFromCharges =
-              workType === "ОПР"
-                ? toNumber(charges.overhead, baseAmount)
-                : workType === "ФОТ/налоги"
-                  ? toNumber(charges.payrollTaxes, baseAmount)
-                  : workType === "Утилизация"
-                    ? toNumber(charges.utilization, baseAmount)
-                    : workType === "СИЗ"
-                      ? toNumber(charges.ppe, baseAmount)
-                      : workType === "АХР"
-                        ? toNumber(charges.admin, baseAmount)
-                        : baseAmount;
-            return {
-              id: `${row?.systemId || row?.systemType}-${index}`,
-              systemLabel,
-              systemType: row?.systemType || "",
-              rowType,
-              workGroup,
-              workType,
-              unit,
-              qty,
-              rate,
-              rateBase: base,
-              baseAmount: amountFromCharges,
-              formula:
-                rowType === "base"
-                  ? `${num(qty, unit === "м" || unit === "ч" || unit === "усл. ед." ? 1 : 0)} × ${rub(rate)}`
-                  : base > 0
-                    ? `${rub(base)} × ${num(qty, unit === "%" ? 2 : 1)} × ${num(rate * 100, 2)}%`
-                    : formulaText,
-              source: row?.laborDetails?.modelSource?.unitRatesConfig || "Внутренняя модель единичных расценок",
-              basis: formulaText,
-            };
-          })
-          .filter((item) => item.rate > 0 && (item.rowType !== "base" || item.qty > 0) && item.baseAmount > 0);
-      }),
-    [systemResults]
-  );
+  const workUnitRateRows = useMemo(() => buildBaseRateExportRows(systemResults), [systemResults]);
   const exportWorkUnitRates = () => {
     if (!workUnitRateRows.length) return;
     const rows = [
-      ["Система", "Код системы", "Тип строки", "Группа работ", "Вид работ", "Ед. изм.", "Количество/норматив", "База начисления, руб.", "Базовая единичная расценка", "Стоимость элемента, руб.", "Формула", "Основание", "Источник расценки"]
-        .map(csvCell)
-        .join(";"),
+      ["Наименование работ", "Стоимость за единицу, руб.", "Количество"].map(csvCell).join(";"),
       ...workUnitRateRows.map((row) =>
-        [
-          row.systemLabel,
-          row.systemType,
-          row.rowType,
-          row.workGroup,
-          row.workType,
-          row.unit,
-          num(row.qty, row.unit === "м" || row.unit === "ч" || row.unit === "усл. ед." ? 1 : 0),
-          num(row.rateBase, 2),
-          num(row.rate, 2),
-          num(row.baseAmount, 2),
-          row.formula,
-          row.basis,
-          row.source,
-        ]
+        [row.workName, num(row.unitPrice, 2), `${num(row.quantity, row.unit === "м" || row.unit === "усл. ед." ? 1 : 0)} ${row.unit}`]
           .map(csvCell)
           .join(";")
       ),
@@ -478,242 +484,369 @@ export default function CalculationLogicStep({
     [systems, systemResults, vendorPriceSnapshots]
   );
 
+  const logicSections = useMemo(
+    () => [
+      {
+        key: "inputs",
+        title: "1. Входные параметры объекта",
+        summary: "Какие исходные данные формируют расчетную модель текущего проекта.",
+        body: (
+          <>
+            <p>
+              Расчет стартует от типа объекта, площади, этажности, статуса здания, региона и состава выбранных систем. Эти данные задают
+              рамку для объемов, сложности монтажа и проектирования.
+            </p>
+            <p>
+              Сейчас по объекту: площадь <strong>{num(calcObjectData.totalArea, 0)} м2</strong>, систем <strong>{num(systems.length, 0)}</strong>,
+              регион <strong>{calcObjectData.regionName || calcObjectData.regionSubject || "не указан"}</strong> ({coef(regionalCoef)}), статус здания{' '}
+              <strong>{calcObjectData.buildingStatus === "operational" ? "действующее" : "строящееся"}</strong> ({coef(exploitedBuildingCoef)}).
+            </p>
+          </>
+        ),
+      },
+      {
+        key: "volumes",
+        title: "2. Автоматическое определение объемов",
+        summary: "Как платформа раскладывает проект на устройства, кабель, узлы и ПНР.",
+        body: (
+          <>
+            <p>
+              Для каждой системы движок рассчитывает количество оконечных устройств, контроллеров, длину трасс, КНС, интеграционные точки и
+              пусконаладочные работы. Если загружен проектный PDF, фактическая спецификация получает приоритет над усредненной моделью.
+            </p>
+            <div className="logic-equipment-list">
+              {automaticVolumeRows.map((item) => (
+                <p key={item.key}>
+                  <strong>{item.title}:</strong> {item.detail} {item.metrics} {item.extra}
+                </p>
+              ))}
+            </div>
+          </>
+        ),
+      },
+      {
+        key: "survey",
+        title: "3. AI-обследование",
+        summary: "Как фото, чек-листы и планы эвакуации влияют на уточнение расчета.",
+        body: (
+          <>
+            <p>
+              AI-обследование собирает уточнения по материалам, высотам, трассам, ограничениям монтажа и сценариям эксплуатации. Для АПС,
+              СОТС и СОУЭ отдельное внимание уделяется планам эвакуации и схеме зонирования.
+            </p>
+            <p>
+              Цель этого блока не украшать смету, а сократить неопределенность по фактическим работам и проектированию до выхода в финальный
+              бюджет.
+            </p>
+          </>
+        ),
+      },
+      {
+        key: "pricing",
+        title: "4. Источники цен оборудования",
+        summary: "Откуда берутся рыночные цены и какие источники подтвердили позиции проекта.",
+        body: (
+          <>
+            <p>
+              Цены собираются по каждой ключевой позиции отдельно через карточки производителя и поставщиков. Приоритет отдается точным
+              совпадениям по артикулу и модели, затем подтвержденным карточкам производителя, и только потом более широкому поиску.
+            </p>
+            <div className="logic-equipment-list">
+              {vendorPricingRows.map((row) => (
+                <p key={"pricing-" + row.systemId}>
+                  <strong>
+                    {row.systemLabel} / {row.vendor}:
+                  </strong>{' '}
+                  проверено хостов {row.checkedHosts.length}, позиций с подтвержденной ценой {row.sourceCount} из {row.totalEntries}, средняя
+                  уверенность {num(row.avgConfidence * 100, 0)}%. Проверенные хосты: {formatHostList(row.checkedHosts)}. Хосты, подтвердившие
+                  цену: {formatHostList(row.matchedHosts)}.
+                  {row.warning ? " Предупреждение: " + row.warning + "." : ""}
+                </p>
+              ))}
+              {vendorPricingPositionRows.map((row) =>
+                row.positions.map((item, index) => (
+                  <p key={"pricing-position-" + row.systemId + "-" + index}>
+                    <strong>
+                      {row.systemLabel} / {row.vendor}:
+                    </strong>{' '}
+                    позиция {item.name}
+                    {item.model ? ", модель " + item.model : ""}, количество {num(item.qty, 0)} {item.unit}, цена за единицу {rub(item.unitPrice)},
+                    сумма по проекту {rub(item.total)}
+                    {item.sourceLabel ? ". Источник: " + item.sourceLabel + "." : ""}
+                    {item.confidence > 0 ? " Уверенность " + num(item.confidence * 100, 0) + "%." : ""}
+                    {item.selectionStrategy ? " Стратегия выбора: " + item.selectionStrategy + "." : ""}
+                  </p>
+                ))
+              )}
+            </div>
+          </>
+        ),
+      },
+      {
+        key: "base-rates",
+        title: "5. Базовые расценки работ",
+        summary: "Только базовые монтажные и пусконаладочные операции без начислений и коэффициентов.",
+        body: (
+          <>
+            <p>
+              По кнопке выгружаются только базовые работы текущего проекта: монтаж устройств, монтаж приборов и контроллеров, кабельные работы,
+              ПНР, интеграционные подключения и КНС-операции. Проектные работы, коэффициенты, ОПР, ФОТ/налоги, утилизация, СИЗ, АХР и
+              региональные надбавки сюда не попадают.
+            </p>
+            <p>
+              Базовая стоимость работ по проекту до начислений и коэффициентов: <strong>{rub(totalWorkBase)}</strong>.
+            </p>
+            <div className="aps-ops-header logic-export-bar">
+              <span className="hint-inline">
+                Выгрузка формирует три столбца: наименование работ, стоимость за единицу и количество именно по текущему проекту.
+              </span>
+              <button className="ghost-btn" type="button" onClick={exportWorkUnitRates} disabled={!workUnitRateRows.length}>
+                Выгрузить базовые расценки
+              </button>
+            </div>
+            {workUnitRateRows.length ? (
+              <div className="table-wrap compact logic-base-rates-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Наименование работ</th>
+                      <th>Стоимость за единицу</th>
+                      <th>Количество</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {workUnitRateRows.map((row) => (
+                      <tr key={row.id}>
+                        <td>{row.workName}</td>
+                        <td>{rub(row.unitPrice)}</td>
+                        <td>
+                          {num(row.quantity, row.unit === "м" || row.unit === "усл. ед." ? 1 : 0)} {row.unit}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p>По текущему набору систем пока нет рассчитанных базовых работ для выгрузки.</p>
+            )}
+            <div className="logic-equipment-list">
+              {ratesDigest.map((item) => (
+                <p key={"rates-" + item.systemType}>
+                  <strong>{item.systemLabel}:</strong> монтаж основного элемента {rub(item.rates.mountPrimary)}, ПНР основного элемента{' '}
+                  {rub(item.rates.pnrPrimary)}, монтаж контроллера {rub(item.rates.controllerMount)}, ПНР активного элемента{' '}
+                  {rub(item.rates.pnrActiveElement)}, кабель {rub(item.rates.cablePerMeter)}/м, КНС {rub(item.rates.knsPerMeter)}/м, интеграция{' '}
+                  {rub(item.rates.integrationPoint)}/точка.
+                </p>
+              ))}
+            </div>
+          </>
+        ),
+      },
+      {
+        key: "risk-guard",
+        title: "6. Risk Guard AI",
+        summary: "Контроль недооценки и переоценки трудовой части проекта.",
+        body: (
+          <>
+            <p>
+              Отдельный AI-контур перепроверяет СМР и ПНР на перекосы относительно состава оборудования, насыщенности трасс, КНС, региона и
+              условий монтажа.
+            </p>
+            <p>
+              Максимальный риск дисбаланса: <strong>{num(aiGuard.maxRisk * 100, 0)}%</strong>, риск недооцененности{' '}
+              <strong>{num(aiGuard.maxUnderpricingRisk * 100, 0)}%</strong>, риск переоцененности{' '}
+              <strong>{num(aiGuard.maxOverpricingRisk * 100, 0)}%</strong>, суммарный рыночный floor <strong>{rub(aiGuard.totalMarketFloor)}</strong>.
+            </p>
+          </>
+        ),
+      },
+      {
+        key: "project-risks",
+        title: "7. AI-риски проекта",
+        summary: "Какие точки удорожания и сдвига сроков система видит по текущему объекту.",
+        body: (
+          <>
+            <p>
+              Модуль рисков проекта анализирует объект, системы, обследование, проектные PDF-данные, рыночные сигналы и ограничения монтажа.
+            </p>
+            <p>
+              Сейчас зафиксировано <strong>{projectRisks.length}</strong> критичных или повышенных риска(ов) для этого проекта.
+            </p>
+          </>
+        ),
+      },
+      {
+        key: "coefficients",
+        title: "8. Коэффициенты и начисления",
+        summary: "Что применяется поверх базовых расценок уже после расчета состава работ.",
+        body: (
+          <>
+            <p>
+              Коэффициенты условий, коэффициент действующего здания, ОПР, ФОТ/налоги, утилизация, СИЗ, АХР и региональный коэффициент относятся
+              к надстройке над базой работ, а не к базовым расценкам.
+            </p>
+            <p>
+              Сводный коэффициент условий: <strong>{coef(conditionFactor)}</strong>. До регионального коэффициента{' '}
+              <strong>{rub(totalWorkBeforeRegion)}</strong>, после начислений и регионального коэффициента{' '}
+              <strong>{rub(totalWorkWithCharges)}</strong>. Сумма начислений <strong>{rub(totalCharges)}</strong>.
+            </p>
+            {appliedObjectCoefficients.length ? (
+              <div className="logic-equipment-list">
+                {appliedObjectCoefficients.map((item) => (
+                  <p key={item.key}>
+                    <strong>{item.label}:</strong> {coef(item.value)}. {item.reason}
+                  </p>
+                ))}
+              </div>
+            ) : (
+              <p>По текущему объекту ручные коэффициенты не отклонены от базового значения x1.00.</p>
+            )}
+          </>
+        ),
+      },
+      {
+        key: "design",
+        title: "9. Проектирование",
+        summary: "Как считается проектирование и когда оно исключается из расчета.",
+        body: (
+          <>
+            <p>
+              Проектирование считается отдельно по системе от объема, сложности, обследования и координации с другими подсистемами. Если по
+              системе уже есть проект, стоимость проектирования по ней не начисляется.
+            </p>
+            <p>
+              Суммарно по рассчитываемым системам: <strong>{num(totalDesignHours, 1)} ч</strong>, средняя группа{' '}
+              <strong>{num(avgDesignTeam, 1)} чел.</strong>, максимальный срок <strong>{formatDesignDurationExact(maxDesignMonths)}</strong>,
+              стоимость <strong>{rub(totalDesign)}</strong>.
+            </p>
+          </>
+        ),
+      },
+      {
+        key: "budget",
+        title: "10. Итоговая формула бюджета",
+        summary: "Как складывается итоговая сумма проекта после всех подсчетов.",
+        body: (
+          <>
+            <p>
+              <strong>Итог = Оборудование + Материалы + Работы + Проектирование + Рентабельность + НДС</strong>
+            </p>
+            <p>
+              Сейчас: оборудование <strong>{rub(totalEquipment)}</strong>, материалы <strong>{rub(totalMaterials)}</strong>, работы{' '}
+              <strong>{rub(totals.totalWorks || totals.totalWork || 0)}</strong>, проектирование <strong>{rub(totalDesign)}</strong>, итог проекта{' '}
+              <strong>{rub(totalProject)}</strong>.
+            </p>
+          </>
+        ),
+      },
+      {
+        key: "recalc",
+        title: "11. Пересчет при изменениях",
+        summary: "Что именно обновляется, когда меняются параметры проекта.",
+        body: (
+          <>
+            <p>
+              Любое изменение объекта, систем, вендора, PDF-спецификации, цен, обследования или бюджета запускает полный пересчет объемов,
+              ценового контура, рисков и итогового бюджета.
+            </p>
+            <div className="logic-equipment-list">
+              {systemResults.map((row, index) => (
+                <p key={row.systemType + "-logic-" + index}>
+                  <strong>{row.systemName}:</strong> кабель {num(row.cable || 0, 1)} м, работы {rub(row.workTotal || 0)}, проектирование{' '}
+                  {row.designSkipped ? "не рассчитывается" : rub(row.designTotal || 0)}, итог {rub(row.total || 0)}.
+                </p>
+              ))}
+              {skippedDesignRows.length ? (
+                <p>
+                  <strong>Системы с готовым проектом:</strong> {skippedDesignRows.map((row) => row.systemName).join(", ")}.
+                </p>
+              ) : null}
+            </div>
+          </>
+        ),
+      },
+    ],
+    [
+      aiGuard.maxOverpricingRisk,
+      aiGuard.maxRisk,
+      aiGuard.maxUnderpricingRisk,
+      aiGuard.totalMarketFloor,
+      appliedObjectCoefficients,
+      automaticVolumeRows,
+      avgDesignTeam,
+      calcObjectData.buildingStatus,
+      calcObjectData.regionName,
+      calcObjectData.regionSubject,
+      calcObjectData.totalArea,
+      conditionFactor,
+      exploitedBuildingCoef,
+      maxDesignMonths,
+      projectRisks.length,
+      ratesDigest,
+      regionalCoef,
+      skippedDesignRows,
+      systems.length,
+      systemResults,
+      totalCharges,
+      totalDesign,
+      totalDesignHours,
+      totalEquipment,
+      totalMaterials,
+      totalProject,
+      totalWorkBase,
+      totalWorkBeforeRegion,
+      totalWorkWithCharges,
+      totals.totalWork,
+      totals.totalWorks,
+      vendorPricingPositionRows,
+      vendorPricingRows,
+      workUnitRateRows,
+    ]
+  );
+  const activeSectionData = logicSections.find((section) => section.key === activeLogicSection) || null;
+
   const content = (
     <section className="panel">
       <div className="panel-header">
         <div>
-          <h2>Р›РѕРіРёРєР° СЂР°СЃС‡РµС‚Р°</h2>
-          <p>РџРѕС€Р°РіРѕРІРѕ: РєР°Рє РїР»Р°С‚С„РѕСЂРјР° СЃРѕР±РёСЂР°РµС‚ РѕР±СЉРµРјС‹, РїСЂРѕРІРѕРґРёС‚ AI-Р°СѓРґРёС‚ С†РµРЅ, РёСЃРїРѕР»СЊР·СѓРµС‚ AI-РѕР±СЃР»РµРґРѕРІР°РЅРёРµ, РѕС†РµРЅРёРІР°РµС‚ СЂРёСЃРєРё РїСЂРѕРµРєС‚Р° Рё Р±Р°Р»Р°РЅСЃРёСЂСѓРµС‚ Р±СЋРґР¶РµС‚ С‡РµСЂРµР· РєРѕРЅС‚СЂРѕР»СЊ РєР°С‡РµСЃС‚РІР° Рё С‚РѕС‡РЅРѕСЃС‚Рё СЂР°СЃС‡РµС‚Р°.</p>
+          <h2>Логика расчета</h2>
+          <p>
+            Все блоки свернуты в отдельные карточки. Открывайте нужный раздел по кнопке, чтобы посмотреть, как именно платформа считает объемы,
+            цены, базовые расценки и итог бюджета.
+          </p>
         </div>
       </div>
 
-      <div className="logic-grid">
-        <article className="logic-card">
-          <h3>1. Р’С…РѕРґРЅС‹Рµ РїР°СЂР°РјРµС‚СЂС‹ РѕР±СЉРµРєС‚Р°</h3>
-          <p>Р Р°СЃС‡РµС‚ РЅР°С‡РёРЅР°РµС‚СЃСЏ СЃ С‚РёРїР° РѕР±СЉРµРєС‚Р°, РїР»РѕС‰Р°РґРё, Р·Р°С‰РёС‰Р°РµРјРѕР№ РїР»РѕС‰Р°РґРё, СЌС‚Р°Р¶РЅРѕСЃС‚Рё, СЂРµРіРёРѕРЅР°, СЃС‚Р°С‚СѓСЃР° Р·РґР°РЅРёСЏ Рё РІС‹Р±СЂР°РЅРЅС‹С… СЃРёСЃС‚РµРј. Р­С‚Рё РґР°РЅРЅС‹Рµ С„РѕСЂРјРёСЂСѓСЋС‚ РїСЂРѕС„РёР»СЊ СЃР»РѕР¶РЅРѕСЃС‚Рё Рё СЃС‚Р°СЂС‚РѕРІС‹Рµ РѕР±СЉРµРјС‹ РїРѕ РєР°Р¶РґРѕР№ СЃРёСЃС‚РµРјРµ.</p>
-          <p>РЎРµР№С‡Р°СЃ: РїР»РѕС‰Р°РґСЊ <strong>{num(calcObjectData.totalArea, 0)} РјВІ</strong>, СЃРёСЃС‚РµРј <strong>{num(systems.length, 0)}</strong>, СЂРµРіРёРѕРЅ <strong>{calcObjectData.regionName}</strong> ({coef(regionalCoef)}), СЃС‚Р°С‚СѓСЃ Р·РґР°РЅРёСЏ <strong>{calcObjectData.buildingStatus === "operational" ? "РґРµР№СЃС‚РІСѓСЋС‰РµРµ" : "СЃС‚СЂРѕСЏС‰РµРµСЃСЏ"}</strong> ({coef(exploitedBuildingCoef)}).</p>
-        </article>
-
-        <article className="logic-card">
-          <h3>2. РђРІС‚РѕРјР°С‚РёС‡РµСЃРєРѕРµ РѕРїСЂРµРґРµР»РµРЅРёРµ РѕР±СЉРµРјРѕРІ</h3>
-          <p>Р”Р»СЏ РєР°Р¶РґРѕР№ СЃРёСЃС‚РµРјС‹ РґРІРёР¶РѕРє СЂР°СЃСЃС‡РёС‚С‹РІР°РµС‚ РєРѕР»РёС‡РµСЃС‚РІРѕ РѕСЃРЅРѕРІРЅС‹С… СЌР»РµРјРµРЅС‚РѕРІ, РєРѕРЅС‚СЂРѕР»Р»РµСЂРѕРІ, РєР°Р±РµР»СЏ, РљРќРЎ, РѕР±СЉРµРј РџРќР  Рё РїСЂРѕРµРєС‚РЅС‹С… С‡Р°СЃРѕРІ. РћСЃРЅРѕРІР° СЂР°СЃС‡РµС‚Р°: РїСЂРѕС„РёР»СЊ Р·РѕРЅ, РЅР°СЃС‹С‰РµРЅРЅРѕСЃС‚СЊ РѕР±СЉРµРєС‚Р°, СЌС‚Р°Р¶РЅРѕСЃС‚СЊ, РјР°СЂС€СЂСѓС‚С‹ Рё С‚РёРї СЌРєСЃРїР»СѓР°С‚Р°С†РёРё.</p>
-          <p>Р•СЃР»Рё Р·Р°РіСЂСѓР¶РµРЅ PDF-РїСЂРѕРµРєС‚ РђРџРЎ, СЃРёСЃС‚РµРјР° РёСЃРїРѕР»СЊР·СѓРµС‚ СЃРїРµС†РёС„РёРєР°С†РёСЋ РїСЂРѕРµРєС‚Р° РєР°Рє РїСЂРёРѕСЂРёС‚РµС‚РЅС‹Р№ РёСЃС‚РѕС‡РЅРёРє С„Р°РєС‚РёС‡РµСЃРєРёС… РѕР±СЉРµРјРѕРІ, Р° РЅРµ С‚РѕР»СЊРєРѕ РІРЅСѓС‚СЂРµРЅРЅСЋСЋ РјРѕРґРµР»СЊ.</p>
-        </article>
-
-        <article className="logic-card">
-          <h3>2.1. Р›РѕРіРёРєР° Р·РѕРЅ Рё СЃРѕСЃС‚Р°РІР° РѕР±РѕСЂСѓРґРѕРІР°РЅРёСЏ РїРѕ РѕР±СЉРµРєС‚Сѓ</h3>
-          <div className="logic-equipment-list">
-            {automaticVolumeRows.map((item) => (
-              <p key={item.key}>
-                <strong>{item.title}:</strong> {item.detail} {item.metrics} {item.extra}
-              </p>
-            ))}
-          </div>
-        </article>
-
-        <article className="logic-card">
-          <h3>3. AI-РѕР±СЃР»РµРґРѕРІР°РЅРёРµ</h3>
-          <p>РџРѕСЃР»Рµ Р·Р°РїРѕР»РЅРµРЅРёСЏ РѕР±СЉРµРєС‚Р° РјРѕР¶РЅРѕ Р·Р°РїСѓСЃС‚РёС‚СЊ AI-РѕР±СЃР»РµРґРѕРІР°РЅРёРµ. РџР»Р°С‚С„РѕСЂРјР° СЃС‚СЂРѕРёС‚ Р°РґР°РїС‚РёРІРЅС‹Р№ С‡РµРє-Р»РёСЃС‚ РїРѕ РѕР±СЉРµРєС‚Сѓ, Р·РѕРЅР°Рј Рё СЃРёСЃС‚РµРјР°Рј Р±РµР· РїСЂРѕРµРєС‚Р°, РІРєР»СЋС‡Р°СЏ РІРѕРїСЂРѕСЃС‹, РЅРµРѕР±С…РѕРґРёРјС‹Рµ РґР»СЏ С‚РѕС‡РЅРѕРіРѕ СЂР°СЃС‡РµС‚Р° СЃС‚РѕРёРјРѕСЃС‚Рё РїСЂРѕРµРєС‚РёСЂРѕРІР°РЅРёСЏ.</p>
-          <p>Р”Р»СЏ РЎРћРўРЎ, РЎРћРЈР­ Рё РђРџРЎ С‡РµРє-Р»РёСЃС‚ РѕР±СЏР·Р°С‚РµР»СЊРЅРѕ СЃРѕР±РёСЂР°РµС‚ РїР»Р°РЅС‹ СЌРІР°РєСѓР°С†РёРё. РџР»Р°С‚С„РѕСЂРјР° РїРѕРґСЃРєР°Р·С‹РІР°РµС‚, РєР°Рє РёС… С„РѕС‚РѕРіСЂР°С„РёСЂРѕРІР°С‚СЊ: РґРµСЂР¶Р°С‚СЊ РєР°РјРµСЂСѓ РїРѕС‡С‚Рё РїР°СЂР°Р»Р»РµР»СЊРЅРѕ РїР»РѕСЃРєРѕСЃС‚Рё СЃС…РµРјС‹, Р±СЂР°С‚СЊ РїР»Р°РЅ С†РµР»РёРєРѕРј, РёР·Р±РµРіР°С‚СЊ Р±Р»РёРєРѕРІ, СЃРјР°Р·Р° Рё СЃРёР»СЊРЅРѕРіРѕ РЅР°РєР»РѕРЅР°.</p>
-          <p>Р¤РѕС‚РѕР°РЅР°Р»РёР· РїРѕРјРѕРіР°РµС‚ РїРѕРґС‚РІРµСЂРґРёС‚СЊ РјР°С‚РµСЂРёР°Р» СЃС‚РµРЅ, С‚РёРї РїРѕС‚РѕР»РєР° Рё, РµСЃР»Рё РєР°С‡РµСЃС‚РІРѕ СЃРЅРёРјРєР° РїРѕР·РІРѕР»СЏРµС‚, РѕС†РµРЅРёС‚СЊ РІС‹СЃРѕС‚Сѓ РїРѕРјРµС‰РµРЅРёСЏ. РћС‚РґРµР»СЊРЅС‹Р№ РјРѕРґСѓР»СЊ СЂР°СЃРїРѕР·РЅР°РІР°РЅРёСЏ РїР»Р°РЅРёСЂРѕРІРѕРє Р°РЅР°Р»РёР·РёСЂСѓРµС‚ РїР»Р°РЅС‹ СЌРІР°РєСѓР°С†РёРё, РІС‹РґРµР»СЏРµС‚ РѕС…СЂР°РЅРЅС‹Рµ Р·РѕРЅС‹ РґР»СЏ РЎРћРўРЎ, Р·РѕРЅС‹ РѕРїРѕРІРµС‰РµРЅРёСЏ РґР»СЏ РЎРћРЈР­ Рё Р—РљРЎРџРЎ РґР»СЏ РђРџРЎ, Р° Р·Р°С‚РµРј РїРµСЂРµРїСЂРѕРІРµСЂСЏРµС‚ СЂРµР·СѓР»СЊС‚Р°С‚ РїРѕ РґР°РЅРЅС‹Рј РѕР±СЉРµРєС‚Р°.</p>
-          <p>Р’ РјРѕРґСѓР»СЊ РІСЃС‚СЂРѕРµРЅР° Р·Р°С‰РёС‚Р° РѕС‚ Р»РѕР¶РЅРѕР№ С„РѕС‚РѕРёРЅС„РѕСЂРјР°С†РёРё: СЃС…РµРјС‹, РґРѕРєСѓРјРµРЅС‚С‹ Рё РЅРµСЂРµР»РµРІР°РЅС‚РЅС‹Рµ СЃРЅРёРјРєРё РЅРµ РїРѕРїР°РґР°СЋС‚ РІ С‡РµРє-Р»РёСЃС‚ Рё РЅРµ РёСЃРєР°Р¶Р°СЋС‚ РѕР±СЃР»РµРґРѕРІР°РЅРёРµ.</p>
-        </article>
-
-        <article className="logic-card">
-          <h3>4. РћС‚РєСѓРґР° Р±РµСЂСѓС‚СЃСЏ С†РµРЅС‹ РѕР±РѕСЂСѓРґРѕРІР°РЅРёСЏ</h3>
-          <p>
-            РџРѕ С‚РµРєСѓС‰РµРјСѓ РїСЂРѕРµРєС‚Сѓ С†РµРЅС‹ СЃРѕР±РёСЂР°СЋС‚СЃСЏ РїРѕ РєР°Р¶РґРѕР№ РєР»СЋС‡РµРІРѕР№ РїРѕР·РёС†РёРё РѕС‚РґРµР»СЊРЅРѕ. РџР»Р°С‚С„РѕСЂРјР° С„РѕСЂРјРёСЂСѓРµС‚ РїРѕРёСЃРєРѕРІС‹Рµ Р·Р°РїСЂРѕСЃС‹ РёР·
-            РІРµРЅРґРѕСЂР°, РјРѕРґРµР»Рё, Р°СЂС‚РёРєСѓР»Р° Рё РЅР°Р·РІР°РЅРёСЏ РїРѕР·РёС†РёРё, РїРѕСЃР»Рµ С‡РµРіРѕ РѕРїСЂР°С€РёРІР°РµС‚ СЃР°Р№С‚ РїСЂРѕРёР·РІРѕРґРёС‚РµР»СЏ Рё РїРѕСЃС‚Р°РІС‰РёРєРѕРІ, РїРѕРґРєР»СЋС‡РµРЅРЅС‹С… Рє
-            РїСЂРѕРµРєС‚Сѓ.
-          </p>
-          <p>
-            Р’ РєРѕРЅС‚СѓСЂ РёСЃС‚РѕС‡РЅРёРєРѕРІ РІС…РѕРґСЏС‚ СЃР°Р№С‚ РїСЂРѕРёР·РІРѕРґРёС‚РµР»СЏ, Tinko, Luis, Garant, Ganimed Рё РґРѕРїРѕР»РЅРёС‚РµР»СЊРЅС‹Рµ РІРµРЅРґРѕСЂРЅС‹Рµ РІРёС‚СЂРёРЅС‹. Р”Р»СЏ
-            РѕС‚РґРµР»СЊРЅС‹С… Р±СЂРµРЅРґРѕРІ РёСЃРїРѕР»СЊР·СѓСЋС‚СЃСЏ СЃРїРµС†РёР°Р»СЊРЅС‹Рµ РёСЃС‚РѕС‡РЅРёРєРё, РЅР°РїСЂРёРјРµСЂ `hikvision-shop.ru` Рё `dahua.market`. Р•СЃР»Рё РїРѕ СЃРёСЃС‚РµРјРµ
-            Р·Р°РіСЂСѓР¶РµРЅ РїСЂРѕРµРєС‚, РїСЂРёРѕСЂРёС‚РµС‚ РїРѕР»СѓС‡Р°СЋС‚ СЃС‚СЂРѕРєРё СЂР°СЃРїРѕР·РЅР°РЅРЅРѕР№ РїСЂРѕРµРєС‚РЅРѕР№ СЃРїРµС†РёС„РёРєР°С†РёРё, Р° С†РµРЅС‹ СЃРѕР±РёСЂР°СЋС‚СЃСЏ СѓР¶Рµ РїРѕ РЅРёРј.
-          </p>
-          <p>
-            РђР»РіРѕСЂРёС‚Рј СЃРЅР°С‡Р°Р»Р° РёС‰РµС‚ С‚РѕС‡РЅС‹Рµ СЃРѕРІРїР°РґРµРЅРёСЏ РїРѕ Р°СЂС‚РёРєСѓР»Сѓ Рё РјРѕРґРµР»Рё. Р•СЃР»Рё РЅР°Р№РґРµРЅРѕ РЅРµСЃРєРѕР»СЊРєРѕ СЂРµР»РµРІР°РЅС‚РЅС‹С… РїСЂРµРґР»РѕР¶РµРЅРёР№, РІ СЂР°СЃС‡РµС‚
-            Р±РµСЂРµС‚СЃСЏ СѓСЃСЂРµРґРЅРµРЅРЅР°СЏ С†РµРЅР° РїРѕ РІР°Р»РёРґРЅС‹Рј РёСЃС‚РѕС‡РЅРёРєР°Рј РїРѕСЃР»Рµ РѕС‚СЃРµС‡РµРЅРёСЏ РІС‹Р±СЂРѕСЃРѕРІ. Р•СЃР»Рё С‚РѕС‡РЅРѕРіРѕ СЃРѕРІРїР°РґРµРЅРёСЏ РЅРµС‚, РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ
-            РїРѕРёСЃРє РїРѕ РјРѕРґРµР»Рё Рё РЅР°Р·РІР°РЅРёСЋ РїРѕР·РёС†РёРё СЃ РїСЂРѕРІРµСЂРєРѕР№ РµРґРёРЅРёС†С‹ РёР·РјРµСЂРµРЅРёСЏ Рё Р·Р°С‰РёС‚РѕР№ РѕС‚ СЃР»РёС€РєРѕРј РЅРёР·РєРёС… РёР»Рё СЃР»РёС€РєРѕРј РІС‹СЃРѕРєРёС… С†РµРЅ.
-          </p>
-          <div className="logic-equipment-list">
-            {vendorPricingRows.map((row) => (
-              <p key={`pricing-${row.systemId}`}>
-                <strong>{row.systemLabel} / {row.vendor}:</strong> РїСЂРѕРІРµСЂРµРЅРѕ С…РѕСЃС‚РѕРІ {row.checkedHosts.length}, РїРѕР·РёС†РёРё СЃ
-                РїРѕРґС‚РІРµСЂР¶РґРµРЅРЅРѕР№ С†РµРЅРѕР№ {row.sourceCount} РёР· {row.totalEntries}, СЃСЂРµРґРЅСЏСЏ СѓРІРµСЂРµРЅРЅРѕСЃС‚СЊ {num(row.avgConfidence * 100, 0)}%.
-                РџСЂРѕРІРµСЂРµРЅРЅС‹Рµ С…РѕСЃС‚С‹: {formatHostList(row.checkedHosts)}. РҐРѕСЃС‚С‹, РїРѕРґС‚РІРµСЂРґРёРІС€РёРµ С†РµРЅСѓ: {formatHostList(row.matchedHosts)}.
-                {row.warning ? ` РџСЂРµРґСѓРїСЂРµР¶РґРµРЅРёРµ: ${row.warning}.` : ""}
-              </p>
-            ))}
-            {vendorPricingPositionRows.map((row) =>
-              row.positions.map((item, index) => (
-                <p key={`pricing-position-${row.systemId}-${index}`}>
-                  <strong>{row.systemLabel} / {row.vendor}:</strong> РїРѕР·РёС†РёСЏ {item.name}
-                  {item.model ? `, РјРѕРґРµР»СЊ ${item.model}` : ""}, РєРѕР»РёС‡РµСЃС‚РІРѕ {num(item.qty, 0)} {item.unit}, С†РµРЅР° Р·Р° РµРґРёРЅРёС†Сѓ{" "}
-                  {rub(item.unitPrice)}, сумма по проекту {rub(item.total)}{item.sourceLabel ? `. Источник: ${item.sourceLabel}.` : ""}
-                  {item.confidence > 0 ? ` РЈРІРµСЂРµРЅРЅРѕСЃС‚СЊ ${num(item.confidence * 100, 0)}%.` : ""}
-                  {item.selectionStrategy ? ` РЎС‚СЂР°С‚РµРіРёСЏ РІС‹Р±РѕСЂР°: ${item.selectionStrategy}.` : ""}
-                </p>
-              ))
-            )}
-          </div>
-          <p>
-            РРјРµРЅРЅРѕ РїРѕСЌС‚РѕРјСѓ РІРѕ РІРєР»Р°РґРєРµ `РЎРёСЃС‚РµРјС‹` РїРѕРєР°Р·С‹РІР°СЋС‚СЃСЏ РїСЂРѕРІРµСЂРµРЅРЅС‹Рµ РёСЃС‚РѕС‡РЅРёРєРё, СЃС‚СЂР°С‚РµРіРёСЏ РІС‹Р±РѕСЂР° Рё СѓСЂРѕРІРµРЅСЊ СѓРІРµСЂРµРЅРЅРѕСЃС‚Рё: СЌС‚Рѕ
-            РєСЂР°С‚РєР°СЏ СЂР°СЃС€РёС„СЂРѕРІРєР° С‚РѕРіРѕ, РєР°Рє РїРѕ С‚РµРєСѓС‰РµРјСѓ РѕР±СЉРµРєС‚Сѓ СЃРѕР±СЂР°Р»СЃСЏ РёС‚РѕРіРѕРІС‹Р№ С†РµРЅРЅРёРє.
-          </p>
-        </article>
-
-        <article className="logic-card">
-          <h3>5. РљР°Рє СЃС‡РёС‚Р°РµС‚СЃСЏ СЃС‚РѕРёРјРѕСЃС‚СЊ СЂР°Р±РѕС‚</h3>
-          <p>РЎРњР +РџРќР  СЃС‡РёС‚Р°СЋС‚СЃСЏ РїРѕ СЃРѕСЃС‚Р°РІСѓ СЂР°Р±РѕС‚, Р° РЅРµ РїРѕ СЂСѓР±Р»СЏРј Р·Р° РєРІР°РґСЂР°С‚РЅС‹Р№ РјРµС‚СЂ. Р‘Р°Р·Р° СЃРєР»Р°РґС‹РІР°РµС‚СЃСЏ РёР· РјРѕРЅС‚Р°Р¶Р° РѕСЃРЅРѕРІРЅС‹С… СЌР»РµРјРµРЅС‚РѕРІ, РџРќР , РєРѕРЅС‚СЂРѕР»Р»РµСЂРѕРІ, РєР°Р±РµР»СЊРЅС‹С… СЂР°Р±РѕС‚, РљРќРЎ Рё С‚РѕС‡РµРє РёРЅС‚РµРіСЂР°С†РёРё.</p>
-          <p>РСЃС‚РѕС‡РЅРёРє Р±Р°Р·РѕРІС‹С… СЂР°СЃС†РµРЅРѕРє вЂ” РІРЅСѓС‚СЂРµРЅРЅСЏСЏ РЅРѕСЂРјР°С‚РёРІРЅР°СЏ Р±Р°Р·Р° РїР»Р°С‚С„РѕСЂРјС‹: РІ РЅРµР№ Р·Р°С„РёРєСЃРёСЂРѕРІР°РЅС‹ РµРґРёРЅРёС‡РЅС‹Рµ СЃС‚Р°РІРєРё РЅР° РјРѕРЅС‚Р°Р¶, РџРќР , РёРЅС‚РµРіСЂР°С†РёСЋ, РєР°Р±РµР»СЊРЅС‹Рµ Рё РљРќРЎ-СЂР°Р±РѕС‚С‹ РїРѕ РєР°Р¶РґРѕРјСѓ С‚РёРїСѓ СЃРёСЃС‚РµРјС‹, Р° С‚Р°РєР¶Рµ РєРѕРЅСЃРµСЂРІР°С‚РёРІРЅС‹Рµ РЅРёР¶РЅРёРµ РїРѕСЂРѕРіРё, РЅРёР¶Рµ РєРѕС‚РѕСЂС‹С… С‚СЂСѓРґРѕРІР°СЏ С‡Р°СЃС‚СЊ РЅРµ РјРѕР¶РµС‚ Р±С‹С‚СЊ РѕРїСѓС‰РµРЅР° РґР°Р¶Рµ РїСЂРё РЅРµРїРѕР»РЅС‹С… РёР»Рё СЃР»РёС€РєРѕРј РѕРїС‚РёРјРёСЃС‚РёС‡РЅС‹С… РёСЃС…РѕРґРЅС‹С… РґР°РЅРЅС‹С…. Р­С‚Рѕ СѓС‚РІРµСЂР¶РґРµРЅРЅР°СЏ СЂР°СЃС‡РµС‚РЅР°СЏ Р±Р°Р·Р° С‚РµРєСѓС‰РµР№ РІРµСЂСЃРёРё РїР»Р°С‚С„РѕСЂРјС‹, Р° РЅРµ РїСЂРѕРёР·РІРѕР»СЊРЅС‹Рµ С†РёС„СЂС‹ РёР· РєРѕРЅРєСЂРµС‚РЅРѕР№ СЃРјРµС‚С‹.</p>
-          <p>
-            РџРѕСЂСЏРґРѕРє СЂР°СЃС‡РµС‚Р° РїРѕ С„РѕСЂРјСѓР»Рµ: <strong>Р‘Р°Р·Р° СЂР°Р±РѕС‚ = РЎРњР  + РџРќР  + РёРЅС‚РµРіСЂР°С†РёСЏ + РљРќРЎ</strong>.
-            РЎРњР  = РїРµСЂРІРёС‡РЅС‹Рµ СЌР»РµРјРµРЅС‚С‹ Г— СЃС‚Р°РІРєР° РјРѕРЅС‚Р°Р¶Р° + РєРѕРЅС‚СЂРѕР»Р»РµСЂС‹ Г— СЃС‚Р°РІРєР° РјРѕРЅС‚Р°Р¶Р° РєРѕРЅС‚СЂРѕР»Р»РµСЂР° + РєР°Р±РµР»СЊ Г— СЃС‚Р°РІРєР° Р·Р° 1 Рј.
-            РџРќР  = РїРµСЂРІРёС‡РЅС‹Рµ СЌР»РµРјРµРЅС‚С‹ Г— СЃС‚Р°РІРєР° РџРќР  + Р°РєС‚РёРІРЅС‹Рµ СЌР»РµРјРµРЅС‚С‹ Г— СЃС‚Р°РІРєР° РџРќР  РЅР° Р°РєС‚РёРІРЅС‹Р№ СЌР»РµРјРµРЅС‚.
-            РРЅС‚РµРіСЂР°С†РёСЏ = С‚РѕС‡РєРё РёРЅС‚РµРіСЂР°С†РёРё Г— СЃС‚Р°РІРєР° РёРЅС‚РµРіСЂР°С†РёРё.
-            РљРќРЎ = РјРµС‚СЂС‹ РљРќРЎ Г— СЃС‚Р°РІРєР° РљРќРЎ + СЂР°Р±РѕС‡РёРµ РµРґРёРЅРёС†С‹ РљРќРЎ Г— 22% СЌС‚РѕР№ Р¶Рµ СЃС‚Р°РІРєРё.
-          </p>
-          <p>
-            Р”Р°Р»РµРµ СЃРёСЃС‚РµРјР° РїСЂРёРјРµРЅСЏРµС‚ С†РµРїРѕС‡РєСѓ: <strong>Р±Р°Р·Р° СЂР°Р±РѕС‚ Г— РєРѕСЌС„С„РёС†РёРµРЅС‚С‹ СѓСЃР»РѕРІРёР№ Г— РєРѕСЌС„С„РёС†РёРµРЅС‚ РґРµР№СЃС‚РІСѓСЋС‰РµРіРѕ Р·РґР°РЅРёСЏ = СЂР°Р±РѕС‚С‹ РїРѕСЃР»Рµ СѓСЃР»РѕРІРёР№</strong>,
-            Р·Р°С‚РµРј РЅР° СЌС‚Сѓ РІРµР»РёС‡РёРЅСѓ РЅР°С‡РёСЃР»СЏСЋС‚СЃСЏ РћРџР , Р¤РћРў, СѓС‚РёР»РёР·Р°С†РёСЏ, РЎРР— Рё РђРҐР , РїРѕСЃР»Рµ С‡РµРіРѕ РїСЂРёРјРµРЅСЏРµС‚СЃСЏ СЂРµРіРёРѕРЅР°Р»СЊРЅС‹Р№ РєРѕСЌС„С„РёС†РёРµРЅС‚.
-            РС‚РѕРіРѕРІР°СЏ Р±Р°Р·Р° СЂР°Р±РѕС‚ РґРѕРїРѕР»РЅРёС‚РµР»СЊРЅРѕ Р·Р°С‰РёС‰Р°РµС‚СЃСЏ СЃРЅРёР·Сѓ С‚СЂРµРјСЏ Р±Р°СЂСЊРµСЂР°РјРё: РјРёРЅРёРјСѓРјРѕРј РїРѕ РµРґРёРЅРёС‡РЅС‹Рј СЃС‚Р°РІРєР°Рј, РјРёРЅРёРјСѓРјРѕРј РїРѕ РјР°СЂРєРµСЂСѓ СЃРёСЃС‚РµРјС‹ Рё AI-floor.
-          </p>
-          <p>Р‘Р°Р·Р° СЂР°Р±РѕС‚ РїРѕ С‚РµРєСѓС‰РµРјСѓ СЂР°СЃС‡РµС‚Сѓ: <strong>{rub(totalWorkBase)}</strong>. РџРѕСЃР»Рµ РЅР°С‡РёСЃР»РµРЅРёР№ Рё РєРѕСЌС„С„РёС†РёРµРЅС‚РѕРІ: <strong>{rub(totalWorkWithCharges)}</strong>.</p>
-          <p>
-            Детализация по текущему расчету: СМР <strong>{rub(detailedLaborBreakdown.totalSmr)}</strong>, ПНР <strong>{rub(detailedLaborBreakdown.totalPnr)}</strong>,
-            интеграция <strong>{rub(detailedLaborBreakdown.totalIntegration)}</strong>, КНС <strong>{rub(detailedLaborBreakdown.totalKns)}</strong>.
-          </p>
-          <p>
-            После коэффициентов условий и статуса здания: <strong>{rub(detailedLaborBreakdown.totalWorkAfterConditions)}</strong>. Начисления:
-            ОПР <strong>{rub(detailedLaborBreakdown.totalOverhead)}</strong>, ФОТ/налоги <strong>{rub(detailedLaborBreakdown.totalPayrollTaxes)}</strong>,
-            утилизация <strong>{rub(detailedLaborBreakdown.totalUtilization)}</strong>, СИЗ <strong>{rub(detailedLaborBreakdown.totalPpe)}</strong>,
-            АХР <strong>{rub(detailedLaborBreakdown.totalAdmin)}</strong>.
-          </p>
-          <p>
-            Защитные пороги базы: по единичным расценкам <strong>{rub(detailedLaborBreakdown.totalRateFloor)}</strong>, по маркеру
-            <strong> {rub(detailedLaborBreakdown.totalMarkerFloor)}</strong>, AI floor <strong>{rub(detailedLaborBreakdown.totalNeuralFloor)}</strong>.
-          </p>
-          <div className="aps-ops-header" style={{ marginBottom: 12 }}>
-            <span className="hint-inline">Кнопка выгружает все составные элементы стоимости работ: базовые операции, базу начисления, коэффициенты и отдельные начисления по текущему проекту.</span>
-            <button className="ghost-btn" type="button" onClick={exportWorkUnitRates} disabled={!workUnitRateRows.length}>
-              Выгрузить цены
-            </button>
-          </div>
-          {workUnitRateRows.length ? (
-            <div className="table-wrap compact" style={{ marginBottom: 12 }}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Система</th>
-                    <th>Тип строки</th>
-                    <th>Группа</th>
-                    <th>Вид работ</th>
-                    <th>Кол-во</th>
-                    <th>Ед.</th>
-                    <th>База начисления</th>
-                    <th>Расценка</th>
-                    <th>Стоимость элемента</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {workUnitRateRows.slice(0, 24).map((row) => (
-                    <tr key={row.id}>
-                      <td>{row.systemLabel}</td>
-                      <td>{row.rowType}</td>
-                      <td>{row.workGroup}</td>
-                      <td>{row.workType}</td>
-                      <td>{num(row.qty, row.unit === "м" || row.unit === "ч" || row.unit === "усл. ед." ? 1 : 0)}</td>
-                      <td>{row.unit}</td>
-                      <td>{row.rateBase ? rub(row.rateBase) : "—"}</td>
-                      <td>{rub(row.rate)}</td>
-                      <td>{rub(row.baseAmount)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
-          <div className="logic-equipment-list">
-            {ratesDigest.map((item) => (
-              <p key={`rates-${item.systemType}`}>
-                <strong>{item.systemLabel}:</strong> монтаж основного элемента {rub(item.rates.mountPrimary)}, ПНР основного элемента {rub(item.rates.pnrPrimary)},
-                монтаж контроллера {rub(item.rates.controllerMount)}, ПНР активного элемента {rub(item.rates.pnrActiveElement)}, кабель {rub(item.rates.cablePerMeter)}/м,
-                КНС {rub(item.rates.knsPerMeter)}/м, интеграция {rub(item.rates.integrationPoint)}/точка, проектирование {rub(item.rates.designHour)}/час.
-                Минимальная база по ставкам: x{num(item.guard.minBaseFactor, 2)}, минимальный итог по маркеру: {rub(item.guard.minFinalPerMarker)}.
-              </p>
-            ))}
-          </div>
-        </article>
-
-        <article className="logic-card">
-          <h3>6. Risk Guard AI: контроль сбалансированности</h3>
-          <p>В расчете есть отдельный AI-контур, который перепроверяет СМР+ПНР не только на недооцененность, но и на переоцененность. Он анализирует PDF-override, кабельную насыщенность, КНС, плотность узлов, набор оборудования, регион и условия работ.</p>
-          <p>Если Risk Guard AI видит дисбаланс, он не меняет коэффициенты автоматически, а корректирует защитные границы расчета и подсказывает, где бюджет может быть занижен или перезаложен относительно параметров объекта.</p>
-          <p>По текущему расчету максимальный риск дисбаланса: <strong>{num(aiGuard.maxRisk * 100, 0)}%</strong>, риск недооцененности: <strong>{num(aiGuard.maxUnderpricingRisk * 100, 0)}%</strong>, риск переоцененности: <strong>{num(aiGuard.maxOverpricingRisk * 100, 0)}%</strong>, суммарный рыночный floor: <strong>{rub(aiGuard.totalMarketFloor)}</strong>.</p>
-        </article>
-
-        <article className="logic-card">
-          <h3>7. AI-риски проекта</h3>
-          <p>Отдельный модуль AI-рисков проекта в реальном времени анализирует весь собранный контур: объект, зонирование, системы, обследование, проектные PDF-данные, рыночные сигналы и ограничения монтажа.</p>
-          <p>На выходе он показывает не общий список замечаний, а до пяти самых критичных индивидуальных рисков именно для текущего проекта, чтобы заранее увидеть возможные точки удорожания, сдвига сроков и корректировок спецификации.</p>
-          <p>Сейчас в модуле зафиксировано <strong>{projectRisks.length}</strong> критичных/повышенных риска(ов).</p>
-        </article>
-
-        <article className="logic-card">
-          <h3>8. Коэффициенты и начисления</h3>
-          <p>После расчета базы работ система применяет коэффициенты условий выполнения, коэффициент действующего здания и региональный коэффициент. Региональная часть ограничена floor-логикой и не может искусственно удешевить труд ниже базы.</p>
-          <p>Сводный коэффициент условий: <strong>{coef(conditionFactor)}</strong>. Начисления: ФОТ {percent(budget.payrollTaxesPercent)}, утилизация {percent(budget.utilizationPercent)}, СИЗ {percent(budget.ppePercent)}, АХР {percent(budget.adminPercent)}.</p>
-          {appliedObjectCoefficients.length ? (
-            <div className="logic-equipment-list">
-              {appliedObjectCoefficients.map((item) => (
-                <p key={item.key}>
-                  <strong>{item.label}:</strong> {coef(item.value)}. {item.reason}
-                </p>
-              ))}
-            </div>
-          ) : (
-            <p>По текущему объекту все ручные коэффициенты стоят в базовом значении x1.00; дополнительно применяются только встроенные базовые настройки модели.</p>
-          )}
-          <p>
-            Сумма начислений по текущему расчету: <strong>{rub(totalCharges)}</strong>. До регионального коэффициента:
-            <strong> {rub(totalWorkBeforeRegion)}</strong>; после регионального коэффициента:
-            <strong> {rub(totalWorkWithCharges)}</strong>.
-          </p>
-        </article>
-
-        <article className="logic-card">
-          <h3>9. Проектирование</h3>
-          <p>Проектирование считается отдельно по каждой системе от расчетного объема и сложности. Данные объекта и AI-обследования корректируют трудоемкость: учитываются трассы, высоты, отделка, интеграции, координация по зонам и существующая инфраструктура.</p>
-          <p>Если по системе есть проект или он загружен во вкладке «Системы», стоимость проектирования по этой системе не рассчитывается, а на вкладке «Проектирование» выводится пометка «стоимость не рассчитывается, проект в наличии».</p>
-          <p>Суммарно по рассчитываемым системам: <strong>{num(totalDesignHours, 1)} ч</strong>, средняя группа <strong>{num(avgDesignTeam, 1)} чел.</strong>, максимальный срок <strong>{formatDesignDurationExact(maxDesignMonths)}</strong>, стоимость <strong>{rub(totalDesign)}</strong>.</p>
-        </article>
-
-        <article className="logic-card">
-          <h3>10. Итоговая формула бюджета</h3>
-          <p><strong>Итог = Оборудование + Материалы + Работы + Проектирование + Рентабельность + НДС</strong></p>
-          <p>Сейчас: оборудование <strong>{rub(totalEquipment)}</strong>, материалы <strong>{rub(totalMaterials)}</strong>, работы <strong>{rub(totals.totalWorks || totals.totalWork || 0)}</strong>, проектирование <strong>{rub(totalDesign)}</strong>, итог проекта <strong>{rub(totalProject)}</strong>.</p>
-        </article>
-
-        <article className="logic-card">
-          <h3>11. Что происходит при изменении параметров</h3>
-          <p>Любое изменение объекта, систем, вендора, PDF-спецификации, цен, обследования или бюджета запускает пересчет: обновляются объемы, AI-аудит цен, контур рисков проекта, блок Risk Guard AI и общий бюджет проекта.</p>
-          <div className="logic-equipment-list">
-            {systemResults.map((row, index) => (
-              <p key={`${row.systemType}-logic-${index}`}>
-                <strong>{row.systemName}:</strong> кабель {num(row.cable || 0, 1)} м, работы {rub(row.workTotal || 0)}, проектирование {row.designSkipped ? "не рассчитывается" : rub(row.designTotal || 0)}, итог {rub(row.total || 0)}.
-              </p>
-            ))}
-            {skippedDesignRows.length ? (
-              <p>
-                <strong>Системы с проектом:</strong> {skippedDesignRows.map((row) => row.systemName).join(", ")}.
-              </p>
-            ) : null}
-          </div>
-        </article>
+      <div className="logic-stack">
+        {logicSections.map((section) => (
+          <button key={section.key} type="button" className="ghost-btn logic-section-btn" onClick={() => setActiveLogicSection(section.key)}>
+            <span className="logic-section-btn__title">{section.title}</span>
+            <span className="logic-section-btn__summary">{section.summary}</span>
+          </button>
+        ))}
       </div>
+
+      {activeSectionData ? (
+        <div className="project-plan-modal logic-modal" role="dialog" aria-modal="true" aria-labelledby="logic-modal-title">
+          <button className="project-plan-modal__backdrop" type="button" aria-label="Закрыть окно" onClick={() => setActiveLogicSection(null)} />
+          <div className="project-plan-modal__card logic-modal__card">
+            <div className="project-plan-modal__header">
+              <div>
+                <div className="project-plan-modal__eyebrow">Логика расчета</div>
+                <h3 id="logic-modal-title">{activeSectionData.title}</h3>
+                <p>{activeSectionData.summary}</p>
+              </div>
+              <button className="ghost-btn project-plan-modal__close" type="button" onClick={() => setActiveLogicSection(null)}>
+                Закрыть
+              </button>
+            </div>
+            <div className="logic-card logic-modal__body">{activeSectionData.body}</div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
-
   return repairReactTextTree(content);
 }
+
