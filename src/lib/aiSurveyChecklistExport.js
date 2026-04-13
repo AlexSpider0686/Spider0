@@ -9,12 +9,14 @@ function escapeHtml(value) {
 }
 
 function safeFileName(value, fallback = "project_checklist") {
-  return String(value || fallback)
-    .trim()
-    .replace(/[\\/:*?"<>|]+/g, "_")
-    .replace(/\s+/g, "_")
-    .replace(/_+/g, "_")
-    .replace(/^_+|_+$/g, "") || fallback;
+  return (
+    String(value || fallback)
+      .trim()
+      .replace(/[\\/:*?"<>|]+/g, "_")
+      .replace(/\s+/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_+|_+$/g, "") || fallback
+  );
 }
 
 async function saveBlob(fileName, blob) {
@@ -246,7 +248,7 @@ function buildChecklistHtml({ objectData = {}, aiSurveyPlan = {}, systems = [] }
       <div class="section">
         <div class="section-head">
           <h2>Состав обследования</h2>
-          <p>Сводка по системам проекта и по тем направлениям, которые должны быть проверены при обследовании.</p>
+          <p>Сводка по системам проекта и тем направлениям, которые должны быть проверены при обследовании.</p>
         </div>
         <table class="system-summary">
           <thead>

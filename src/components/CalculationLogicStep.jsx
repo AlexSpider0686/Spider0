@@ -151,14 +151,14 @@ function t(value) {
 
 function formatHostList(hosts = []) {
   const normalized = [...new Set((hosts || []).map((item) => String(item || "").trim()).filter(Boolean))];
-  return normalized.length ? normalized.join(", ") : "РЅРµС‚ РґР°РЅРЅС‹С…";
+  return normalized.length ? normalized.join(", ") : "нет данных";
 }
 
 function formatDesignDurationExact(monthsExact) {
   const safeMonths = toNumber(monthsExact, 0);
-  if (safeMonths <= 0) return "0 РјРµСЃ.";
-  if (safeMonths < 1) return `${num(Math.max(safeMonths * 22, 1), 0)} СЂР°Р±. РґРЅ.`;
-  return `${num(safeMonths, 1)} РјРµСЃ.`;
+  if (safeMonths <= 0) return "0 мес.";
+  if (safeMonths < 1) return `${num(Math.max(safeMonths * 22, 1), 0)} раб. дн.`;
+  return `${num(safeMonths, 1)} мес.`;
 }
 
 function summarizeAiGuard(systemResults) {
@@ -175,6 +175,74 @@ function summarizeAiGuard(systemResults) {
   return { maxRisk, maxUplift, maxOverpricingRisk, maxUnderpricingRisk, totalMarketFloor };
 }
 
+function summarizeSurveyLayer(technicalSolution = {}, aiSurveyCompletion = {}) {
+  const appliedAnswers = technicalSolution?.appliedAnswers || {};
+  const appliedPhotoAnalyses = technicalSolution?.appliedPhotoAnalyses || {};
+  const photoCount = Object.values(appliedPhotoAnalyses).filter((item) => item?.accepted !== false).length;
+  const completionPercent = toNumber(aiSurveyCompletion?.percent, 0);
+  const lowCurrentRooms = toNumber(appliedAnswers["object-low-current-rooms"], 0);
+  const reservePercent = toNumber(appliedAnswers["object-cable-reserve"], 0);
+  const noRiserAccess = appliedAnswers["object-riser-access"] === false;
+  const routeSignals = Object.keys(appliedAnswers).filter((key) => key.endsWith("-corridor-route-method")).length;
+  const appliedAt = technicalSolution?.appliedAt;
+
+  const highlights = [
+    appliedAt ? `Данные обследования уже загружены в расчет (${new Date(appliedAt).toLocaleString("ru-RU")}).` : "Данные обследования еще не загружены в расчет.",
+    `Заполнение обязательной части чек-листа: ${num(completionPercent, 0)}%.`,
+    photoCount > 0 ? `Принято фото/планов обследования: ${photoCount}.` : "Фото и планы в расчет пока не внесены.",
+    lowCurrentRooms > 0 ? `Подтверждены слаботочные помещения/узлы связи: ${lowCurrentRooms}.` : "",
+    reservePercent > 0 ? `По чек-листу заложен дополнительный резерв кабеля ${num(reservePercent, 0)}%.` : "",
+    noRiserAccess ? "По обследованию не подтвержден свободный доступ к стоякам и вертикальным трассам." : "",
+    routeSignals > 0 ? `Для ${routeSignals} зон уже зафиксированы способы прокладки по маршрутам.` : "",
+  ].filter(Boolean);
+
+  return {
+    completionPercent,
+    photoCount,
+    highlights,
+  };
+}
+
+const BASE_RATE_COMPOSITION = [
+  {
+    key: "mountPrimary",
+    title: "Монтаж основного элемента",
+    description: "Включает разметку, установку, крепление, подключение, базовую коммутацию и проверку установки основного устройства системы.",
+  },
+  {
+    key: "controllerMount",
+    title: "Монтаж контроллеров и приборов",
+    description: "Включает сборку узла, крепление шкафа/прибора, силовое и слаботочное подключение, маркировку и подготовку к пусконаладке.",
+  },
+  {
+    key: "cablePerMeter",
+    title: "Прокладка кабеля",
+    description:
+      "Включает разметку маршрута, крепление кабеля, сверление и проходы по конструкциям, бурение стояков в составе типового объема, маркировку, укладку и первичную проверку линии.",
+  },
+  {
+    key: "knsPerMeter",
+    title: "КНС и трассообразующие элементы",
+    description:
+      "Включает лоток/короб/гофру/трубу по трассе, крепеж, подвесы, доборные элементы, повороты, стыковку, монтаж переходов и сопутствующие операции по кабеленесущей системе.",
+  },
+  {
+    key: "pnrPrimary",
+    title: "ПНР основного элемента",
+    description: "Включает адресацию, базовую настройку, тест включения, проверку отклика и участие элемента в общем сценарии системы.",
+  },
+  {
+    key: "pnrActiveElement",
+    title: "ПНР активных устройств",
+    description: "Включает настройку активного оборудования, проверку связи, сценариев, журналов и устойчивой работы в проектной конфигурации.",
+  },
+  {
+    key: "integrationPoint",
+    title: "Интеграционная точка",
+    description: "Включает подключение к смежной системе, настройку обмена, проверку логики взаимодействия и тест сценария интеграции.",
+  },
+];
+
 export default function CalculationLogicStep({
   objectData,
   effectiveObjectData,
@@ -183,6 +251,8 @@ export default function CalculationLogicStep({
   budget,
   totals,
   projectRisks = [],
+  technicalSolution = {},
+  aiSurveyCompletion = {},
   vendorPriceSnapshots = {},
 }) {
   const [activeLogicSection, setActiveLogicSection] = React.useState(null);
@@ -215,7 +285,21 @@ export default function CalculationLogicStep({
   const totalDesign = toNumber(totals.totalDesign, 0);
   const totalProject = toNumber(totals.total, 0);
   const aiGuard = summarizeAiGuard(systemResults);
+  const surveySummary = useMemo(() => summarizeSurveyLayer(technicalSolution, aiSurveyCompletion), [technicalSolution, aiSurveyCompletion]);
   const skippedDesignRows = systemResults.filter((row) => row.designSkipped);
+  const aiGuardRows = useMemo(
+    () =>
+      [...(systemResults || [])]
+        .map((row) => ({
+          systemName: row.systemName,
+          underpricingRisk: toNumber(row?.laborDetails?.neuralCheck?.underestimationRisk, 0),
+          overpricingRisk: toNumber(row?.laborDetails?.neuralCheck?.overestimationRisk, 0),
+          marketFloor: toNumber(row?.laborDetails?.marketGuard?.marketFloorTotal, 0),
+        }))
+        .sort((a, b) => Math.max(b.underpricingRisk, b.overpricingRisk) - Math.max(a.underpricingRisk, a.overpricingRisk))
+        .slice(0, 3),
+    [systemResults]
+  );
   const totalWorkBeforeRegion = systemResults.reduce((sum, row) => sum + toNumber(row?.laborDetails?.workTotalBeforeRegion, 0), 0);
   const appliedObjectCoefficients = useMemo(() => {
     const entries = [];
@@ -517,7 +601,7 @@ export default function CalculationLogicStep({
             <div className="logic-equipment-list">
               {automaticVolumeRows.map((item) => (
                 <p key={item.key}>
-                  <strong>{item.title}:</strong> {item.detail} {item.metrics} {item.extra}
+                  <strong>{t(item.title)}:</strong> {t(item.detail)} {t(item.metrics)} {t(item.extra)}
                 </p>
               ))}
             </div>
@@ -538,6 +622,13 @@ export default function CalculationLogicStep({
               Цель этого блока не украшать смету, а сократить неопределенность по фактическим работам и проектированию до выхода в финальный
               бюджет.
             </p>
+            <div className="logic-equipment-list">
+              {surveySummary.highlights.map((item, index) => (
+                <p key={`survey-highlight-${index}`}>
+                  <strong>Результат обследования:</strong> {item}
+                </p>
+              ))}
+            </div>
           </>
         ),
       },
@@ -560,7 +651,7 @@ export default function CalculationLogicStep({
                   проверено хостов {row.checkedHosts.length}, позиций с подтвержденной ценой {row.sourceCount} из {row.totalEntries}, средняя
                   уверенность {num(row.avgConfidence * 100, 0)}%. Проверенные хосты: {formatHostList(row.checkedHosts)}. Хосты, подтвердившие
                   цену: {formatHostList(row.matchedHosts)}.
-                  {row.warning ? " Предупреждение: " + row.warning + "." : ""}
+                  {row.warning ? " Предупреждение: " + t(row.warning) + "." : ""}
                 </p>
               ))}
               {vendorPricingPositionRows.map((row) =>
@@ -594,7 +685,9 @@ export default function CalculationLogicStep({
               региональные надбавки сюда не попадают.
             </p>
             <p>
-              Базовая стоимость работ по проекту до начислений и коэффициентов: <strong>{rub(totalWorkBase)}</strong>.
+              Базовая стоимость работ по проекту до начислений и коэффициентов: <strong>{rub(totalWorkBase)}</strong>. Ставки в текущей версии
+              обновлены до среднерыночного уровня и используются как база, от которой дальше считаются коэффициенты, начисления и итоговая
+              трудовая часть.
             </p>
             <div className="aps-ops-header logic-export-bar">
               <span className="hint-inline">
@@ -639,6 +732,11 @@ export default function CalculationLogicStep({
                   {rub(item.rates.integrationPoint)}/точка.
                 </p>
               ))}
+              {BASE_RATE_COMPOSITION.map((item) => (
+                <p key={`base-rate-composition-${item.key}`}>
+                  <strong>{item.title}:</strong> {item.description}
+                </p>
+              ))}
             </div>
           </>
         ),
@@ -658,6 +756,15 @@ export default function CalculationLogicStep({
               <strong>{num(aiGuard.maxUnderpricingRisk * 100, 0)}%</strong>, риск переоцененности{' '}
               <strong>{num(aiGuard.maxOverpricingRisk * 100, 0)}%</strong>, суммарный рыночный floor <strong>{rub(aiGuard.totalMarketFloor)}</strong>.
             </p>
+            <div className="logic-equipment-list">
+              {aiGuardRows.map((item) => (
+                <p key={`guard-${item.systemName}`}>
+                  <strong>{item.systemName}:</strong> риск недооцененности {num(item.underpricingRisk * 100, 0)}%, риск переоцененности{" "}
+                  {num(item.overpricingRisk * 100, 0)}%, рыночный floor {rub(item.marketFloor)}. Для этого объекта это означает, что именно по
+                  этой системе нужно вручную перепроверить объем СМР/ПНР и не убирать резерв до подтверждения трасс и состава работ.
+                </p>
+              ))}
+            </div>
           </>
         ),
       },
@@ -673,6 +780,17 @@ export default function CalculationLogicStep({
             <p>
               Сейчас зафиксировано <strong>{projectRisks.length}</strong> критичных или повышенных риска(ов) для этого проекта.
             </p>
+            <div className="logic-equipment-list">
+              {projectRisks.length ? (
+                projectRisks.map((risk) => (
+                  <p key={`project-risk-${risk.id}`}>
+                    <strong>{risk.title}:</strong> {risk.summary} Потенциальное влияние на бюджет: {rub(risk.budgetImpact || 0)}.
+                  </p>
+                ))
+              ) : (
+                <p>Выраженных рисков по текущему набору данных не выявлено.</p>
+              )}
+            </div>
           </>
         ),
       },
@@ -695,7 +813,7 @@ export default function CalculationLogicStep({
               <div className="logic-equipment-list">
                 {appliedObjectCoefficients.map((item) => (
                   <p key={item.key}>
-                    <strong>{item.label}:</strong> {coef(item.value)}. {item.reason}
+                    <strong>{t(item.label)}:</strong> {coef(item.value)}. {t(item.reason)}
                   </p>
                 ))}
               </div>
@@ -720,6 +838,14 @@ export default function CalculationLogicStep({
               <strong>{num(avgDesignTeam, 1)} чел.</strong>, максимальный срок <strong>{formatDesignDurationExact(maxDesignMonths)}</strong>,
               стоимость <strong>{rub(totalDesign)}</strong>.
             </p>
+            <div className="logic-equipment-list">
+              {ratesDigest.map((item) => (
+                <p key={`design-${item.systemType}`}>
+                  <strong>{item.systemLabel}:</strong> базовая ставка проектирования {rub(item.rates.designHour)}/час. На стоимость влияют объем
+                  системы, насыщенность оборудования, кабельная часть, интеграционные точки, результаты обследования и межсистемная координация.
+                </p>
+              ))}
+            </div>
           </>
         ),
       },
@@ -751,6 +877,10 @@ export default function CalculationLogicStep({
               ценового контура, рисков и итогового бюджета.
             </p>
             <div className="logic-equipment-list">
+              <p>
+                <strong>Журнал зависимостей:</strong> объект и зоны меняют объемы и трассы; системы и вендоры меняют состав оборудования;
+                обследование меняет маршруты, материалы и трудоемкость; PDF и цены меняют unit-price; бюджет меняет коэффициенты и начисления.
+              </p>
               {systemResults.map((row, index) => (
                 <p key={row.systemType + "-logic-" + index}>
                   <strong>{row.systemName}:</strong> кабель {num(row.cable || 0, 1)} м, работы {rub(row.workTotal || 0)}, проектирование{' '}
@@ -772,6 +902,7 @@ export default function CalculationLogicStep({
       aiGuard.maxRisk,
       aiGuard.maxUnderpricingRisk,
       aiGuard.totalMarketFloor,
+      aiGuardRows,
       appliedObjectCoefficients,
       automaticVolumeRows,
       avgDesignTeam,
@@ -782,10 +913,11 @@ export default function CalculationLogicStep({
       conditionFactor,
       exploitedBuildingCoef,
       maxDesignMonths,
-      projectRisks.length,
+      projectRisks,
       ratesDigest,
       regionalCoef,
       skippedDesignRows,
+      surveySummary,
       systems.length,
       systemResults,
       totalCharges,
