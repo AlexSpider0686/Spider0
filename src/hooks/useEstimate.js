@@ -343,12 +343,12 @@ export default function useEstimate() {
   }, [aiSurveyPlan, surveyPlanObjectData, zones, technicalSolution.photoAnalyses, technicalSolution.surveyStartedAt]);
 
   const aiSurveyCompletion = useMemo(
-    () => calculateAiSurveyCompletion(aiSurveyPlan, technicalSolution.answers),
-    [aiSurveyPlan, technicalSolution.answers]
+    () => calculateAiSurveyCompletion(aiSurveyPlan, technicalSolution.answers, technicalSolution.photoAnalyses),
+    [aiSurveyPlan, technicalSolution.answers, technicalSolution.photoAnalyses]
   );
   const appliedAiSurveyCompletion = useMemo(
-    () => calculateAiSurveyCompletion(aiSurveyPlan, technicalSolution.appliedAnswers),
-    [aiSurveyPlan, technicalSolution.appliedAnswers]
+    () => calculateAiSurveyCompletion(aiSurveyPlan, technicalSolution.appliedAnswers, technicalSolution.appliedPhotoAnalyses),
+    [aiSurveyPlan, technicalSolution.appliedAnswers, technicalSolution.appliedPhotoAnalyses]
   );
   const technicalRecommendations = useMemo(
     () =>

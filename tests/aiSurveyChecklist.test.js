@@ -46,13 +46,25 @@ function buildCompletedAnswers(plan) {
 test("survey completion drops after clearing a required numeric answer", () => {
   const { plan } = createSurveyFixture();
   const answers = buildCompletedAnswers(plan);
-  const requiredNumber = getEnabledSurveyQuestions(plan, answers).find((question) => question.required !== false && question.type === "number");
+  const requiredNumber = getEnabledSurveyQuestions(plan, answers).find(
+    (question) => question.required !== false && question.type === "number" && question.aiAutofill === true
+  );
+  const prompt = plan.photoPrompts.find((item) => item.targetQuestionIds?.includes(requiredNumber?.id));
+  const photoAnalyses = prompt
+    ? {
+        [prompt.id]: {
+          state: "success",
+          accepted: true,
+        },
+      }
+    : {};
 
   assert.ok(requiredNumber, "expected at least one required number question");
-  assert.equal(calculateAiSurveyCompletion(plan, answers).percent, 100);
+  assert.ok(prompt, "expected a photo prompt for the required numeric question");
+  assert.equal(calculateAiSurveyCompletion(plan, answers, photoAnalyses).percent, 100);
 
   answers[requiredNumber.id] = undefined;
-  const completion = calculateAiSurveyCompletion(plan, answers);
+  const completion = calculateAiSurveyCompletion(plan, answers, photoAnalyses);
 
   assert.ok(completion.percent < 100);
 });
@@ -73,6 +85,30 @@ test("survey completion ignores disabled dependent answers after toggle reset", 
   answers[dependentQuestion.id] = undefined;
 
   assert.equal(calculateAiSurveyCompletion(plan, answers).percent, 100);
+});
+
+test("survey completion can reach 100 without photos when only AI autofill fields remain", () => {
+  const { plan } = createSurveyFixture();
+  const answers = {};
+  const requiredQuestions = getEnabledSurveyQuestions(plan, {}).filter((question) => question.required !== false && question.aiAutofill !== true);
+
+  for (const question of requiredQuestions) {
+    if (question.type === "boolean") {
+      answers[question.id] = true;
+      continue;
+    }
+    if (question.type === "number") {
+      answers[question.id] = 1;
+      continue;
+    }
+    if (question.type === "multiselect") {
+      answers[question.id] = [question.options?.[0]].filter(Boolean);
+      continue;
+    }
+    answers[question.id] = "ok";
+  }
+
+  assert.equal(calculateAiSurveyCompletion(plan, answers, {}).percent, 100);
 });
 
 test("APS survey question exposes auto-calculate and returns zone count from the existing algorithm", () => {

@@ -528,13 +528,30 @@ export function getEnabledSurveyQuestions(plan, answers = {}) {
   });
 }
 
-export function calculateAiSurveyCompletion(plan, answers = {}) {
+function hasAcceptedPhotoAnalysisForQuestion(plan, questionId, photoAnalyses = {}) {
+  const prompts = (plan?.photoPrompts || []).filter((prompt) => Array.isArray(prompt?.targetQuestionIds) && prompt.targetQuestionIds.includes(questionId));
+  if (!prompts.length) return false;
+  return prompts.some((prompt) => {
+    const analysis = photoAnalyses?.[prompt.id];
+    return analysis?.state === "success" && analysis?.accepted !== false;
+  });
+}
+
+function getRequiredSurveyQuestions(plan, answers = {}, photoAnalyses = {}) {
+  return getEnabledSurveyQuestions(plan, answers).filter((question) => {
+    if (question.required === false) return false;
+    if (question.aiAutofill !== true) return true;
+    return hasAcceptedPhotoAnalysisForQuestion(plan, question.id, photoAnalyses);
+  });
+}
+
+export function calculateAiSurveyCompletion(plan, answers = {}, photoAnalyses = {}) {
   const questions = plan?.allQuestions || [];
   if (!questions.length) {
     return { total: 0, completed: 0, percent: 100 };
   }
 
-  const requiredQuestions = getEnabledSurveyQuestions(plan, answers).filter((question) => question.required !== false);
+  const requiredQuestions = getRequiredSurveyQuestions(plan, answers, photoAnalyses);
 
   const completed = requiredQuestions.filter((question) => {
     const value = answers?.[question.id];
