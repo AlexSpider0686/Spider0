@@ -2,6 +2,18 @@ const ASSET_BASE = import.meta.env.BASE_URL || "/";
 
 const PLAN_BACKGROUND_URL = `${ASSET_BASE}assets/background/development-lab.jpg`;
 
+const completedPlanItems = new Set([
+  "3-0",
+  "3-1",
+  "3-2",
+  "4-0",
+  "4-1",
+  "4-2",
+  "5-0",
+  "6-1",
+  "7-1",
+]);
+
 const developmentDirections = [
   {
     title: "Точность цен и стоимости работ",
@@ -98,13 +110,14 @@ export function DevelopmentPlanModal({ open, onClose }: DevelopmentPlanModalProp
         </div>
 
         <div className="development-plan__body">
-          {developmentDirections.map((direction) => (
+          {developmentDirections.map((direction, directionIndex) => (
             <section className="development-plan__section" key={direction.title}>
               <h4>{direction.title}</h4>
               <ul>
-                {direction.points.map((point) => (
-                  <li key={point}>{point}</li>
-                ))}
+                {direction.points.map((point, pointIndex) => {
+                  const itemKey = `${directionIndex}-${pointIndex}`;
+                  return <li key={point}>{completedPlanItems.has(itemKey) ? <s>{point}</s> : point}</li>;
+                })}
               </ul>
             </section>
           ))}
