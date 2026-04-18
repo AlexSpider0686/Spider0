@@ -1,6 +1,7 @@
 import PptxGenJS from "pptxgenjs";
 import { buildProjectPlan, formatRub } from "./projectPlanModel.js";
 import { exportMppViaLocalProjectBridge, isHostedWebContour } from "./localProjectBridge.js";
+import { repairUtf8Cp1251Mojibake } from "./textEncoding.js";
 
 const C = {
   bg: "EEF4FA",
@@ -26,7 +27,8 @@ const PLAN_CONTEXT_IMAGES = {
   governance: "/assets/object-types/production.jpg",
 };
 
-const filePart = (v, fallback) => String(v || fallback).replace(/[<>:"/\\|?*]+/g, "_").slice(0, 80) || fallback;
+const filePart = (v, fallback) =>
+  repairUtf8Cp1251Mojibake(String(v || fallback)).replace(/[<>:"/\\|?*]+/g, "_").slice(0, 80) || fallback;
 const nbsp = (value) => String(value ?? "").replace(/\s/g, "\u00A0");
 const dayLabel = (days) => `${days}\u00A0дн.`;
 const dayRange = (start, duration) => (duration <= 1 ? `Д${start}` : `Д${start}-Д${start + duration - 1}`);

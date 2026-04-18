@@ -1,4 +1,5 @@
 import { buildMsProjectXml, buildProjectPlan } from "./projectPlanModel.js";
+import { repairUtf8Cp1251Mojibake } from "./textEncoding.js";
 
 export const LOCAL_PROJECT_BRIDGE_PORT = 32123;
 const LOCAL_BRIDGE_ORIGIN = `http://127.0.0.1:${LOCAL_PROJECT_BRIDGE_PORT}`;
@@ -20,7 +21,7 @@ function toBase64Utf8(value) {
 }
 
 function filePart(value, fallback) {
-  return String(value || fallback).replace(/[<>:"/\\|?*]+/g, "_").slice(0, 80) || fallback;
+  return repairUtf8Cp1251Mojibake(String(value || fallback)).replace(/[<>:"/\\|?*]+/g, "_").slice(0, 80) || fallback;
 }
 
 function assetUrl(path) {

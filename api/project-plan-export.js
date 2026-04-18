@@ -4,11 +4,12 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { execFile } from "node:child_process";
 import { buildMsProjectXml, buildProjectPlan } from "../src/lib/projectPlanModel.js";
+import { repairUtf8Cp1251Mojibake } from "../src/lib/textEncoding.js";
 
 const execFileAsync = promisify(execFile);
 
 function filePart(value, fallback) {
-  return String(value || fallback).replace(/[<>:"/\\|?*]+/g, "_").slice(0, 80) || fallback;
+  return repairUtf8Cp1251Mojibake(String(value || fallback)).replace(/[<>:"/\\|?*]+/g, "_").slice(0, 80) || fallback;
 }
 
 async function convertXmlToMpp(xmlPath, mppPath) {
