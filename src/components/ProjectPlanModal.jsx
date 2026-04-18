@@ -36,7 +36,11 @@ export default function ProjectPlanModal({ open, onClose, onSelectFormat }) {
     const status = await getLocalProjectBridgeStatus();
     setBridgeBusy(false);
     setBridgeReady(status.ok === true);
-    setBridgeHint(status.ok ? formatLocalProjectBridgeStatus(status) : `${formatLocalProjectBridgeStatus(status)} Установщик: ${getLocalProjectBridgeInstallerUrl()}`);
+    setBridgeHint(
+      status.ok
+        ? formatLocalProjectBridgeStatus(status)
+        : `${formatLocalProjectBridgeStatus(status)} Установщик: ${getLocalProjectBridgeInstallerUrl()}`
+    );
   };
 
   if (!open) return null;
@@ -50,8 +54,8 @@ export default function ProjectPlanModal({ open, onClose, onSelectFormat }) {
             <div className="project-plan-modal__eyebrow">AI-планирование</div>
             <h3 id="project-plan-modal-title">Сгенерировать план проекта</h3>
             <p>
-              Платформа соберет верхнеуровневый план реализации систем по данным объекта, составу систем, AI-аналитике, рискам и расчетным
-              срокам ТКП.
+              Платформа соберет верхнеуровневый план реализации систем по данным объекта, составу систем, AI-аналитике,
+              рискам и расчетным срокам ТКП.
             </p>
           </div>
           <button className="ghost-btn project-plan-modal__close" type="button" onClick={onClose}>
@@ -76,7 +80,7 @@ export default function ProjectPlanModal({ open, onClose, onSelectFormat }) {
               hostedContour
                 ? bridgeReady
                   ? "Сформировать план проекта в формате Microsoft Project через локальный агент на этом ПК"
-                  : "Если локальный агент еще не установлен, платформа скачает его установщик и подскажет дальнейшие шаги"
+                  : "Если локальный агент еще не установлен, платформа скачает EXE-файл агента и подскажет дальнейшие шаги"
                 : "Сформировать план проекта в формате Microsoft Project"
             }
           >
@@ -90,7 +94,7 @@ export default function ProjectPlanModal({ open, onClose, onSelectFormat }) {
                 <AlertCircle size={14} />
                 {bridgeReady
                   ? "Локальный агент найден на этом ПК: экспорт .mpp пойдет через него, с выбором папки и открытием плана в Microsoft Project."
-                  : "Web-версия использует локальный агент на этом ПК. Если мост еще не установлен, по нажатию будет скачан установщик и показана инструкция."}
+                  : "Web-версия использует локальный EXE-агент на этом ПК. Если мост еще не установлен, по нажатию будет скачан EXE-файл и показана инструкция."}
               </span>
             ) : null}
           </button>
@@ -104,11 +108,11 @@ export default function ProjectPlanModal({ open, onClose, onSelectFormat }) {
                 <button className="ghost-btn" type="button" onClick={handleBridgeCheck} disabled={bridgeBusy}>
                   {bridgeBusy ? "Проверка агента..." : "Проверить локальный агент"}
                 </button>
-                <a className="ghost-btn" href={getLocalProjectBridgeInstallerUrl()} download="projectcore-local-bridge-install.ps1">
-                  Скачать установщик агента
+                <a className="ghost-btn" href={getLocalProjectBridgeInstallerUrl()} download="ProjectCoreLocalBridgeAgent.exe">
+                  Скачать EXE агента
                 </a>
               </div>
-              {bridgeHint ? <span>{bridgeHint}</span> : <span>Для web-контура экспорт .mpp идет через локальный агент на этом ПК.</span>}
+              {bridgeHint ? <span>{bridgeHint}</span> : <span>Для web-контура экспорт .mpp идет через локальный EXE-агент на этом ПК.</span>}
             </div>
           </div>
         ) : null}

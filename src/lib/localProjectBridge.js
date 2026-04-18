@@ -3,6 +3,7 @@ import { buildMsProjectXml, buildProjectPlan } from "./projectPlanModel.js";
 export const LOCAL_PROJECT_BRIDGE_PORT = 32123;
 const LOCAL_BRIDGE_ORIGIN = `http://127.0.0.1:${LOCAL_PROJECT_BRIDGE_PORT}`;
 const LOCAL_BRIDGE_TIMEOUT_MS = 120000;
+const LOCAL_BRIDGE_EXE_NAME = "ProjectCoreLocalBridgeAgent.exe";
 
 function filePart(value, fallback) {
   return String(value || fallback).replace(/[<>:"/\\|?*]+/g, "_").slice(0, 80) || fallback;
@@ -53,14 +54,14 @@ export async function getLocalProjectBridgeStatus() {
     }
 
     return {
-      ok: payload?.ok === true,
-      version: payload?.version || "",
-      port: payload?.port || LOCAL_PROJECT_BRIDGE_PORT,
-      msProjectDetected: payload?.msProjectDetected !== false,
-      msProjectVersion: payload?.msProjectVersion || "",
-      installRoot: payload?.installRoot || "",
-      startupEnabled: payload?.startupEnabled !== false,
-      lastError: payload?.lastError || "",
+      ok: payload?.Ok === true || payload?.ok === true,
+      version: payload?.Version || payload?.version || "",
+      port: payload?.Port || payload?.port || LOCAL_PROJECT_BRIDGE_PORT,
+      msProjectDetected: payload?.MsProjectDetected ?? payload?.msProjectDetected ?? false,
+      msProjectVersion: payload?.MsProjectVersion || payload?.msProjectVersion || "",
+      installRoot: payload?.InstallRoot || payload?.installRoot || "",
+      startupEnabled: payload?.StartupEnabled ?? payload?.startupEnabled ?? false,
+      lastError: payload?.LastError || payload?.lastError || "",
     };
   } catch {
     return {
@@ -83,7 +84,9 @@ export function formatLocalProjectBridgeStatus(status) {
     status.msProjectDetected
       ? `Microsoft Project найден${status.msProjectVersion ? ` (${status.msProjectVersion})` : ""}.`
       : "Microsoft Project пока не найден через COM.",
-    status.startupEnabled ? "Автозапуск для текущего пользователя включен." : "Автозапуск для текущего пользователя выключен.",
+    status.startupEnabled
+      ? "Автозапуск для текущего пользователя включен."
+      : "Автозапуск для текущего пользователя выключен.",
   ];
 
   if (status.installRoot) {
@@ -98,15 +101,15 @@ export function formatLocalProjectBridgeStatus(status) {
 
 export function getLocalProjectBridgeInstallerUrl() {
   if (typeof window === "undefined") return "";
-  return new URL(assetUrl("downloads/projectcore-local-bridge-install.ps1"), window.location.origin).toString();
+  return new URL(assetUrl(`downloads/${LOCAL_BRIDGE_EXE_NAME}`), window.location.origin).toString();
 }
 
 export function downloadLocalProjectBridgeInstaller() {
   if (typeof window === "undefined" || typeof document === "undefined") return "";
-  const href = assetUrl("downloads/projectcore-local-bridge-install.ps1");
+  const href = assetUrl(`downloads/${LOCAL_BRIDGE_EXE_NAME}`);
   const link = document.createElement("a");
   link.href = href;
-  link.download = "projectcore-local-bridge-install.ps1";
+  link.download = LOCAL_BRIDGE_EXE_NAME;
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -145,13 +148,13 @@ export async function exportMppViaLocalProjectBridge(payload) {
         ? "Локальный агент не ответил за отведенное время."
         : "Локальный агент Project.Core не найден на этом ПК.";
     throw new Error(
-      `${details} Установщик локального моста уже скачан: ${installerUrl}. Запустите его один раз от имени текущего пользователя Windows и затем повторите экспорт.`
+      `${details} EXE-файл агента уже скачан: ${installerUrl}. Запустите его один раз под текущим пользователем Windows, дождитесь сообщения об установке и затем повторите экспорт.`
     );
   }
 
   const result = await response.json().catch(() => ({}));
-  if (!response.ok || result?.ok !== true) {
-    throw new Error(result?.error || "Локальный агент не смог сформировать файл .mpp.");
+  if (!response.ok || (result?.ok !== true && result?.Ok !== true)) {
+    throw new Error(result?.error || result?.Error || "Локальный агент не смог сформировать файл .mpp.");
   }
 
   return result;
