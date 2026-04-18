@@ -174,8 +174,8 @@ export function calculateSystem(system, zones, budget, objectData = {}, marketSn
   const directCost = materialsBase + workTotal;
   const profit = directCost * (toNumber(budget.profitabilityPercent) / 100);
   const subtotal = directCost + profit;
-  const vat = budget.taxMode === "osno" ? subtotal * (toNumber(budget.vatPercent) / 100) : 0;
-  const total = subtotal + vat;
+  const vat = 0;
+  const total = subtotal;
 
   return {
     systemType: system.type,

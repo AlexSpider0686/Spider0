@@ -611,6 +611,7 @@ export async function fetchPricesByRequests(requests = [], options = {}) {
   const batches = chunkBySize(requests, batchSize);
   const resultRows = [];
   let fetchedAt = new Date().toISOString();
+  let warning = "";
 
   for (let index = 0; index < batches.length; index += 1) {
     const batch = batches[index];
@@ -622,6 +623,7 @@ export async function fetchPricesByRequests(requests = [], options = {}) {
       }
     );
     fetchedAt = payload?.fetchedAt || fetchedAt;
+    warning = warning || String(payload?.warning || "").trim();
     resultRows.push(...(payload?.results || []));
     if (typeof options?.onProgress === "function") {
       options.onProgress({
@@ -633,7 +635,7 @@ export async function fetchPricesByRequests(requests = [], options = {}) {
     }
   }
 
-  const payload = { fetchedAt, results: resultRows };
+  const payload = { fetchedAt, results: resultRows, warning };
   const resultsByKey = new Map((payload.results || []).map((entry) => [entry.key, entry]));
 
   const sanitizePrice = (request, result) => {
@@ -723,6 +725,7 @@ export async function fetchPricesByRequests(requests = [], options = {}) {
 
   return {
     fetchedAt: payload.fetchedAt,
+    warning: typeof payload.warning === "string" ? payload.warning : "",
     entries: requests.map((request) => {
       const result = resultsByKey.get(request.key) || {};
       const sanitized = sanitizePrice(request, result);

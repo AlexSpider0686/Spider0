@@ -867,7 +867,7 @@ test("technical solution exposes full architecture roles across all six systems"
   }
 });
 
-test("VAT is not applied to design total", () => {
+test("VAT is not added on top of budget articles", () => {
   const { zones, baseBudget, system, objectData } = createFixture();
   const detailed = calculateSystemWithBreakdown(system, zones, baseBudget, objectData);
   const vatBreakdownTotal =
@@ -876,6 +876,10 @@ test("VAT is not applied to design total", () => {
     (detailed.vatBreakdown?.works || 0) +
     (detailed.vatBreakdown?.design || 0);
 
+  assert.equal(detailed.vat || 0, 0);
+  assert.equal(detailed.vatBreakdown?.equipment || 0, 0);
+  assert.equal(detailed.vatBreakdown?.materials || 0, 0);
+  assert.equal(detailed.vatBreakdown?.works || 0, 0);
   assert.equal(detailed.vatBreakdown?.design || 0, 0);
   assert.ok(Math.abs(vatBreakdownTotal - (detailed.vat || 0)) < 0.01);
 });

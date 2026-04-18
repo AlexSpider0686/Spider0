@@ -604,14 +604,12 @@ export function calculateSystemWithBreakdown(
   const taxableBase = equipmentCost + materialCost + workTotal;
   const profit = taxableBase * (toNumber(normalizedInput.budget.profitabilityPercent, 0) / 100);
   const subtotal = taxableBase + designTotal + profit;
-  const vat = normalizedInput.budget.taxMode === "osno" ? (taxableBase + profit) * (toNumber(normalizedInput.budget.vatPercent, 0) / 100) : 0;
-  const total = subtotal + vat;
-  const vatRatio = normalizedInput.budget.taxMode === "osno" ? toNumber(normalizedInput.budget.vatPercent, 0) / 100 : 0;
-  const profitShareBase = Math.max(taxableBase, 0.0001);
+  const vat = 0;
+  const total = subtotal;
   const vatBreakdown = {
-    equipment: (equipmentCost + profit * (equipmentCost / profitShareBase)) * vatRatio,
-    materials: (materialCost + profit * (materialCost / profitShareBase)) * vatRatio,
-    works: (workTotal + profit * (workTotal / profitShareBase)) * vatRatio,
+    equipment: 0,
+    materials: 0,
+    works: 0,
     design: 0,
   };
 

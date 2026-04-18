@@ -49,6 +49,26 @@ function sendBinary(res, statusCode, { contentType, fileName, buffer }) {
   res.end(buffer);
 }
 
+function buildVendorPriceFallbackResults(requests = [], error) {
+  return requests.map((entry) => ({
+    key: entry?.key,
+    price: entry?.fallbackPrice ?? null,
+    status: "fallback",
+    reason: "price_collection_error",
+    error: error?.message || "",
+    sourceCount: 0,
+    checkedSources: Array.isArray(entry?.sourceUrls) ? entry.sourceUrls.filter(Boolean).length : entry?.sourceUrl ? 1 : 0,
+    usedSources: [],
+    matchedSources: [],
+    matchedSourceHosts: [],
+    unitHints: [],
+    selectionStrategy: "fallback_error",
+    modelToken: "",
+    recheckRequired: false,
+    priceConfidence: 0,
+  }));
+}
+
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
     let raw = "";
@@ -111,11 +131,19 @@ async function handleApiRequest(req, res, pathname) {
         return true;
       }
 
-      const results = await resolveVendorPrices(requests);
+      let results = [];
+      let warning = "";
+      try {
+        results = await resolveVendorPrices(requests);
+      } catch (error) {
+        results = buildVendorPriceFallbackResults(requests, error);
+        warning = error?.message || "price_collection_failed";
+      }
       sendJson(res, 200, {
         ok: true,
         results,
         fetchedAt: new Date().toISOString(),
+        ...(warning ? { warning } : {}),
       });
       return true;
     }

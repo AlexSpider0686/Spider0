@@ -1110,59 +1110,78 @@ export async function resolveVendorPrices(requests = []) {
       const { key, sourceUrls, sourceUrl, fallbackPrice } = entry || {};
       const targets = Array.isArray(sourceUrls) ? sourceUrls.filter(Boolean).slice(0, 16) : sourceUrl ? [sourceUrl] : [];
 
-      if (!targets.length) {
-        return {
-          key,
-          price: fallbackPrice ?? null,
-          status: "fallback",
-          reason: "no_source",
-          sourceCount: 0,
-          checkedSources: 0,
-          usedSources: [],
-        };
-      }
-
-      const modelToken = buildModelTokenFromEntry(entry);
-      const settled = await Promise.allSettled(
-        targets.map((target) =>
-          withOperationTimeout(
-            () => fetchPriceForTarget(target, fallbackPrice),
-            25000,
-            `Source ${typeof target === "string" ? target : target?.url || "unknown"}`
-          )
-        )
-      );
-      const candidateRows = [];
-
-      settled.forEach((result, index) => {
-        if (result.status !== "fulfilled") return;
-        const value = result.value || {};
-        const source = normalizeSourceTarget(targets[index]);
-        const prices = (value.prices || []).filter((item) => Number.isFinite(item) && item > 0);
-        if (!prices.length) return;
-        const usedSources = (value.usedSources || []).filter(Boolean);
-        const sourceUrl = source?.url || usedSources[0] || "";
-        const sourceHost = hostFromUrl(sourceUrl);
-        const sourceName = source?.sourceName || value?.selectionMeta?.sourceKind || sourceHost || "";
-        const inferredModelMatch = modelToken
-          ? [sourceUrl, ...usedSources].some((url) => isModelTokenInText(modelToken, url))
-          : false;
-        const modelTokenMatched = Boolean(value?.selectionMeta?.modelTokenMatched) || inferredModelMatch;
-        const articleMatched = Boolean(value?.selectionMeta?.articleMatched);
-        const unitHints = (value.unitHints || []).map((item) => normalizeUnitHint(item)).filter(Boolean);
-
-        for (const price of prices) {
-          candidateRows.push({
-            price,
-            sourceName,
-            sourceHost,
-            usedSources: usedSources.length ? usedSources : sourceUrl ? [sourceUrl] : [],
-            unitHints,
-            modelTokenMatched,
-            articleMatched,
-          });
-        }
+      const buildEntryFallback = (reason = "price_collection_error", errorMessage = "") => ({
+        key,
+        price: fallbackPrice ?? null,
+        status: "fallback",
+        reason,
+        error: errorMessage || "",
+        sourceCount: 0,
+        checkedSources: targets.length,
+        usedSources: [],
+        matchedSources: [],
+        matchedSourceHosts: [],
+        unitHints: [],
+        selectionStrategy: "fallback_error",
+        modelToken: buildModelTokenFromEntry(entry),
+        recheckRequired: false,
+        priceConfidence: 0,
       });
+
+      try {
+        if (!targets.length) {
+          return {
+            key,
+            price: fallbackPrice ?? null,
+            status: "fallback",
+            reason: "no_source",
+            sourceCount: 0,
+            checkedSources: 0,
+            usedSources: [],
+          };
+        }
+
+        const modelToken = buildModelTokenFromEntry(entry);
+        const settled = await Promise.allSettled(
+          targets.map((target) =>
+            withOperationTimeout(
+              () => fetchPriceForTarget(target, fallbackPrice),
+              25000,
+              `Source ${typeof target === "string" ? target : target?.url || "unknown"}`
+            )
+          )
+        );
+        const candidateRows = [];
+
+        settled.forEach((result, index) => {
+          if (result.status !== "fulfilled") return;
+          const value = result.value || {};
+          const source = normalizeSourceTarget(targets[index]);
+          const prices = (value.prices || []).filter((item) => Number.isFinite(item) && item > 0);
+          if (!prices.length) return;
+          const usedSources = (value.usedSources || []).filter(Boolean);
+          const sourceUrl = source?.url || usedSources[0] || "";
+          const sourceHost = hostFromUrl(sourceUrl);
+          const sourceName = source?.sourceName || value?.selectionMeta?.sourceKind || sourceHost || "";
+          const inferredModelMatch = modelToken
+            ? [sourceUrl, ...usedSources].some((url) => isModelTokenInText(modelToken, url))
+            : false;
+          const modelTokenMatched = Boolean(value?.selectionMeta?.modelTokenMatched) || inferredModelMatch;
+          const articleMatched = Boolean(value?.selectionMeta?.articleMatched);
+          const unitHints = (value.unitHints || []).map((item) => normalizeUnitHint(item)).filter(Boolean);
+
+          for (const price of prices) {
+            candidateRows.push({
+              price,
+              sourceName,
+              sourceHost,
+              usedSources: usedSources.length ? usedSources : sourceUrl ? [sourceUrl] : [],
+              unitHints,
+              modelTokenMatched,
+              articleMatched,
+            });
+          }
+        });
 
       const unitCompatibleRows = candidateRows.filter((item) => isUnitCompatible(entry?.unit, item.unitHints));
       const baseRows = unitCompatibleRows.length ? unitCompatibleRows : candidateRows;
@@ -1282,10 +1301,10 @@ export async function resolveVendorPrices(requests = []) {
         };
       }
 
-      return {
-        key,
-        price: fallbackPrice ?? null,
-        status: "fallback",
+        return {
+          key,
+          price: fallbackPrice ?? null,
+          status: "fallback",
           reason: "price_not_found",
           sourceCount: 0,
           checkedSources: targets.length,
@@ -1296,8 +1315,11 @@ export async function resolveVendorPrices(requests = []) {
           selectionStrategy,
           modelToken,
           recheckRequired: false,
-        priceConfidence: 0,
-      };
+          priceConfidence: 0,
+        };
+      } catch (error) {
+        return buildEntryFallback("price_collection_error", error?.message || "");
+      }
     })
   );
 }

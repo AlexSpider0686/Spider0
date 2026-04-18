@@ -69,6 +69,26 @@ function readJsonBody(req) {
   });
 }
 
+function buildVendorPriceFallbackResults(requests = [], error) {
+  return requests.map((entry) => ({
+    key: entry?.key,
+    price: entry?.fallbackPrice ?? null,
+    status: "fallback",
+    reason: "price_collection_error",
+    error: error?.message || "",
+    sourceCount: 0,
+    checkedSources: Array.isArray(entry?.sourceUrls) ? entry.sourceUrls.filter(Boolean).length : entry?.sourceUrl ? 1 : 0,
+    usedSources: [],
+    matchedSources: [],
+    matchedSourceHosts: [],
+    unitHints: [],
+    selectionStrategy: "fallback_error",
+    modelToken: "",
+    recheckRequired: false,
+    priceConfidence: 0,
+  }));
+}
+
 function localVendorPriceApiPlugin() {
   return {
     name: "local-vendor-price-api",
@@ -101,8 +121,16 @@ function localVendorPriceApiPlugin() {
           let body = null;
           if (req.url.startsWith("/api/vendor-prices")) {
             const requests = Array.isArray(payload?.requests) ? payload.requests : [];
-            const results = await resolveVendorPrices(requests);
-            body = { results, fetchedAt: new Date().toISOString() };
+            try {
+              const results = await resolveVendorPrices(requests);
+              body = { results, fetchedAt: new Date().toISOString() };
+            } catch (error) {
+              body = {
+                results: buildVendorPriceFallbackResults(requests, error),
+                fetchedAt: new Date().toISOString(),
+                warning: error?.message || "price_collection_failed",
+              };
+            }
           } else if (req.url.startsWith("/api/auth-send-code")) {
             body = await issueOtpChallenge(payload?.email);
           } else if (req.url.startsWith("/api/auth-verify-code")) {

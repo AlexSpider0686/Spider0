@@ -713,7 +713,7 @@ export default function useEstimate() {
       const priceSnapshot = await fetchPricesByRequests(requests, normalizedOptions);
       return {
         priceSnapshot,
-        fallbackNotice: "",
+        fallbackNotice: String(priceSnapshot?.warning || "").trim(),
       };
     } catch (error) {
       if (normalizedOptions?.signal?.aborted || isAbortLikeError(error)) {
