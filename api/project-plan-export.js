@@ -21,9 +21,12 @@ async function convertXmlToMpp(xmlPath, mppPath) {
   }
 
   const script = `
+param(
+  [Parameter(Mandatory = $true)] [string] $xmlPath,
+  [Parameter(Mandatory = $true)] [string] $mppPath
+)
+
 $ErrorActionPreference = 'Stop'
-$xmlPath = '${xmlPath.replace(/'/g, "''")}'
-$mppPath = '${mppPath.replace(/'/g, "''")}'
 $app = $null
 $opened = $false
 
@@ -77,7 +80,7 @@ if (-not (Test-Path -LiteralPath $mppPath)) { throw 'MPP file was not created.' 
     await fs.writeFile(scriptPath, script, "utf8");
     await execFileAsync(
       "powershell.exe",
-      ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", scriptPath],
+      ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", scriptPath, xmlPath, mppPath],
       {
         windowsHide: true,
         timeout: 120000,

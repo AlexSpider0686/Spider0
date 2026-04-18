@@ -14,7 +14,7 @@ namespace ProjectCoreLocalBridgeAgent
 {
     internal static class Program
     {
-        private const string AgentVersion = "1.2.2";
+        private const string AgentVersion = "1.2.3";
         private const int DefaultPort = 32123;
         private const string InstalledExeName = "ProjectCoreLocalBridgeAgent.exe";
         private const string ShortcutName = "ProjectCore Local Bridge.lnk";
@@ -356,9 +356,11 @@ namespace ProjectCoreLocalBridgeAgent
 
         private static void RunMsProjectPowerShell(string xmlPath, string targetPath)
         {
-            var script = "$ErrorActionPreference = 'Stop'\n" +
-                         "$xmlPath = '" + EscapePowerShellLiteral(xmlPath) + "'\n" +
-                         "$mppPath = '" + EscapePowerShellLiteral(targetPath) + "'\n" +
+            var script = "param(\n" +
+                         "  [Parameter(Mandatory = $true)] [string] $xmlPath,\n" +
+                         "  [Parameter(Mandatory = $true)] [string] $mppPath\n" +
+                         ")\n" +
+                         "$ErrorActionPreference = 'Stop'\n" +
                          "$app = $null\n" +
                          "$opened = $false\n" +
                          "function Save-MppFile {\n" +
@@ -411,7 +413,7 @@ namespace ProjectCoreLocalBridgeAgent
                 var startInfo = new ProcessStartInfo
                 {
                     FileName = "powershell.exe",
-                    Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"" + scriptPath + "\"",
+                    Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"" + scriptPath + "\" \"" + xmlPath + "\" \"" + targetPath + "\"",
                     UseShellExecute = false,
                     CreateNoWindow = true,
                     RedirectStandardError = true,
@@ -449,11 +451,6 @@ namespace ProjectCoreLocalBridgeAgent
                 {
                 }
             }
-        }
-
-        private static string EscapePowerShellLiteral(string value)
-        {
-            return (value ?? string.Empty).Replace("'", "''");
         }
 
         private static AgentConfig LoadConfig(AgentOptions options)
