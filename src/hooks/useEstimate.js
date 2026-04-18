@@ -706,7 +706,8 @@ export default function useEstimate() {
 
   const loadApsProjectPrices = async (requests, options = {}) => {
     const normalizedOptions = {
-      batchSize: options?.batchSize || (requests.length > 12 ? 4 : requests.length > 6 ? 5 : undefined),
+      batchSize: options?.batchSize || (requests.length > 12 ? 1 : requests.length > 6 ? 2 : 3),
+      timeoutMs: options?.timeoutMs || (requests.length > 12 ? 90000 : requests.length > 6 ? 75000 : 60000),
       ...options,
     };
     try {

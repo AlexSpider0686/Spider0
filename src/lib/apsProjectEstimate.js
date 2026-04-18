@@ -475,7 +475,12 @@ function buildSourceUrls(source, queries, item) {
     }
   }
 
-  return dedupeSourceRequests([...manufacturerTargets, ...apiRequests, ...urlTargets]).slice(0, 10);
+  const hasExactManufacturerPath = Boolean(item?.sourcePath);
+  const prioritizedTargets = hasExactManufacturerPath
+    ? [...manufacturerTargets, ...apiRequests.slice(0, 1), ...urlTargets.slice(0, 2)]
+    : [...manufacturerTargets, ...apiRequests.slice(0, 2), ...urlTargets.slice(0, 3)];
+
+  return dedupeSourceRequests(prioritizedTargets).slice(0, hasExactManufacturerPath ? 4 : 6);
 }
 
 function buildRequestKey(index, item) {

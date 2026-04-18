@@ -1105,83 +1105,85 @@ export async function resolveVendorPrices(requests = []) {
     throw new Error("requests must be an array");
   }
 
-  return Promise.all(
-    requests.map(async (entry) => {
-      const { key, sourceUrls, sourceUrl, fallbackPrice } = entry || {};
-      const targets = Array.isArray(sourceUrls) ? sourceUrls.filter(Boolean).slice(0, 16) : sourceUrl ? [sourceUrl] : [];
+  const results = [];
 
-      const buildEntryFallback = (reason = "price_collection_error", errorMessage = "") => ({
-        key,
-        price: fallbackPrice ?? null,
-        status: "fallback",
-        reason,
-        error: errorMessage || "",
-        sourceCount: 0,
-        checkedSources: targets.length,
-        usedSources: [],
-        matchedSources: [],
-        matchedSourceHosts: [],
-        unitHints: [],
-        selectionStrategy: "fallback_error",
-        modelToken: buildModelTokenFromEntry(entry),
-        recheckRequired: false,
-        priceConfidence: 0,
-      });
+  for (const entry of requests) {
+    const { key, sourceUrls, sourceUrl, fallbackPrice } = entry || {};
+    const targets = Array.isArray(sourceUrls) ? sourceUrls.filter(Boolean).slice(0, 12) : sourceUrl ? [sourceUrl] : [];
 
-      try {
-        if (!targets.length) {
-          return {
-            key,
-            price: fallbackPrice ?? null,
-            status: "fallback",
-            reason: "no_source",
-            sourceCount: 0,
-            checkedSources: 0,
-            usedSources: [],
-          };
-        }
+    const buildEntryFallback = (reason = "price_collection_error", errorMessage = "") => ({
+      key,
+      price: fallbackPrice ?? null,
+      status: "fallback",
+      reason,
+      error: errorMessage || "",
+      sourceCount: 0,
+      checkedSources: targets.length,
+      usedSources: [],
+      matchedSources: [],
+      matchedSourceHosts: [],
+      unitHints: [],
+      selectionStrategy: "fallback_error",
+      modelToken: buildModelTokenFromEntry(entry),
+      recheckRequired: false,
+      priceConfidence: 0,
+    });
 
-        const modelToken = buildModelTokenFromEntry(entry);
-        const settled = await Promise.allSettled(
-          targets.map((target) =>
-            withOperationTimeout(
-              () => fetchPriceForTarget(target, fallbackPrice),
-              25000,
-              `Source ${typeof target === "string" ? target : target?.url || "unknown"}`
-            )
-          )
-        );
-        const candidateRows = [];
-
-        settled.forEach((result, index) => {
-          if (result.status !== "fulfilled") return;
-          const value = result.value || {};
-          const source = normalizeSourceTarget(targets[index]);
-          const prices = (value.prices || []).filter((item) => Number.isFinite(item) && item > 0);
-          if (!prices.length) return;
-          const usedSources = (value.usedSources || []).filter(Boolean);
-          const sourceUrl = source?.url || usedSources[0] || "";
-          const sourceHost = hostFromUrl(sourceUrl);
-          const sourceName = source?.sourceName || value?.selectionMeta?.sourceKind || sourceHost || "";
-          const inferredModelMatch = modelToken
-            ? [sourceUrl, ...usedSources].some((url) => isModelTokenInText(modelToken, url))
-            : false;
-          const modelTokenMatched = Boolean(value?.selectionMeta?.modelTokenMatched) || inferredModelMatch;
-          const articleMatched = Boolean(value?.selectionMeta?.articleMatched);
-          const unitHints = (value.unitHints || []).map((item) => normalizeUnitHint(item)).filter(Boolean);
-
-          for (const price of prices) {
-            candidateRows.push({
-              price,
-              sourceName,
-              sourceHost,
-              usedSources: usedSources.length ? usedSources : sourceUrl ? [sourceUrl] : [],
-              unitHints,
-              modelTokenMatched,
-              articleMatched,
-            });
-          }
+    try {
+      if (!targets.length) {
+        results.push({
+          key,
+          price: fallbackPrice ?? null,
+          status: "fallback",
+          reason: "no_source",
+          sourceCount: 0,
+          checkedSources: 0,
+          usedSources: [],
         });
+        continue;
+      }
+
+      const modelToken = buildModelTokenFromEntry(entry);
+      const settled = await Promise.allSettled(
+        targets.map((target) =>
+          withOperationTimeout(
+            () => fetchPriceForTarget(target, fallbackPrice),
+            18000,
+            `Source ${typeof target === "string" ? target : target?.url || "unknown"}`
+          )
+        )
+      );
+      const candidateRows = [];
+
+      settled.forEach((result, index) => {
+        if (result.status !== "fulfilled") return;
+        const value = result.value || {};
+        const source = normalizeSourceTarget(targets[index]);
+        const prices = (value.prices || []).filter((item) => Number.isFinite(item) && item > 0);
+        if (!prices.length) return;
+        const usedSources = (value.usedSources || []).filter(Boolean);
+        const resolvedSourceUrl = source?.url || usedSources[0] || "";
+        const sourceHost = hostFromUrl(resolvedSourceUrl);
+        const sourceName = source?.sourceName || value?.selectionMeta?.sourceKind || sourceHost || "";
+        const inferredModelMatch = modelToken
+          ? [resolvedSourceUrl, ...usedSources].some((url) => isModelTokenInText(modelToken, url))
+          : false;
+        const modelTokenMatched = Boolean(value?.selectionMeta?.modelTokenMatched) || inferredModelMatch;
+        const articleMatched = Boolean(value?.selectionMeta?.articleMatched);
+        const unitHints = (value.unitHints || []).map((item) => normalizeUnitHint(item)).filter(Boolean);
+
+        for (const price of prices) {
+          candidateRows.push({
+            price,
+            sourceName,
+            sourceHost,
+            usedSources: usedSources.length ? usedSources : resolvedSourceUrl ? [resolvedSourceUrl] : [],
+            unitHints,
+            modelTokenMatched,
+            articleMatched,
+          });
+        }
+      });
 
       const unitCompatibleRows = candidateRows.filter((item) => isUnitCompatible(entry?.unit, item.unitHints));
       const baseRows = unitCompatibleRows.length ? unitCompatibleRows : candidateRows;
@@ -1228,52 +1230,56 @@ export async function resolveVendorPrices(requests = []) {
         selectionStrategy === "luis_api_model_bias";
 
       let selectedPrice = preferFallbackAnchoredSelection
-        ? selectClosestToFallback(poolPrices, fallbackPrice) || selectBestPrice(poolPrices, fallbackPrice) || selectFinalPrice(poolPrices, fallbackPrice)
+        ? selectClosestToFallback(poolPrices, fallbackPrice) ||
+          selectBestPrice(poolPrices, fallbackPrice) ||
+          selectFinalPrice(poolPrices, fallbackPrice)
         : selectFinalPrice(poolPrices, fallbackPrice);
 
       const fallback = Number(fallbackPrice);
-        const isManufacturerAuthoritative =
-          (selectionStrategy === "manufacturer_source_bias" || selectionStrategy === "manufacturer_exact_match") &&
-          manufacturerRows.length > 0;
-        let manufacturerDriftRisk = false;
+      const isManufacturerAuthoritative =
+        (selectionStrategy === "manufacturer_source_bias" || selectionStrategy === "manufacturer_exact_match") &&
+        manufacturerRows.length > 0;
+      let manufacturerDriftRisk = false;
 
-        if (Number.isFinite(fallback) && fallback > 0 && Number.isFinite(selectedPrice) && selectedPrice > 0) {
-          const tooHigh = selectedPrice > fallback * 4;
-          const tooLow = selectedPrice < fallback * 0.2;
-          if ((tooHigh || tooLow) && !isManufacturerAuthoritative) {
-            const corridorRows = baseRows.filter((item) => item.price >= fallback * 0.22 && item.price <= fallback * 4.2);
-            if (corridorRows.length) {
-              selectionPool = corridorRows;
-              const corridorPrices = selectionPool.map((item) => item.price);
-              selectedPrice = preferFallbackAnchoredSelection
-              ? selectClosestToFallback(corridorPrices, fallback) || selectBestPrice(corridorPrices, fallback) || selectFinalPrice(corridorPrices, fallback)
+      if (Number.isFinite(fallback) && fallback > 0 && Number.isFinite(selectedPrice) && selectedPrice > 0) {
+        const tooHigh = selectedPrice > fallback * 4;
+        const tooLow = selectedPrice < fallback * 0.2;
+        if ((tooHigh || tooLow) && !isManufacturerAuthoritative) {
+          const corridorRows = baseRows.filter((item) => item.price >= fallback * 0.22 && item.price <= fallback * 4.2);
+          if (corridorRows.length) {
+            selectionPool = corridorRows;
+            const corridorPrices = selectionPool.map((item) => item.price);
+            selectedPrice = preferFallbackAnchoredSelection
+              ? selectClosestToFallback(corridorPrices, fallback) ||
+                selectBestPrice(corridorPrices, fallback) ||
+                selectFinalPrice(corridorPrices, fallback)
               : selectFinalPrice(corridorPrices, fallback);
             selectionStrategy = `${selectionStrategy}_fallback_guard`;
-            } else {
-              selectedPrice = fallback;
-              selectionStrategy = `${selectionStrategy}_fallback_guard`;
-            }
-          } else if (tooHigh || tooLow) {
-            manufacturerDriftRisk = true;
-            selectionStrategy = `${selectionStrategy}_manufacturer_override`;
+          } else {
+            selectedPrice = fallback;
+            selectionStrategy = `${selectionStrategy}_fallback_guard`;
           }
+        } else if (tooHigh || tooLow) {
+          manufacturerDriftRisk = true;
+          selectionStrategy = `${selectionStrategy}_manufacturer_override`;
         }
+      }
 
       const spreadBase = selectionPool.map((item) => item.price).filter((item) => Number.isFinite(item) && item > 0);
       const spread = spreadBase.length > 1 ? Math.max(...spreadBase) / Math.max(Math.min(...spreadBase), 1) : 1;
       const hasUnitMismatchRisk = !unitCompatibleRows.length && candidateRows.length > 0;
-        const recheckRequired = (spread >= 6 && selectionPool.length > 1) || hasUnitMismatchRisk || manufacturerDriftRisk;
+      const recheckRequired = (spread >= 6 && selectionPool.length > 1) || hasUnitMismatchRisk || manufacturerDriftRisk;
       const closestRows = selectedPrice
         ? selectionPool.filter((item) => Math.abs(item.price - selectedPrice) <= Math.max(1, selectedPrice * 0.03))
         : [];
-        const selectedRows = closestRows.length ? closestRows : selectionPool;
+      const selectedRows = closestRows.length ? closestRows : selectionPool;
 
-        const matchedSources = unique(candidateRows.flatMap((item) => item.usedSources || []).filter(Boolean));
-        const matchedSourceHosts = unique(candidateRows.map((item) => item.sourceHost).filter(Boolean));
-        const selectedUsedSources = unique(selectedRows.flatMap((item) => item.usedSources || []).filter(Boolean));
-        const selectedUnits = unique(selectedRows.flatMap((item) => item.unitHints || []).filter(Boolean));
+      const matchedSources = unique(candidateRows.flatMap((item) => item.usedSources || []).filter(Boolean));
+      const matchedSourceHosts = unique(candidateRows.map((item) => item.sourceHost).filter(Boolean));
+      const selectedUsedSources = unique(selectedRows.flatMap((item) => item.usedSources || []).filter(Boolean));
+      const selectedUnits = unique(selectedRows.flatMap((item) => item.unitHints || []).filter(Boolean));
 
-        if (selectedPrice && candidateRows.length > 0) {
+      if (selectedPrice && candidateRows.length > 0) {
         const baseConfidence =
           selectionStrategy === "article_exact_match"
             ? 0.97
@@ -1284,44 +1290,47 @@ export async function resolveVendorPrices(requests = []) {
                 : spread <= 4
                   ? 0.72
                   : 0.55;
-        return {
+
+        results.push({
           key,
           price: selectedPrice,
-            status: selectionPool.length > 1 ? "fetched_multi" : "fetched",
-            sourceCount: selectedUsedSources.length,
-            checkedSources: targets.length,
-            usedSources: selectedUsedSources,
-            matchedSources,
-            matchedSourceHosts,
-            unitHints: selectedUnits,
-            selectionStrategy,
-            modelToken,
-            recheckRequired,
-            priceConfidence: Number(baseConfidence.toFixed(2)),
-        };
-      }
-
-        return {
-          key,
-          price: fallbackPrice ?? null,
-          status: "fallback",
-          reason: "price_not_found",
-          sourceCount: 0,
+          status: selectionPool.length > 1 ? "fetched_multi" : "fetched",
+          sourceCount: selectedUsedSources.length,
           checkedSources: targets.length,
-          usedSources: [],
-          matchedSources: [],
-          matchedSourceHosts: [],
-          unitHints: [],
+          usedSources: selectedUsedSources,
+          matchedSources,
+          matchedSourceHosts,
+          unitHints: selectedUnits,
           selectionStrategy,
           modelToken,
-          recheckRequired: false,
-          priceConfidence: 0,
-        };
-      } catch (error) {
-        return buildEntryFallback("price_collection_error", error?.message || "");
+          recheckRequired,
+          priceConfidence: Number(baseConfidence.toFixed(2)),
+        });
+        continue;
       }
-    })
-  );
+
+      results.push({
+        key,
+        price: fallbackPrice ?? null,
+        status: "fallback",
+        reason: "price_not_found",
+        sourceCount: 0,
+        checkedSources: targets.length,
+        usedSources: [],
+        matchedSources: [],
+        matchedSourceHosts: [],
+        unitHints: [],
+        selectionStrategy,
+        modelToken,
+        recheckRequired: false,
+        priceConfidence: 0,
+      });
+    } catch (error) {
+      results.push(buildEntryFallback("price_collection_error", error?.message || ""));
+    }
+  }
+
+  return results;
 }
 
 function setCorsHeaders(res) {
