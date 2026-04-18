@@ -1,12 +1,9 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { AuthModal } from "../components/AuthModal";
-import { DevelopmentPlanModal } from "../components/DevelopmentPlanModal";
 import { HeroVideo } from "../components/HeroVideo";
-import { MetricSpotlightModal } from "../components/MetricSpotlightModal";
 import { PromoReelPlayer } from "../components/PromoReelPlayer";
 import { SectionHeader } from "../components/SectionHeader";
-import projectCoreMarkUrl from "../assets/project-core-mark.svg";
 import { comparisonCards, growthPoints, metrics, siteConfig } from "../data/siteContent";
 
 const sequenceSteps = [
@@ -28,7 +25,7 @@ const sequenceSteps = [
   },
   {
     title: "5. Коэффициенты и защита бюджета",
-    text: "К трудовой части применяются коэффициенты региона, статуса здания, условий монтажа и встроенные ограничения Risk Guard AI для контроля сбалансированности.",
+    text: "К трудовой части применяются коэффициенты региона, статуса здания, условий монтажа и встроенные анти-недооценочные ограничения.",
   },
   {
     title: "6. Итоговый бюджет и ТКП",
@@ -69,7 +66,7 @@ const commonLogicBlocks = [
     points: [
       "Работы считаются по единичным расценкам: устройство, метр кабеля, точка интеграции, КНС и т.д.",
       "СМР, ПНР, интеграция и КНС рассчитываются отдельно, затем суммируются в базу работ.",
-      "Система применяет рыночный floor и Risk Guard AI, чтобы не допустить перекоса бюджета в сторону занижения или перезаложенности.",
+      "Система применяет рыночный floor и AI-проверку недооценки, чтобы не допустить занижения бюджета.",
       "Региональный коэффициент не может искусственно опустить стоимость работ ниже базового безопасного уровня.",
     ],
   },
@@ -83,7 +80,7 @@ const systemLogic = [
     autoCalc:
       "Количество извещателей, приборов, шкафов, кабеля, объем СМР и ПНР. При наличии PDF проектная спецификация получает приоритет.",
     result:
-      "Стоимость оборудования, материалов, монтажа, ПНР и проектирования с дополнительной перепроверкой сбалансированности трудовой части.",
+      "Стоимость оборудования, материалов, монтажа, ПНР и проектирования с дополнительной защитой от недооценки трудовой части.",
   },
   {
     code: "СОУЭ",
@@ -150,7 +147,7 @@ const aiCapabilities = [
   },
   {
     title: "AI-защита работ и ПНР",
-    text: "Нейросетевой risk scorer оценивает риск дисбаланса СМР+ПНР по насыщенности проекта, PDF-override, кабелю, КНС, региону и условиям работ.",
+    text: "Нейросетевой risk scorer оценивает риск недооценки СМР+ПНР по насыщенности проекта, PDF-override, кабелю, КНС, региону и условиям работ.",
   },
   {
     title: "AI-обработка PDF-проектов",
@@ -163,14 +160,11 @@ const aiFlowSteps = [
   "2. Распознавание строк: наименование, модель, единица измерения и количество.",
   "3. Проверка единиц и выявление конфликтов проект ↔ поставщик.",
   "4. Сбор рыночных цен по поставщикам и сайту производителя выбранного вендора.",
-  "5. Расчет оборудования, материалов, работ и запуск Risk Guard AI для перепроверки баланса.",
+  "5. Расчет оборудования, материалов, работ и запуск AI-проверки недооценки.",
   "6. Формирование итогового бюджета с рыночным floor и объяснением происхождения суммы.",
 ];
 
 const aiTechnicalSolutionPoints = [
-  "Новый модуль AI-планирования по кнопке «Сгенерировать план проекта» собирает детальный график реализации систем в PowerPoint или MS Project (.mpp) и синхронизирует его верхнеуровневые сроки с экспортируемым ТКП.",
-  "AI-модуль отдельно запрашивает фотографии коридоров и анализирует способ прокладки кабельных линий: в лотке, в гофре/трубе, в коробе, в запотолочном пространстве, под фальш-полом или открыто.",
-  "В чек-лист по системам встроены вопросы о наличии лотков, фальш-полов и запотолочного пространства, а полученные ответы потом используются в техническом решении, спецификации, материалах, СМР и итоговой стоимости.",
   "Этап 1. На вкладке «Объект» пользователь отмечает состав систем, наличие РД, параметры объекта, зоны и статус здания, после чего запускает AI-обследование.",
   "Этап 2. Платформа формирует единый адаптивный чек-лист по объекту, зонам и системам без РД, включая вопросы, которые влияют на точность расчета стоимости проектирования.",
   "Логика вопросов зависит от статуса объекта, площади, этажности, функционального назначения зон и выбранных инженерных систем.",
@@ -180,15 +174,13 @@ const aiTechnicalSolutionPoints = [
   "Если снимок не соответствует требуемому сценарию, модуль отклоняет его и не позволяет записать в чек-лист ложную фотоинформацию.",
   "Если AI уверенно определил высоту помещения, вручную в чек-листе ее указывать не нужно; если уверенности недостаточно, поле остается обязательным для ручного ввода.",
   "После обследования данные используются сразу в двух контурах: AI-конфигуратор уточняет техническое решение, а расчетный движок корректирует стоимость проектирования по системам.",
-  "По каждой системе платформа собирает полную спецификацию оборудования и материалов с ценами, суммами, источниками и отдельной Excel-выгрузкой прямо из вкладки «Системы».",
   "Если по системе есть проект или он загружен во вкладке «Система», стоимость проектирования по этой системе не рассчитывается и помечается как «проект в наличии».",
 ];
 
 export function HomePage() {
   const [authOpen, setAuthOpen] = useState(false);
   const [promoOpen, setPromoOpen] = useState(false);
-  const [developmentPlanOpen, setDevelopmentPlanOpen] = useState(false);
-  const [activeMetric, setActiveMetric] = useState<(typeof metrics)[number] | null>(null);
+  const navigate = useNavigate();
 
   return (
     <main>
@@ -196,19 +188,10 @@ export function HomePage() {
         <HeroVideo variant="legacy" />
         <div className="container hero__content">
           <div className="hero__badge">Presale / Budget Intelligence / Security Systems</div>
-          <h1 className="hero__brand-title">
-            <img className="hero__brand-mark" src={projectCoreMarkUrl} alt="" aria-hidden="true" />
-            <span className="hero__brand-line">{siteConfig.brand} —</span>
-            <span className="hero__headline-copy">
-              <span>предварительная</span>
-              <span>бюджетная оценка</span>
-              <span>систем безопасности</span>
-              <span>без Excel-хаоса</span>
-            </span>
-          </h1>
+          <h1>{siteConfig.brand} — предварительная бюджетная оценка систем безопасности без Excel-хаоса</h1>
           <p className="hero__lead">
             Платформа собирает бюджет по АПС, СОУЭ, СОТС, СОТ, СКУД и ССОИ, учитывает зонирование, тип объекта, регион, а затем запускает собственный
-            AI-аудит цен и трудозатрат, который помогает держать бюджет сбалансированным и перепроверенным.
+            AI-аудит цен и трудозатрат, который снимает риск недооцененности бюджета.
           </p>
           <div className="hero__actions">
             <button className="btn btn--primary" onClick={() => setAuthOpen(true)}>
@@ -223,21 +206,16 @@ export function HomePage() {
             <Link className="btn btn--ghost-light" to="/about-system">
               О системе
             </Link>
-            <button className="btn btn--ghost-light btn--plan" type="button" onClick={() => setDevelopmentPlanOpen(true)}>
-              План разработки
-            </button>
             <button className="btn btn--signal" type="button" onClick={() => setPromoOpen(true)}>
               Видео о возможностях
             </button>
           </div>
           <div className="hero__grid">
             {metrics.map((metric) => (
-              <button className="metric-card metric-card--interactive" type="button" key={metric.id} onClick={() => setActiveMetric(metric)}>
+              <div className="metric-card" key={metric.label}>
                 <div className="metric-card__value">{metric.value}</div>
                 <div className="metric-card__label">{metric.label}</div>
-                <div className="metric-card__teaser">{metric.teaser}</div>
-                <div className="metric-card__hint">Нажмите, чтобы раскрыть</div>
-              </button>
+              </div>
             ))}
           </div>
           <div className="hero__legal-note">
@@ -253,14 +231,12 @@ export function HomePage() {
       </section>
 
       <PromoReelPlayer open={promoOpen} onClose={() => setPromoOpen(false)} />
-      <DevelopmentPlanModal open={developmentPlanOpen} onClose={() => setDevelopmentPlanOpen(false)} />
-      <MetricSpotlightModal metric={activeMetric} onClose={() => setActiveMetric(null)} />
 
-      <section className="section section--dark section--positioning" id="comparison">
+      <section className="section section--dark" id="comparison">
         <div className="container">
           <SectionHeader eyebrow="Позиционирование" title={`Почему ${siteConfig.brand} нужен рынку прямо сейчас`}>
             На рынке РФ много либо тяжелых сметных систем, либо локальных таблиц. Ниша быстрого браузерного пресейл-движка для нескольких систем
-            безопасности с AI-аудитом цен и контролем сбалансированности до сих пор почти свободна.
+            безопасности с AI-аудитом цен и защитой от недооценки до сих пор почти свободна.
           </SectionHeader>
           <div className="comparison-grid">
             {comparisonCards.map((card) => (
@@ -284,16 +260,13 @@ export function HomePage() {
         </div>
       </section>
 
-      <section className="section section--light section--key-feature">
+      <section className="section section--light">
         <div className="container feature-layout">
           <div>
             <SectionHeader eyebrow="Ключевая особенность" title="Собственный AI-аудит цен и трудозатрат уже встроен в расчет">
               Это не декоративный AI-блок и не внешняя экспертиза после расчета. Нейросетевой контур встроен прямо в расчетный движок, проверяет рынок и не
-              уводит бюджет из зоны недооцененности или избыточной перезаложенности.
+              дает бюджету провалиться в зону недооценки.
             </SectionHeader>
-            <p className="hint-inline corridor-emphasis" style={{ marginTop: -8, marginBottom: 18 }}>
-              Отдельный контур по коридорам позволяет AI распознавать способ прокладки кабеля и учитывать лотки, фальш-полы и запотолочное пространство уже в самом расчете системы, а не только в описании объекта.
-            </p>
             <ul className="growth-list">
               {growthPoints.map((item) => (
                 <li key={item}>{item}</li>
@@ -305,18 +278,18 @@ export function HomePage() {
             <h3>Быстрый бюджет, который можно защищать на переговорах</h3>
             <p>
               {siteConfig.brand} не просто выдает сумму, а показывает, из чего она собрана: объемы, источники цен, единичные расценки, коэффициенты, рыночный
-              floor и AI-проверку риска дисбаланса.
+              floor и AI-проверку риска недооценки.
             </p>
-            <button className="btn btn--primary" onClick={() => setAuthOpen(true)}>
-              Получить доступ к демо
+            <button className="btn btn--primary" onClick={() => navigate("/system?demo=1")}>
+              Запустить демо-версию
             </button>
           </div>
         </div>
       </section>
 
-      <section className="section section--dark section--ai-engine ai-showcase" id="ai-engine">
+      <section className="section section--dark ai-showcase" id="ai-engine">
         <div className="container">
-          <SectionHeader eyebrow={`AI-движок ${siteConfig.brand}`} title="Как именно AI балансирует бюджет и перепроверяет расчеты">
+          <SectionHeader eyebrow={`AI-движок ${siteConfig.brand}`} title="Как именно AI снимает риск недооцененности бюджета">
             Алгоритм одновременно работает в контуре цен и в контуре работ. Он проверяет рыночные предложения, анализирует структуру проекта и усиливает
             расчет там, где видит признаки занижения.
           </SectionHeader>
@@ -339,7 +312,7 @@ export function HomePage() {
         </div>
       </section>
 
-      <section className="section section--light section--technical-solution" id="ai-technical-solution">
+      <section className="section section--light" id="ai-technical-solution">
         <div className="container feature-layout">
           <div>
             <SectionHeader eyebrow="AI-Техническое решение" title="Как модуль превращает описание объекта в обследование и техническое решение">
@@ -358,22 +331,13 @@ export function HomePage() {
               AI-модуль связывает параметры объекта, реестр систем, наличие РД, ответы обследования и фотофиксацию в один сценарий. Для СОТС, СОУЭ и АПС он дополнительно собирает планы эвакуации, подсказывает, как их правильно снять, распознает планировку и дифференцированно выделяет охранные зоны, зоны оповещения и ЗКСПС с дополнительной перепроверкой по данным объекта.
             </p>
             <p>
-              В системе есть контур актуализации нормативных требований: для каждого нормативного блока сохраняется дата проверки и ссылка на опорный источник.
-            </p>
-            <p>
               В результате пользователь получает не только цифру, но и основу для дальнейшего техрешения и проектного бюджета: что именно нужно проверить на объекте, как планировка влияет на деление по зонам, какие условия меняют состав системы, почему меняется трудоемкость проектирования и в каких системах расчет проектирования отключен из-за наличия проекта.
-            </p>
-            <p>
-              Дополнительно по каждой системе формируется полная рассчитанная спецификация оборудования и материалов, которую можно проверить на вкладке «Системы» и отдельно выгрузить в Excel.
-            </p>
-            <p>
-              На том же контуре теперь работает и AI-планирование: после расчета платформа может выпустить детальный план проекта с мероприятиями, сроками и оговоркой по допущениям в формате PowerPoint или MS Project (.mpp).
             </p>
           </div>
         </div>
       </section>
 
-      <section className="section section--dark section--project-risks">
+      <section className="section section--dark">
         <div className="container feature-layout">
           <div>
             <SectionHeader eyebrow="AI-риски проекта" title="Как модуль заранее показывает критичные риски именно по вашему объекту">
@@ -399,10 +363,10 @@ export function HomePage() {
         </div>
       </section>
 
-      <section className="section section--light section--calculation-logic" id="calculation-logic">
+      <section className="section section--light" id="calculation-logic">
         <div className="container">
           <SectionHeader eyebrow="Логика расчета" title="Как формируется бюджет: от параметров объекта до итоговой суммы проекта">
-            Расчет идет по фиксированной последовательности: входные данные, автоматическое определение объемов, AI-аудит цен, AI-обследование, AI-риски проекта, Risk Guard AI, применение коэффициентов и формирование финального бюджета.
+            Расчет идет по фиксированной последовательности: входные данные, автоматическое определение объемов, AI-аудит цен, AI-обследование, AI-риски проекта, проверка риска недооценки работ, применение коэффициентов и формирование финального бюджета.
           </SectionHeader>
 
           <div className="logic-sequence">
@@ -433,7 +397,7 @@ export function HomePage() {
               <li>Без проекта система считает по параметрической модели объекта и зон.</li>
               <li>С загруженным PDF AI распознает спецификацию и подменяет расчетные объемы проектными, где это надежно подтверждено.</li>
               <li>Позиции проходят проверку единиц измерения, качества совпадения и статуса цены.</li>
-              <li>Для СМР+ПНР запускается отдельная AI-проверка риска дисбаланса, и при необходимости включается защитный контур без автоматической смены пользовательских коэффициентов.</li>
+              <li>Для СМР+ПНР запускается отдельная AI-проверка риска недооценки, и при необходимости включается консервативный uplift.</li>
               <li>Отдельный модуль AI-рисков проекта собирает критичные риски по объекту в реальном времени и помогает заранее увидеть, где понадобится резерв бюджета или сроков.</li>
             </ul>
           </article>
@@ -473,39 +437,8 @@ export function HomePage() {
             <h3>Итоговая формула бюджета</h3>
             <p>
               Итог = [Оборудование + Материалы + Работы + Проектирование] + Рентабельность + НДС. Внутри блока работ уже учтены единичные расценки,
-              коэффициенты условий, регион, рыночный floor и AI-проверка сбалансированности.
+              коэффициенты условий, регион, рыночный floor и AI-проверка недооценки.
             </p>
-          </div>
-        </div>
-      </section>
-
-      <section className="section section--light">
-        <div className="container">
-          <SectionHeader eyebrow="Новые функции" title="Командировки, численность бригад и уточнение адреса">
-            Платформа теперь коротко показывает три прикладные возможности: умный расчет командировочного выезда, прозрачную логику численности бригад и быстрое уточнение адреса с переходом на карту.
-          </SectionHeader>
-          <div className="calc-logic-grid">
-            <article className="calc-logic-card">
-              <h3>Командировочные выезды</h3>
-              <ul>
-                <li>Во вкладке расчета ресурса можно активировать умный алгоритм и заполнить начальную и конечную точки маршрута.</li>
-                <li>Алгоритм оценивает маршрут туда и обратно, время в пути, транспорт, проживание и суточные, а затем добавляет сумму к стоимости работ по системам.</li>
-              </ul>
-            </article>
-            <article className="calc-logic-card">
-              <h3>Расчет численности бригад</h3>
-              <ul>
-                <li>Состав бригады рассчитывается по трудоемкости, длительности фазы, роли специалистов и насыщенности системы.</li>
-                <li>Любая ручная корректировка состава сразу меняет срок и стоимость СМР/ПНР.</li>
-              </ul>
-            </article>
-            <article className="calc-logic-card">
-              <h3>Уточнение адреса</h3>
-              <ul>
-                <li>Адрес можно ввести в свободной форме, затем уточнить и открыть на Яндекс Карте в отдельном окне.</li>
-                <li>После подтверждения нормализованный адрес и точка объекта участвуют в дальнейших расчетах.</li>
-              </ul>
-            </article>
           </div>
         </div>
       </section>
@@ -524,7 +457,6 @@ export function HomePage() {
             <Link to="/legal/privacy">Политика конфиденциальности</Link>
             <Link to="/legal/personal-data">Политика обработки ПДн</Link>
             <Link to="/legal/user-agreement">Пользовательское соглашение</Link>
-            <Link to="/legal/information-security">Информационная безопасность</Link>
             <Link to="/legal/cookies">Cookies</Link>
             <Link to="/legal/disclaimer">Отказ от ответственности</Link>
           </div>

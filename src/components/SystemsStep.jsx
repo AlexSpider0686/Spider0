@@ -1,187 +1,28 @@
-﻿import React, { useEffect, useState } from "react";
-import { Plus, Trash2, Shield, FileUp, RefreshCcw, Eye, EyeOff, CheckCircle2, Download, BarChart3 } from "lucide-react";
+import React, { useState } from "react";
+import { Plus, Trash2, Shield, FileUp, RefreshCcw, Eye, EyeOff, CheckCircle2, Download } from "lucide-react";
 import { SYSTEM_TYPES, VENDORS } from "../config/estimateConfig";
 import { getManufacturerSource, getVendorByName } from "../config/vendorsConfig";
 import { num, rub, toNumber } from "../lib/estimate";
-import { getConcreteModel, getEditableModelOptions, resolveModelPriceOverride } from "../lib/equipment";
-import { summarizePriceSnapshot } from "../lib/priceCollector";
-import { repairReactTextTree } from "../lib/repairReactTree";
-import { resolvePreferredEquipmentSourceLink, toSourceHost } from "../lib/sourceLinks";
 import VendorConfigurator from "./VendorConfigurator";
 
 function renderApsImportStatus(status) {
   if (!status) return null;
   if (status.state === "loading") return <p className="hint-inline">Статус: {status.message}</p>;
-  if (status.state === "warning") return <p className="warn-inline">Статус: {status.message}</p>;
   if (status.state === "error") return <p className="warn-inline">Статус: {status.message}</p>;
   return <p className="hint-inline">Статус: {status.message}</p>;
 }
 
-function renderApsImportProgress(status, elapsedSeconds = 0) {
-  if (!status) return null;
-  const stages = [
-    { key: "parsing", label: "1. Анализ PDF" },
-    { key: "pricing", label: "2. Сбор цен" },
-    { key: "done", label: "3. Финализация" },
-  ];
-  const currentIndex = Math.max(
-    stages.findIndex((item) => item.key === status.stage),
-    status.state === "success" || status.state === "warning" ? 2 : 0
-  );
-
-  const progressPercent =
-    status.state === "success" || status.state === "warning"
-      ? 100
-      : status.stage === "pricing"
-        ? 72
-        : status.stage === "parsing"
-          ? 34
-          : 12;
-
-  return (
-    <>
-      <div className="pricing-source-row comparison-summary-row" style={{ marginTop: 8, marginBottom: 8 }}>
-      {stages.map((stage, index) => {
-        const isCompleted = index < currentIndex || ((status.state === "success" || status.state === "warning") && index === currentIndex);
-        const isActive = status.state === "loading" && index === currentIndex;
-        const tone = status.state === "error" && index === currentIndex ? "warn" : isCompleted ? "ok" : isActive ? "muted" : "muted";
-        return (
-          <span className={`pricing-source-chip ${tone}`} key={`${status.stage || status.state}-${stage.key}`}>
-            <strong>{stage.label}</strong>
-            {isActive ? "..." : ""}
-          </span>
-        );
-      })}
-      {status.state === "loading" ? (
-        <span className="pricing-source-chip muted">
-          <strong>Время:</strong> {elapsedSeconds} сек.
-        </span>
-      ) : null}
-      {status.parsedItems ? (
-        <span className="pricing-source-chip ok">
-          <strong>Позиции:</strong> {status.parsedItems}
-        </span>
-      ) : null}
-      </div>
-      <div style={{ marginTop: 6, marginBottom: 10 }}>
-        <div style={{ height: 6, background: "#E6ECE8", borderRadius: 999, overflow: "hidden" }}>
-          <div
-            style={{
-              width: `${progressPercent}%`,
-              height: "100%",
-              background: status.state === "error" ? "#E07A5F" : status.state === "warning" ? "#E0A458" : "#219653",
-              transition: "width 0.3s ease",
-            }}
-          />
-        </div>
-      </div>
-    </>
-  );
-}
-
-function renderVendorPricingProgress(progress) {
-  if (!progress) return null;
-  const percent = Math.max(0, Math.min(toNumber(progress.percent, 0), 100));
-  const tone =
-    progress.state === "error" ? "#E07A5F" : progress.state === "warning" ? "#E0A458" : progress.state === "success" ? "#219653" : "#1E9FC5";
-
-  return (
-    <div className="calc-explain" style={{ marginTop: 10 }}>
-      <div className="pricing-source-row" style={{ marginBottom: 8 }}>
-        <span className={`pricing-source-chip ${progress.state === "error" ? "warn" : progress.state === "warning" ? "muted" : "ok"}`}>
-          <strong>Обновление цен</strong>
-        </span>
-        {progress.total ? (
-          <span className="pricing-source-chip muted">
-            <strong>Позиции:</strong> {progress.processed || 0} / {progress.total}
-          </span>
-        ) : null}
-      </div>
-      <p className={progress.state === "error" ? "warn-inline" : "hint-inline"}>{progress.message}</p>
-      <div style={{ marginTop: 8, height: 8, background: "#E6ECE8", borderRadius: 999, overflow: "hidden" }}>
-        <div style={{ width: `${percent}%`, height: "100%", background: tone, transition: "width 0.3s ease" }} />
-      </div>
-    </div>
-  );
-}
-
-function renderComparisonProgress(progress) {
-  if (!progress || progress.state !== "loading") return null;
-  const percent = Math.max(0, Math.min(toNumber(progress.percent, 0), 100));
-  return (
-    <div className="calc-explain" style={{ marginTop: 10 }}>
-      <div className="pricing-source-row" style={{ marginBottom: 8 }}>
-        <span className="pricing-source-chip ok">
-          <strong>Сравнение цен</strong>
-        </span>
-        {progress.total ? (
-          <span className="pricing-source-chip muted">
-            <strong>Вендоры:</strong> {progress.processed || 0} / {progress.total}
-          </span>
-        ) : null}
-      </div>
-      <p className="hint-inline">{progress.message}</p>
-      <div style={{ marginTop: 8, height: 8, background: "#E6ECE8", borderRadius: 999, overflow: "hidden" }}>
-        <div style={{ width: `${percent}%`, height: "100%", background: "#1E9FC5", transition: "width 0.3s ease" }} />
-      </div>
-    </div>
-  );
-}
-
-function getManufacturerHosts(source) {
-  return [...new Set([source?.website, source?.searchWebsite].map(toSourceHost).filter(Boolean))];
-}
-
-function buildSearchLink(query) {
-  const normalized = String(query || "").trim();
-  return normalized ? `https://www.tinko.ru/search/?q=${encodeURIComponent(normalized)}` : "";
-}
-
-function formatTechnicalSpecPosition(row) {
-  const name = String(row?.name || "").trim();
-  const model = String(row?.model || "").trim();
-  if (!model || !name) return name || model || "вЂ”";
-  return name.includes(model) ? name : `${name} (${model})`;
-}
-
-function buildSpecModelOptions(system, row) {
-  if (!row?.isModelEditable || row?.category !== "equipment") return [];
-  const options = getEditableModelOptions(system?.type, system?.vendor, row?.itemCode);
-  if (!row?.model || options.some((item) => item.model === row.model)) return options;
-  return [{ model: row.model, optionKey: "", basePrice: 0 }, ...options];
-}
-
-const TECHNICAL_SOURCE_LABELS = {
-  project_pdf: "PDF",
-  model_bom: "BOM",
-  cable_model: "кабель",
-  kns_model: "КНС",
-  resource_model: "ресурсы",
-  survey_ai: "AI",
-  key_equipment: "вендор",
-  algorithm: "модель",
-};
-
-function resolveKeyEquipmentModel(system, item) {
-  const explicitModel = String(item?.model || "").trim();
-  if (explicitModel) return explicitModel;
-
-  const selected = system?.selectedEquipmentParams || {};
-  const optionMap = {
-    CAM: ["camera", `${selected.cameraPlacement}_${selected.cameraResolution}`],
-    REC: ["recorder", selected.recorderChannels],
-    SW: ["switch", `${selected.switchPorts}_${selected.switchPoe}`],
-    CTRL: ["controller", selected.controllerChannels],
-    SEN: ["sensor", selected.sensorKind],
-    DET: ["detector", selected.detectorKind],
-    PANEL: ["panel", selected.panelLoops],
-    SPK: ["speaker", selected.speakerKind],
-    AMP: ["amplifier", selected.amplifierChannels],
-  };
-
-  const [itemType, optionKey] = optionMap[item?.code] || [];
-  if (!itemType || optionKey === undefined || optionKey === null || optionKey === "") return "-";
-  return getConcreteModel(system?.type, system?.vendor, itemType, optionKey) || "-";
+function toHost(url) {
+  if (!url) return "";
+  try {
+    return new URL(url).hostname.replace(/^www\./i, "").toLowerCase();
+  } catch {
+    return String(url)
+      .replace(/^https?:\/\//i, "")
+      .replace(/^www\./i, "")
+      .split("/")[0]
+      .toLowerCase();
+  }
 }
 
 function resolveUnrecognizedReason(reason) {
@@ -206,72 +47,6 @@ function formatSelectionStrategy(strategy) {
   return "алгоритм по умолчанию";
 }
 
-function resolveEquipmentSourceLink(item, result, system, manufacturerSource = {}) {
-  const manufacturerHosts = getManufacturerHosts(manufacturerSource);
-  return resolvePreferredEquipmentSourceLink(item, result, manufacturerHosts);
-}
-
-function findMatchingMarketEntry(row, result) {
-  const marketEntries = Array.isArray(result?.equipmentData?.marketEntries) ? result.equipmentData.marketEntries : [];
-  const keys = [row?.name, row?.label, row?.model, row?.code, `${row?.name || ""} ${row?.model || ""}`]
-    .map((value) => String(value || "").trim().toLowerCase())
-    .filter(Boolean);
-  return (
-    keys
-      .map((key) =>
-        marketEntries.find((entry) =>
-          [entry?.equipmentLabel, entry?.equipmentKey, entry?.projectModel, entry?.projectName, entry?.modelToken]
-            .map((value) => String(value || "").trim().toLowerCase())
-            .filter(Boolean)
-            .includes(key)
-        )
-      )
-      .find(Boolean) || null
-  );
-}
-
-export function buildTechnicalSpecPriceMeta(row, result, manufacturerSource = {}) {
-  const manufacturerHosts = getManufacturerHosts(manufacturerSource);
-  const marketEntry = findMatchingMarketEntry(row, result);
-  const manufacturerMatched =
-    marketEntry && manufacturerHosts.length
-      ? manufacturerHosts.some((host) =>
-          [...(marketEntry?.matchedSourceHosts || []), ...(marketEntry?.usedSourceHosts || [])].map((item) => String(item || "").trim()).includes(host)
-        )
-      : false;
-  const manufacturerUnitPrice = manufacturerMatched ? toNumber(marketEntry?.price, 0) : 0;
-  const rowUnitPrice = toNumber(row?.unitPrice, 0);
-  return {
-    manufacturerUnitPrice,
-    isAboveManufacturer: manufacturerUnitPrice > 0 && rowUnitPrice > manufacturerUnitPrice * 1.01,
-  };
-}
-
-function buildTechnicalSpecSourceMeta(row, result, system, manufacturerSource = {}) {
-  const directLink = resolveEquipmentSourceLink(row, result, system, manufacturerSource);
-  if (directLink) {
-    return {
-      label: toSourceHost(directLink) || "ссылка",
-      url: directLink,
-    };
-  }
-
-  const sourceLabel = TECHNICAL_SOURCE_LABELS[row?.source] || (row?.source === "survey_ai" ? "AI" : "—");
-  return {
-    label: sourceLabel,
-    url: "",
-  };
-}
-
-function formatPricingWarning(snapshot) {
-  const warning = String(snapshot?.warning || "").trim();
-  if (!warning) return "";
-  if (warning === "price_collection_unavailable_fallback_mode") {
-    return "Сервис сбора цен временно недоступен. Использован резервный режим и fallback-логика.";
-  }
-  return warning;
-}
-
 const APS_MANUAL_UNIT_OPTIONS = ["шт", "компл", "м", "м2", "кг", "л", "уп", "лист"];
 
 function defaultManualDraft() {
@@ -292,18 +67,15 @@ function formatMultiplier(value) {
 function renderWorkCostPopover(result) {
   const laborDetails = result?.laborDetails;
   if (!laborDetails?.unitRates || !laborDetails?.workBreakdown) {
-    return <span className="pricing-chip-popover">{"\u0414\u0435\u0442\u0430\u043b\u0438\u0437\u0430\u0446\u0438\u044f \u0440\u0430\u0441\u0447\u0435\u0442\u0430 \u0440\u0430\u0431\u043e\u0442 \u043f\u043e\u044f\u0432\u0438\u0442\u0441\u044f \u043f\u043e\u0441\u043b\u0435 \u0444\u043e\u0440\u043c\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u044f \u0438\u0442\u043e\u0433\u043e\u0432\u043e\u0433\u043e \u0440\u0430\u0441\u0447\u0435\u0442\u0430 \u0441\u0438\u0441\u0442\u0435\u043c\u044b."}</span>;
+    return <span className="pricing-chip-popover">Детализация расчета работ появится после формирования итогового расчета системы.</span>;
   }
 
   const rates = laborDetails.unitRates;
   const breakdown = laborDetails.workBreakdown;
   const charges = laborDetails.workChargesBeforeRegion || {};
-  const chargePercents = laborDetails.chargePercents || {};
   const marketGuard = laborDetails.marketGuard || {};
   const neuralCheck = laborDetails.neuralCheck || {};
-  const modelSource = laborDetails.modelSource || {};
   const regionalFactor = Math.max(toNumber(breakdown.regionalFactor, 1), 0.0001);
-  const workBase = toNumber(result?.workBase || breakdown.computedWorkBase, 0);
   const workAfterConditions = toNumber(result?.laborBase, 0) / regionalFactor;
   const chargesTotal =
     toNumber(charges.overhead, 0) +
@@ -311,136 +83,57 @@ function renderWorkCostPopover(result) {
     toNumber(charges.utilization, 0) +
     toNumber(charges.ppe, 0) +
     toNumber(charges.admin, 0);
-  const markerLabel = result?.unitWorkMarker?.label || "marker";
-  const markerUnits = Math.max(toNumber(laborDetails.markerUnits, 0), 1);
-  const marketFloorBaseByRates = toNumber(marketGuard.marketFloorBaseByRates, 0);
-  const marketFloorBaseByMarker = toNumber(marketGuard.marketFloorBaseByMarker, 0);
-  const neuralFloorBase = toNumber(neuralCheck.neuralFloorBase, 0);
 
   return (
     <span className="pricing-chip-popover work-cost-popover">
       <span className="work-cost-popover__section">
-        <strong>{"\u041a\u0430\u043a \u0441\u0447\u0438\u0442\u0430\u0435\u0442\u0441\u044f \u0441\u0442\u043e\u0438\u043c\u043e\u0441\u0442\u044c \u0440\u0430\u0431\u043e\u0442"}</strong>
-        <span>{"\u0417\u0434\u0435\u0441\u044c \u043f\u043e\u043a\u0430\u0437\u0430\u043d \u043f\u043e\u043b\u043d\u044b\u0439 \u043f\u043e\u0440\u044f\u0434\u043e\u043a \u0440\u0430\u0441\u0447\u0435\u0442\u0430 \u0421\u041c\u0420+\u041f\u041d\u0420: \u043e\u0442 \u0431\u0430\u0437\u043e\u0432\u044b\u0445 \u0435\u0434\u0438\u043d\u0438\u0447\u043d\u044b\u0445 \u0440\u0430\u0441\u0446\u0435\u043d\u043e\u043a \u0438 \u043e\u0431\u044a\u0435\u043c\u043e\u0432 \u0434\u043e \u043d\u0430\u0447\u0438\u0441\u043b\u0435\u043d\u0438\u0439, \u0440\u0435\u0433\u0438\u043e\u043d\u0430\u043b\u044c\u043d\u043e\u0433\u043e \u043a\u043e\u044d\u0444\u0444\u0438\u0446\u0438\u0435\u043d\u0442\u0430 \u0438 \u0437\u0430\u0449\u0438\u0442\u044b \u043e\u0442 \u043d\u0435\u0434\u043e\u043e\u0446\u0435\u043d\u043a\u0438."}</span>
-        <span>{`\u041f\u0440\u043e\u0435\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435 \u0441\u0447\u0438\u0442\u0430\u0435\u0442\u0441\u044f \u043e\u0442\u0434\u0435\u043b\u044c\u043d\u043e \u043f\u043e \u0441\u0442\u0430\u0432\u043a\u0435 ${rub(rates.designHour)} / \u0447\u0430\u0441 \u0438 \u0432 \u044d\u0442\u0443 \u0441\u0443\u043c\u043c\u0443 \u0440\u0430\u0431\u043e\u0442 \u043d\u0435 \u0432\u0445\u043e\u0434\u0438\u0442.`}</span>
+        <strong>Как считается стоимость работ</strong>
+        <span>
+          СМР+ПНР считаются по внутренней модели единичных расценок, затем проверяются рыночным полом и AI-анализом риска
+          недооценки. Для APS с PDF итог не может быть ниже базы по единичным расценкам.
+        </span>
       </span>
 
       <span className="work-cost-popover__section">
-        <strong>{"\u041e\u0442\u043a\u0443\u0434\u0430 \u0431\u0435\u0440\u0443\u0442\u0441\u044f \u0441\u0442\u0430\u0432\u043a\u0438 \u0438 \u043d\u043e\u0440\u043c\u044b"}</strong>
-        <span>{`\u0418\u0441\u0442\u043e\u0447\u043d\u0438\u043a \u0431\u0430\u0437\u043e\u0432\u044b\u0445 \u0440\u0430\u0441\u0446\u0435\u043d\u043e\u043a: ${modelSource.unitRatesConfig || "LABOR_UNIT_RATES / src/config/costModelConfig.js"}.`}</span>
-        <span>{"\u0411\u0430\u0437\u043e\u0432\u044b\u0435 \u0441\u0442\u0430\u0432\u043a\u0438 \u2014 \u044d\u0442\u043e \u0443\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u043d\u044b\u0435 \u0432\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0438\u0435 \u0435\u0434\u0438\u043d\u0438\u0447\u043d\u044b\u0435 \u043d\u043e\u0440\u043c\u044b \u0442\u0435\u043a\u0443\u0449\u0435\u0439 \u0432\u0435\u0440\u0441\u0438\u0438 \u043f\u043b\u0430\u0442\u0444\u043e\u0440\u043c\u044b; \u043e\u043d\u0438 \u043f\u0440\u0438\u043c\u0435\u043d\u044f\u044e\u0442\u0441\u044f \u043e\u0434\u0438\u043d\u0430\u043a\u043e\u0432\u043e \u0434\u043b\u044f \u0432\u0441\u0435\u0445 \u0440\u0430\u0441\u0447\u0435\u0442\u043e\u0432 \u044d\u0442\u043e\u0439 \u0432\u0435\u0440\u0441\u0438\u0438 \u0438 \u0437\u0430\u0442\u0435\u043c \u043a\u043e\u0440\u0440\u0435\u043a\u0442\u0438\u0440\u0443\u044e\u0442\u0441\u044f \u0443\u0441\u043b\u043e\u0432\u0438\u044f\u043c\u0438 \u043c\u043e\u043d\u0442\u0430\u0436\u0430, \u0440\u0435\u0433\u0438\u043e\u043d\u043e\u043c \u0438 \u0437\u0430\u0449\u0438\u0442\u043d\u044b\u043c\u0438 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0430\u043c\u0438."}</span>
-        <span>{`\u0418\u0441\u0442\u043e\u0447\u043d\u0438\u043a \u0437\u0430\u0449\u0438\u0442\u043d\u044b\u0445 \u043f\u043e\u0440\u043e\u0433\u043e\u0432: ${modelSource.marketGuardConfig || "LABOR_MARKET_GUARDRAILS / src/config/costModelConfig.js"}.`}</span>
-        <span>{modelSource.scheduleCalibration || "\u0422\u0440\u0443\u0434\u043e\u0435\u043c\u043a\u043e\u0441\u0442\u044c \u043a\u0430\u043b\u0438\u0431\u0440\u0443\u0435\u0442\u0441\u044f \u0432\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0435\u0439 \u043c\u043e\u0434\u0435\u043b\u044c\u044e \u0441\u0442\u0430\u0432\u043e\u043a, \u043d\u043e\u0440\u043c \u0438 \u043e\u0431\u044a\u0435\u043c\u043e\u0432."}</span>
+        <strong>Базовые единичные расценки</strong>
+        <span>
+          Осн. элемент: {rub(rates.mountPrimary)} монтаж / {rub(rates.pnrPrimary)} ПНР; контроллер: {rub(rates.controllerMount)};
+          активный элемент ПНР: {rub(rates.pnrActiveElement)}; кабель: {rub(rates.cablePerMeter)}/м; КНС: {rub(rates.knsPerMeter)}/м;
+          интеграция: {rub(rates.integrationPoint)}/точку.
+        </span>
       </span>
 
       <span className="work-cost-popover__section">
-        <strong>{"\u0411\u0430\u0437\u043e\u0432\u044b\u0435 \u0435\u0434\u0438\u043d\u0438\u0447\u043d\u044b\u0435 \u0440\u0430\u0441\u0446\u0435\u043d\u043a\u0438 \u0434\u043b\u044f \u044d\u0442\u043e\u0439 \u0441\u0438\u0441\u0442\u0435\u043c\u044b"}</strong>
-        <span>{`\u041c\u043e\u043d\u0442\u0430\u0436 \u043e\u0441\u043d\u043e\u0432\u043d\u043e\u0433\u043e \u044d\u043b\u0435\u043c\u0435\u043d\u0442\u0430: ${rub(rates.mountPrimary)} / \u0448\u0442; \u041f\u041d\u0420 \u043e\u0441\u043d\u043e\u0432\u043d\u043e\u0433\u043e \u044d\u043b\u0435\u043c\u0435\u043d\u0442\u0430: ${rub(rates.pnrPrimary)} / \u0448\u0442.`}</span>
-        <span>{`\u041c\u043e\u043d\u0442\u0430\u0436 \u043a\u043e\u043d\u0442\u0440\u043e\u043b\u043b\u0435\u0440\u0430: ${rub(rates.controllerMount)} / \u0448\u0442; \u041f\u041d\u0420 \u0430\u043a\u0442\u0438\u0432\u043d\u043e\u0433\u043e \u044d\u043b\u0435\u043c\u0435\u043d\u0442\u0430: ${rub(rates.pnrActiveElement)} / \u0448\u0442.`}</span>
-        <span>{`\u041a\u0430\u0431\u0435\u043b\u044c\u043d\u044b\u0435 \u043b\u0438\u043d\u0438\u0438: ${rub(rates.cablePerMeter)} / \u043c; \u041a\u041d\u0421: ${rub(rates.knsPerMeter)} / \u043c; \u0442\u043e\u0447\u043a\u0430 \u0438\u043d\u0442\u0435\u0433\u0440\u0430\u0446\u0438\u0438: ${rub(rates.integrationPoint)} / \u0442\u043e\u0447\u043a\u0443.`}</span>
+        <strong>Объемы</strong>
+        <span>
+          {num(breakdown.primaryUnits, 0)} осн. элементов, {num(breakdown.controllerUnits, 0)} контроллеров, {num(breakdown.activeElements, 0)}
+          {" "}активных элементов, {num(breakdown.integrationPoints, 0)} точек интеграции, {num(breakdown.cableLengthM, 0)} м кабеля,
+          {` ${num(breakdown.knsLengthM, 0)} м КНС.`}
+        </span>
       </span>
 
       <span className="work-cost-popover__section">
-        <strong>{"\u041e\u0431\u044a\u0435\u043c\u044b, \u043a\u043e\u0442\u043e\u0440\u044b\u0435 \u0432\u043e\u0448\u043b\u0438 \u0432 \u0440\u0430\u0441\u0447\u0435\u0442"}</strong>
-        <span>{`\u041e\u0441\u043d\u043e\u0432\u043d\u044b\u0435 \u044d\u043b\u0435\u043c\u0435\u043d\u0442\u044b: ${num(breakdown.primaryUnits, 0)}; \u043a\u043e\u043d\u0442\u0440\u043e\u043b\u043b\u0435\u0440\u044b: ${num(breakdown.controllerUnits, 0)}; \u0430\u043a\u0442\u0438\u0432\u043d\u044b\u0435 \u044d\u043b\u0435\u043c\u0435\u043d\u0442\u044b \u041f\u041d\u0420: ${num(breakdown.activeElements, 0)}.`}</span>
-        <span>{`\u0422\u043e\u0447\u043a\u0438 \u0438\u043d\u0442\u0435\u0433\u0440\u0430\u0446\u0438\u0438: ${num(breakdown.integrationPoints, 0)}; \u043a\u0430\u0431\u0435\u043b\u044c: ${num(breakdown.cableLengthM, 1)} \u043c; \u041a\u041d\u0421: ${num(breakdown.knsLengthM, 1)} \u043c; \u0443\u0441\u043b\u043e\u0432\u043d\u044b\u0435 \u0440\u0430\u0431\u043e\u0442\u044b \u043f\u043e \u041a\u041d\u0421: ${num(breakdown.knsWorkUnits, 1)}.`}</span>
-        <span>{`\u041c\u0430\u0440\u043a\u0435\u0440 \u043d\u043e\u0440\u043c\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u044f: \u00ab${markerLabel}\u00bb; \u043a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u043e \u043c\u0430\u0440\u043a\u0435\u0440\u043e\u0432 \u0432 \u0440\u0430\u0441\u0447\u0435\u0442\u0435: ${num(markerUnits, 0)}.`}</span>
-      </span>
-
-      <span className="work-cost-popover__section">
-        <strong>{"\u041f\u043e\u0448\u0430\u0433\u043e\u0432\u0430\u044f \u0444\u043e\u0440\u043c\u0443\u043b\u0430 \u0440\u0430\u0441\u0447\u0435\u0442\u0430"}</strong>
-        <span>{`1) \u0421\u041c\u0420 = ${num(breakdown.primaryUnits, 0)} x ${rub(rates.mountPrimary)} + ${num(breakdown.controllerUnits, 0)} x ${rub(rates.controllerMount)} + ${num(breakdown.cableLengthM, 1)} \u043c x ${rub(rates.cablePerMeter)} = ${rub(breakdown.smrBase)}.`}</span>
-        <span>{`2) \u041f\u041d\u0420 = ${num(breakdown.primaryUnits, 0)} x ${rub(rates.pnrPrimary)} + ${num(breakdown.activeElements, 0)} x ${rub(rates.pnrActiveElement)} = ${rub(breakdown.pnrBase)}.`}</span>
-        <span>{`3) \u0418\u043d\u0442\u0435\u0433\u0440\u0430\u0446\u0438\u044f = ${num(breakdown.integrationPoints, 0)} x ${rub(rates.integrationPoint)} = ${rub(breakdown.integrationBase)}.`}</span>
-        <span>{`4) \u041a\u041d\u0421 = ${num(breakdown.knsLengthM, 1)} \u043c x ${rub(rates.knsPerMeter)} + ${num(breakdown.knsWorkUnits, 1)} x ${rub(rates.knsPerMeter)} x 0.22 = ${rub(breakdown.knsBase)}.`}</span>
-        <span>{`5) \u0420\u0430\u0441\u0447\u0435\u0442\u043d\u0430\u044f \u0431\u0430\u0437\u0430 \u043f\u043e \u0435\u0434\u0438\u043d\u0438\u0447\u043d\u044b\u043c \u0440\u0430\u0441\u0446\u0435\u043d\u043a\u0430\u043c = ${rub(breakdown.computedWorkBase)}.`}</span>
-        <span>{`6) \u0417\u0430\u0449\u0438\u0449\u0435\u043d\u043d\u0430\u044f \u0431\u0430\u0437\u0430 = max(\u043f\u0440\u043e\u0435\u043a\u0442\u043d\u0430\u044f ${rub(breakdown.projectWorkBase)}, floor \u043f\u043e \u0441\u0442\u0430\u0432\u043a\u0430\u043c ${rub(marketFloorBaseByRates)}, floor \u043f\u043e \u043c\u0430\u0440\u043a\u0435\u0440\u0443 ${rub(marketFloorBaseByMarker)}, AI floor ${rub(neuralFloorBase)}) = ${rub(workBase)}.`}</span>
-        <span>{`7) \u041f\u043e\u0441\u043b\u0435 \u0443\u0441\u043b\u043e\u0432\u0438\u0439 \u043c\u043e\u043d\u0442\u0430\u0436\u0430 = ${rub(workBase)} x ${num(breakdown.conditionFactor, 2)} x ${num(breakdown.exploitedFactor, 2)} = ${rub(workAfterConditions)}.`}</span>
-        <span>{`8) \u041d\u0430\u0447\u0438\u0441\u043b\u0435\u043d\u0438\u044f = \u043d\u0430\u043a\u043b\u0430\u0434\u043d\u044b\u0435 ${num(chargePercents.overhead, 0)}% (${rub(charges.overhead)}) + \u043d\u0430\u043b\u043e\u0433\u0438 \u0424\u041e\u0422 ${num(chargePercents.payrollTaxes, 0)}% (${rub(charges.payrollTaxes)}) + \u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442/\u0438\u0437\u043d\u043e\u0441 ${num(chargePercents.utilization, 0)}% (${rub(charges.utilization)}) + \u0421\u0418\u0417 ${num(chargePercents.ppe, 0)}% (${rub(charges.ppe)}) + \u0430\u0434\u043c\u0438\u043d ${num(chargePercents.admin, 0)}% (${rub(charges.admin)}) = ${rub(chargesTotal)}.`}</span>
-        <span>{`9) \u0414\u043e \u0440\u0435\u0433\u0438\u043e\u043d\u0430 = ${rub(workAfterConditions)} + ${rub(chargesTotal)} = ${rub(laborDetails.workTotalBeforeRegion || 0)}; \u043f\u043e\u0441\u043b\u0435 \u0440\u0435\u0433\u0438\u043e\u043d\u0430 = ${rub(laborDetails.workTotalBeforeRegion || 0)} x ${num(breakdown.regionalFactor, 2)} = ${rub(result?.workTotal || 0)}.`}</span>
-      </span>
-
-      <span className="work-cost-popover__section">
-        <strong>{"\u0417\u0430\u0449\u0438\u0442\u0430 \u043e\u0442 \u043d\u0435\u0434\u043e\u043e\u0446\u0435\u043d\u043a\u0438"}</strong>
-        <span>{`\u041c\u0438\u043d\u0438\u043c\u0430\u043b\u044c\u043d\u0430\u044f \u0431\u0430\u0437\u0430 \u043f\u043e \u0441\u0442\u0430\u0432\u043a\u0430\u043c = ${rub(breakdown.computedWorkBase)} x ${num(marketGuard.minBaseFactor, 2)} = ${rub(marketFloorBaseByRates)}.`}</span>
-        <span>{`\u041c\u0438\u043d\u0438\u043c\u0430\u043b\u044c\u043d\u044b\u0439 \u0440\u044b\u043d\u043e\u0447\u043d\u044b\u0439 \u0438\u0442\u043e\u0433 \u043f\u043e \u043c\u0430\u0440\u043a\u0435\u0440\u0443 = ${rub(marketGuard.minFinalPerMarker || 0)} x ${num(markerUnits, 0)} \u043c\u0430\u0440\u043a\u0435\u0440\u043e\u0432 = ${rub(marketGuard.marketFloorTotal || 0)} \u043f\u043e\u0441\u043b\u0435 \u0443\u0441\u043b\u043e\u0432\u0438\u0439 \u0438 \u0440\u0435\u0433\u0438\u043e\u043d\u0430.`}</span>
-        <span>{`AI-\u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u0440\u0438\u0441\u043a\u0430 \u043d\u0435\u0434\u043e\u043e\u0446\u0435\u043d\u043a\u0438 = ${num(toNumber(neuralCheck.underestimationRisk, 0) * 100, 0)}%; \u0443\u0441\u0438\u043b\u0435\u043d\u0438\u0435 \u0431\u0430\u0437\u044b = x${num(neuralCheck.neuralUpliftMultiplier || 1, 2)}; AI floor = ${rub(neuralFloorBase)}.`}</span>
-        <span>{"\u0412 \u0438\u0442\u043e\u0433 \u0431\u0435\u0440\u0435\u0442\u0441\u044f \u043d\u0435 \u043c\u0438\u043d\u0438\u043c\u0443\u043c, \u0430 \u043c\u0430\u043a\u0441\u0438\u043c\u0443\u043c \u0438\u0437 \u0432\u0441\u0435\u0445 \u0437\u0430\u0449\u0438\u0442\u043d\u044b\u0445 \u043f\u043e\u0440\u043e\u0433\u043e\u0432, \u0447\u0442\u043e\u0431\u044b \u0441\u043c\u0435\u0442\u0430 \u043d\u0435 \u043f\u0440\u043e\u0432\u0430\u043b\u0438\u0432\u0430\u043b\u0430\u0441\u044c \u043d\u0438\u0436\u0435 \u0440\u0430\u0431\u043e\u0447\u0435\u0433\u043e \u043c\u0438\u043d\u0438\u043c\u0443\u043c\u0430."}</span>
+        <strong>Формула</strong>
+        <span>
+          База: {rub(result?.workBase || breakdown.computedWorkBase)} = СМР {rub(breakdown.smrBase)} + ПНР {rub(breakdown.pnrBase)} +
+          интеграция {rub(breakdown.integrationBase)} + КНС {rub(breakdown.knsBase)}.
+        </span>
+        <span>
+          После условий: {rub(workAfterConditions)} = база {formatMultiplier(breakdown.conditionFactor)} x эксплуатируемое здание{" "}
+          {formatMultiplier(breakdown.exploitedFactor)}.
+        </span>
+        <span>
+          Начисления: {rub(chargesTotal)}; до региона {rub(laborDetails.workTotalBeforeRegion || 0)}; регион {formatMultiplier(breakdown.regionalFactor)}.
+        </span>
+        <span>
+          Рыночный пол: {rub(marketGuard.marketFloorTotal || 0)}; AI uplift {formatMultiplier(neuralCheck.neuralUpliftMultiplier || 1)}; риск
+          недооценки {num(toNumber(neuralCheck.underestimationRisk, 0) * 100, 0)}%.
+        </span>
       </span>
 
       <span className="work-cost-popover__section work-cost-popover__section--accent">
-        <strong>{"\u0418\u0442\u043e\u0433 \u0434\u043b\u044f \u0444\u0438\u043d\u0441\u043b\u0443\u0436\u0431\u044b"}</strong>
-        <span>{`\u0418\u0442\u043e\u0433\u043e\u0432\u0430\u044f \u0441\u0442\u043e\u0438\u043c\u043e\u0441\u0442\u044c \u0440\u0430\u0431\u043e\u0442 (\u0421\u041c\u0420+\u041f\u041d\u0420) = ${rub(result?.workTotal || 0)}.`}</span>
-        <span>{`\u042d\u0442\u0430 \u0441\u0443\u043c\u043c\u0430 \u043f\u0440\u043e\u0441\u043b\u0435\u0436\u0438\u0432\u0430\u0435\u0442\u0441\u044f \u043e\u0442 \u043a\u043e\u043d\u043a\u0440\u0435\u0442\u043d\u044b\u0445 \u0441\u0442\u0430\u0432\u043e\u043a, \u043e\u0431\u044a\u0435\u043c\u043e\u0432, \u043d\u0430\u0447\u0438\u0441\u043b\u0435\u043d\u0438\u0439 \u0438 \u043a\u043e\u044d\u0444\u0444\u0438\u0446\u0438\u0435\u043d\u0442\u043e\u0432, \u043f\u043e\u043a\u0430\u0437\u0430\u043d\u043d\u044b\u0445 \u0432\u044b\u0448\u0435.`}</span>
-      </span>
-    </span>
-  );
-}
-
-function renderVendorMetricPopover(kind, result) {
-  const unitPrice = toNumber(result?.equipmentData?.unitPrice, 0);
-  const equipmentCost = toNumber(result?.equipmentCost, 0);
-  const markerLabel = result?.unitWorkMarker?.label || "вЂ”";
-  const costPerUnit = toNumber(result?.unitWorkMarker?.costPerUnit, 0);
-  const selectionKey = result?.equipmentData?.selectionKey || "fallback";
-  const modeLabel = result?.estimateMode === "project_pdf" ? "по PDF-проекту" : "по внутренней модели";
-
-  if (kind === "unitPrice") {
-    return (
-      <span className="pricing-chip-popover work-cost-popover">
-        <span className="work-cost-popover__section">
-          <strong>Что такое «Ед. цена»</strong>
-          <span>Это расчетная стоимость одной базовой единицы оборудования для текущей системы.</span>
-        </span>
-        <span className="work-cost-popover__section">
-          <strong>Как рассчитано сейчас</strong>
-          <span>
-            Значение {rub(unitPrice)} получено из блока оборудования системы: общий бюджет оборудования {rub(equipmentCost)} сведен к
-            базовой единице расчета по текущему профилю вендора, типу системы и найденным рыночным источникам.
-          </span>
-          <span>
-            Ключ выбора: {selectionKey}. Режим расчета: {modeLabel}.
-          </span>
-        </span>
-      </span>
-    );
-  }
-
-  if (kind === "marker") {
-    return (
-      <span className="pricing-chip-popover work-cost-popover">
-        <span className="work-cost-popover__section">
-          <strong>Что такое «Маркер»</strong>
-          <span>
-            Это опорная единица трудозатрат, по которой система нормирует стоимость работ на одну условную единицу текущей системы.
-          </span>
-        </span>
-        <span className="work-cost-popover__section">
-          <strong>Как рассчитано сейчас</strong>
-          <span>
-            Для этой системы выбран маркер «{markerLabel}». Он определяется алгоритмом по типу системы, составу оборудования и режиму
-            расчета, чтобы привести работы к единой сравнимой базе.
-          </span>
-        </span>
-      </span>
-    );
-  }
-
-  return (
-    <span className="pricing-chip-popover work-cost-popover">
-      <span className="work-cost-popover__section">
-        <strong>Что такое «За единицу»</strong>
-        <span>Это стоимость работ в пересчете на один выбранный маркер трудоемкости.</span>
-      </span>
-      <span className="work-cost-popover__section">
-        <strong>Как рассчитано сейчас</strong>
-        <span>
-          Сейчас показатель равен {num(costPerUnit, 0)} и отражает, сколько рублей работ приходится на один маркер «{markerLabel}».
-        </span>
-        <span>
-          Значение формируется из общей стоимости СМР+ПНР, внутренней модели единичных расценок, поправок условий монтажа и проверки
-          рыночным floor.
-        </span>
+        <strong>Итог</strong>
+        <span>Итоговая стоимость работ (СМР+ПНР): {rub(result?.workTotal || 0)}</span>
       </span>
     </span>
   );
@@ -453,15 +146,9 @@ export default function SystemsStep({
   updateSystem,
   systemResults,
   refreshVendorPricing,
-  refreshAllVendorPricing,
-  compareVendorPrices,
-  clearVendorComparison,
   vendorPriceSnapshots,
-  vendorPricingProgressBySystem,
-  vendorComparisonsBySystem,
   canAddMoreSystems,
   importApsProjectPdf,
-  cancelApsProjectPdfImport,
   clearApsProjectPdf,
   updateApsProjectItem,
   addApsProjectItem,
@@ -471,25 +158,13 @@ export default function SystemsStep({
   technicalRecommendations,
   updateTechnicalSpecOverride,
   exportSystemSpecification,
-  exportAllSystemsSpecification,
+  demoMode = false,
 }) {
   const usedTypeMap = new Map(systems.map((item) => [item.id, item.type]));
   const [manualDraftBySystem, setManualDraftBySystem] = useState({});
   const [showUnitAuditBySystem, setShowUnitAuditBySystem] = useState({});
   const [showRecheckBySystem, setShowRecheckBySystem] = useState({});
-  const [showCoefficientsBySystem, setShowCoefficientsBySystem] = useState({});
   const [refreshingBySystem, setRefreshingBySystem] = useState({});
-  const [comparingBySystem, setComparingBySystem] = useState({});
-  const [refreshingAll, setRefreshingAll] = useState(false);
-  const [exportingAll, setExportingAll] = useState(false);
-  const [statusNow, setStatusNow] = useState(Date.now());
-
-  useEffect(() => {
-    const hasLoading = Object.values(apsImportStatuses || {}).some((status) => status?.state === "loading");
-    if (!hasLoading) return undefined;
-    const timer = setInterval(() => setStatusNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, [apsImportStatuses]);
 
   const getManualDraft = (systemId) => manualDraftBySystem[systemId] || defaultManualDraft();
 
@@ -515,10 +190,6 @@ export default function SystemsStep({
     setShowRecheckBySystem((prev) => ({ ...prev, [systemId]: !prev[systemId] }));
   };
 
-  const toggleCoefficients = (systemId) => {
-    setShowCoefficientsBySystem((prev) => ({ ...prev, [systemId]: !prev[systemId] }));
-  };
-
   const handleRefresh = async (system) => {
     if (!system?.id || refreshingBySystem[system.id]) return;
     setRefreshingBySystem((prev) => ({ ...prev, [system.id]: true }));
@@ -529,54 +200,17 @@ export default function SystemsStep({
     }
   };
 
-  const handleCompare = async (system) => {
-    if (!system?.id || comparingBySystem[system.id]) return;
-    setComparingBySystem((prev) => ({ ...prev, [system.id]: true }));
-    try {
-      await compareVendorPrices?.(system.id);
-    } finally {
-      setComparingBySystem((prev) => ({ ...prev, [system.id]: false }));
-    }
-  };
-
-  const handleRefreshAll = async () => {
-    if (refreshingAll) return;
-    setRefreshingAll(true);
-    try {
-      await refreshAllVendorPricing?.();
-    } finally {
-      setRefreshingAll(false);
-    }
-  };
-
-  const handleExportAll = async () => {
-    if (exportingAll) return;
-    setExportingAll(true);
-    try {
-      await exportAllSystemsSpecification?.();
-    } finally {
-      setExportingAll(false);
-    }
-  };
-
-  const content = (
+  return (
     <section className="panel">
       <div className="panel-header">
         <div>
           <h2>Системы</h2>
           <p>На одном объекте может быть только одна система каждого вида.</p>
+          {demoMode ? <small className="hint-inline demo-inline-note">В демо можно оценить готовый набор систем и пересчёт по параметрам объекта. PDF, экспорт, обновление цен и изменение состава систем отключены.</small> : null}
         </div>
-        <div className="action-cell" style={{ justifyContent: "flex-end", flexWrap: "wrap", gap: 10 }}>
-          <button className="ghost-btn" onClick={handleRefreshAll} type="button" disabled={refreshingAll || !systems.length}>
-            <RefreshCcw size={16} /> {refreshingAll ? "Обновляем цены..." : "Обновить цены"}
-          </button>
-          <button className="ghost-btn" onClick={handleExportAll} type="button" disabled={exportingAll || !systems.length}>
-            <Download size={16} /> {exportingAll ? "Готовим файл..." : "Выгрузить спецификацию"}
-          </button>
-          <button className="primary-btn" onClick={addSystem} type="button" disabled={!canAddMoreSystems}>
-            <Plus size={16} /> + Система
-          </button>
-        </div>
+        <button className="primary-btn" onClick={addSystem} type="button" disabled={demoMode || !canAddMoreSystems}>
+          <Plus size={16} /> + Система
+        </button>
       </div>
 
       <div className="stack">
@@ -585,55 +219,43 @@ export default function SystemsStep({
           const Icon = typeMeta?.icon || Shield;
           const vendorList = VENDORS[system.type] || ["Базовый"];
           const selectedVendor = getVendorByName(system.type, system.vendor);
-          const apsSnapshot = apsProjectSnapshots?.[system.id];
+          const snapshot = vendorPriceSnapshots?.[system.id];
           const result = systemResults[index];
           const keyEquipment = result?.equipmentData?.keyEquipment || [];
+          const apsSnapshot = apsProjectSnapshots?.[system.id];
           const apsStatus = apsImportStatuses?.[system.id];
           const technicalRecommendation = (technicalRecommendations || []).find((item) => item.systemId === system.id);
           const projectBasedMode = Boolean(apsSnapshot?.active || result?.projectInPlace);
-          const snapshot = projectBasedMode ? apsSnapshot?.priceSnapshot || vendorPriceSnapshots?.[system.id] : vendorPriceSnapshots?.[system.id];
           const unitAuditRows = (apsSnapshot?.items || []).filter((item) => (item?.unitAudit?.status || "unknown") !== "match");
           const manufacturerSource = getManufacturerSource(system.type, system.vendor);
-            const manufacturerHosts = getManufacturerHosts(manufacturerSource);
-            const manufacturerHost = manufacturerHosts[0] || "";
-            const isRefreshing = Boolean(refreshingBySystem[system.id]);
-            const isComparing = Boolean(comparingBySystem[system.id]);
-            const isApsImportLoading = apsStatus?.state === "loading";
-            const displaySnapshot = isApsImportLoading && !projectBasedMode ? null : snapshot;
-            const importElapsedSeconds =
-              apsStatus?.startedAt && isApsImportLoading
-                ? Math.max(Math.floor((statusNow - new Date(apsStatus.startedAt).getTime()) / 1000), 0)
-                : 0;
+          const manufacturerWebsite = manufacturerSource?.website || "";
+          const manufacturerHost = toHost(manufacturerWebsite);
+          const isRefreshing = Boolean(refreshingBySystem[system.id]);
           const showUnitAudit = Boolean(showUnitAuditBySystem[system.id]);
           const showRecheck = Boolean(showRecheckBySystem[system.id]);
-          const showCoefficients = Boolean(showCoefficientsBySystem[system.id]);
-          const comparison = vendorComparisonsBySystem?.[system.id];
-          const pricingProgress = vendorPricingProgressBySystem?.[system.id];
 
-          const marketMetrics = summarizePriceSnapshot(displaySnapshot);
-          const pricedSourceCount = marketMetrics.pricedSourceCount;
-          const checkedSourceCount = marketMetrics.checkedSourceCount;
-          const checkedSourceHosts = marketMetrics.checkedSourceHosts;
-          const recheckRequiredCount = marketMetrics.recheckRequiredCount;
-          const avgConfidence = marketMetrics.confidencePercent;
+          const pricedSourceCount =
+            snapshot?.entries
+              ?.filter((item) => (item.sourceCount || 0) > 0)
+              .reduce((sum, item) => sum + (item.sourceCount || 0), 0) || 0;
+          const checkedSourceCount =
+            snapshot?.entries?.reduce((sum, item) => sum + (item.checkedSources || item.sourceUrls?.length || 0), 0) || 0;
+          const checkedSourceHosts = [...new Set((snapshot?.entries || []).flatMap((item) => item.checkedSourceHosts || []))].slice(0, 10);
+          const recheckRequiredCount = (snapshot?.entries || []).filter((item) => item.recheckRequired).length;
+          const avgConfidence = snapshot?.entries?.length
+            ? snapshot.entries.reduce((sum, item) => sum + Number(item.priceConfidence || 0), 0) / snapshot.entries.length
+            : 0;
           const strategy =
-            displaySnapshot?.entries && displaySnapshot.entries.length
-              ? displaySnapshot.entries.map((item) => item.selectionStrategy).filter(Boolean).slice(0, 1)[0] || "average_all_sources"
+            snapshot?.entries && snapshot.entries.length
+              ? snapshot.entries.map((item) => item.selectionStrategy).filter(Boolean).slice(0, 1)[0] || "average_all_sources"
               : "average_all_sources";
-          const manufacturerChecked = manufacturerHosts.length ? manufacturerHosts.some((host) => checkedSourceHosts.includes(host)) : false;
-          const manufacturerMatchedUrls = manufacturerHosts.length
-            ? [
-                ...new Set(
-                  (displaySnapshot?.entries || [])
-                    .flatMap((item) => item.matchedSources || item.usedSources || [])
-                    .filter((url) => manufacturerHosts.includes(toSourceHost(url)))
-                ),
-              ]
+          const manufacturerChecked = manufacturerHost ? checkedSourceHosts.includes(manufacturerHost) : false;
+          const manufacturerUsedUrls = manufacturerHost
+            ? [...new Set((snapshot?.entries || []).flatMap((item) => item.usedSources || []).filter((url) => toHost(url) === manufacturerHost))]
             : [];
-          const manufacturerSuccess = manufacturerMatchedUrls.length > 0;
-          const recheckRows = (displaySnapshot?.entries || []).filter((item) => item.recheckRequired);
-          const detectedVendor = apsSnapshot?.detectedVendor || apsSnapshot?.vendorName || system.vendor;
-          const vendorLockedByProject = Boolean(projectBasedMode && detectedVendor);
+          const manufacturerSuccess = manufacturerUsedUrls.length > 0;
+          const recheckRows = (snapshot?.entries || []).filter((item) => item.recheckRequired);
+          const detectedVendor = apsSnapshot?.detectedVendor || system.vendor;
 
           return (
             <div className={`system-card ${projectBasedMode ? "project-based-mode" : ""}`} key={system.id}>
@@ -670,17 +292,10 @@ export default function SystemsStep({
 
                     <div className="input-card compact">
                       <label>Вендор</label>
-                      {vendorLockedByProject ? (
-                        <>
-                          <input type="text" value={detectedVendor} readOnly disabled title="Вендор определен автоматически по спецификации из проекта." />
-                          <small className="hint-inline">Определен автоматически по спецификации проекта</small>
-                        </>
-                      ) : null}
                       <select
                         value={system.vendor}
                         onChange={(event) => updateSystem(system.id, "vendor", event.target.value)}
                         disabled={projectBasedMode}
-                        style={vendorLockedByProject ? { display: "none" } : undefined}
                         title="Вендор влияет на ценовой профиль, коэффициенты и итог системы. Базовый вендор применяйте, если бренд еще не выбран и нужна нейтральная рыночная оценка."
                       >
                         {vendorList.map((vendor) => (
@@ -713,40 +328,18 @@ export default function SystemsStep({
                       />
                     </div>
                   </div>
-                  <div className="comparison-trigger-row">
-                    <div className="input-card compact comparison-trigger-card">
-                        <label>Сравнение цен</label>
-                      <button className="ghost-btn comparison-trigger-btn" type="button" onClick={() => handleCompare(system)} disabled={isComparing}>
-                        <BarChart3 size={16} />
-                        {isComparing ? "Собираем цены..." : "Сравнить 3 вендора"}
-                      </button>
-                      <small className="hint-inline">Сравниваются текущий вендор и две реальные альтернативы без базового профиля.</small>
-                    </div>
-                  </div>
                 </div>
 
                 <div className="vendor-hint vendor-hint-lg">
                   <div className="vendor-hint-top">
                     <p className="vendor-kpi">
-                      <span className="pricing-chip-tooltip">
-                        <span>Ед. цена:</span>
-                        {renderVendorMetricPopover("unitPrice", result)}
-                      </span>{" "}
-                      <strong>{rub(result?.equipmentData?.unitPrice || 0)}</strong>
+                      Ед. цена: <strong>{rub(result?.equipmentData?.unitPrice || 0)}</strong>
                     </p>
                     <p className="vendor-kpi">
-                      <span className="pricing-chip-tooltip">
-                        <span>Маркер:</span>
-                        {renderVendorMetricPopover("marker", result)}
-                      </span>{" "}
-                      <strong>{result?.unitWorkMarker?.label || "вЂ”"}</strong>
+                      Маркер: <strong>{result?.unitWorkMarker?.label || "—"}</strong>
                     </p>
                     <p className="vendor-kpi">
-                      <span className="pricing-chip-tooltip">
-                        <span>За единицу:</span>
-                        {renderVendorMetricPopover("costPerUnit", result)}
-                      </span>{" "}
-                      <strong>{num(result?.unitWorkMarker?.costPerUnit || 0, 0)}</strong>
+                      За единицу: <strong>{num(result?.unitWorkMarker?.costPerUnit || 0, 0)}</strong>
                     </p>
                   </div>
 
@@ -771,82 +364,19 @@ export default function SystemsStep({
                   <div className="vendor-hint-footer">
                     <p>Ключ выбора: {result?.equipmentData?.selectionKey || "fallback"}</p>
                     <p>Режим: {result?.estimateMode === "project_pdf" ? "по PDF-проекту" : "по внутренней модели"}</p>
-                    <button className="ghost-btn" type="button" onClick={() => handleRefresh(system)} disabled={isRefreshing}>
+                    <button className="ghost-btn" type="button" onClick={() => handleRefresh(system)} disabled={demoMode || isRefreshing}>
                       <RefreshCcw size={14} className={isRefreshing ? "spin" : ""} /> {isRefreshing ? "Обновление..." : "Обновить цены"}
                     </button>
                   </div>
                 </div>
               </div>
 
-              {pricingProgress ? renderVendorPricingProgress(pricingProgress) : null}
-              {comparison?.state === "loading" ? renderComparisonProgress(comparison) : null}
-
-              {comparison ? (
-                <div className="subpanel comparison-panel">
-                  <div className="subpanel-header">
-                    <div>
-                      <h3>Сравнение цен по вендорам</h3>
-                      <p>Сравнение учитывает цены оборудования, материалы, работы, проектирование и итог по системе.</p>
-                    </div>
-                  </div>
-
-                  {comparison.state === "loading" ? <p className="hint-inline">{comparison.message}</p> : null}
-                  {comparison.state === "error" ? <p className="warn-inline">{comparison.message}</p> : null}
-
-                  {comparison.state === "success" && comparison.rows?.length ? (
-                    <>
-                      <div className="pricing-source-row comparison-summary-row">
-                        <span className="pricing-source-chip ok">
-                          <strong>Текущий вендор:</strong> {comparison.currentVendor}
-                        </span>
-                        <span className="pricing-source-chip">
-                          <strong>Строк в сравнении:</strong> {comparison.rows.length}
-                        </span>
-                        <span className="pricing-source-chip muted">
-                          <strong>PPTX:</strong> таблица будет включена в выгрузку
-                        </span>
-                        <button className="ghost-btn" type="button" onClick={() => clearVendorComparison(system.id)}>
-                          Скрыть сравнение цен
-                        </button>
-                      </div>
-
-                      <div className="table-wrap compact comparison-table-wrap">
-                        <table>
-                          <thead>
-                            <tr>
-                              <th>Роль</th>
-                              <th>Вендор</th>
-                              <th>Оборудование</th>
-                              <th>Материалы</th>
-                              <th>Итог</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {comparison.rows.map((row) => (
-                              <tr key={`${system.id}-${row.vendor}`}>
-                                <td>{row.role}</td>
-                                <td>{row.vendor}</td>
-                                <td>{rub(row.equipmentCost)}</td>
-                                <td>{rub(row.materialCost)}</td>
-                                <td>
-                                  <strong>{rub(row.total)}</strong>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {displaySnapshot ? (
+              {snapshot ? (
                 <div className="pricing-caption">
                   <div className="pricing-source-row">
                     <span className="pricing-chip-tooltip">
                       <span className="pricing-source-chip">
-                      <strong>Проверено источников:</strong> {checkedSourceCount}
+                        <strong>Проверено источников:</strong> {checkedSourceCount}
                       </span>
                       <span className="pricing-chip-popover">
                         Это число источников, которые система реально опросила при поиске стоимости по текущей системе:
@@ -882,7 +412,7 @@ export default function SystemsStep({
                       <span className="pricing-chip-popover">
                         Это количество позиций, по которым система нашла признаки неточного сопоставления:
                         спорная модель, расхождение единиц измерения, несколько возможных совпадений или низкая
-                        уверенность в распознавании. Такие позиции лучше вручную проверить перед финальным расчётом.
+                        уверенность в распознавании. Такие позиции лучше вручную проверить перед финальным расчетом.
                       </span>
                     </span>
                     <span className="pricing-chip-tooltip">
@@ -900,21 +430,20 @@ export default function SystemsStep({
                         <strong>Уверенность:</strong> {num(avgConfidence * 100, 0)}%
                       </span>
                       <span className="pricing-chip-popover">
-                        Это сводная оценка того, насколько надёжно система распознала позиции и сопоставила их с
+                        Это сводная оценка того, насколько надежно система распознала позиции и сопоставила их с
                         рыночными источниками. Чем выше процент, тем меньше спорных мест в наименованиях, моделях,
                         единицах измерения и найденных ценах.
                       </span>
                     </span>
                   </div>
-                  {snapshot.warning ? <span className="warn-inline"> {formatPricingWarning(snapshot)}</span> : null}
-                  {!snapshot.warning && snapshot.error ? <span className="warn-inline"> Ошибка API: {snapshot.error}</span> : null}
+                  {snapshot.error ? <span className="warn-inline"> Ошибка API: {snapshot.error}</span> : null}
                 </div>
               ) : null}
 
               {recheckRequiredCount ? (
                 <div className="calc-explain">
                   <div className="aps-ops-header">
-                  <h4>Спорные позиции</h4>
+                    <h4>Спорные позиции</h4>
                     <button className="ghost-btn" type="button" onClick={() => toggleRecheckRows(system.id)}>
                       {showRecheck ? <EyeOff size={14} /> : <Eye size={14} />}
                       {showRecheck ? "Скрыть спорные позиции" : "Показать спорные позиции"}
@@ -925,11 +454,11 @@ export default function SystemsStep({
                       <table>
                         <thead>
                           <tr>
-                              <th>Позиция</th>
-                              <th>Наименование</th>
-                              <th>Цена</th>
-                              <th>Уверенность</th>
-                              <th>Причина</th>
+                            <th>Позиция</th>
+                            <th>Наименование</th>
+                            <th>Цена</th>
+                            <th>Уверенность</th>
+                            <th>Причина</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -949,21 +478,17 @@ export default function SystemsStep({
                 </div>
               ) : null}
 
-              {true ? (
+              {system.type === "aps" ? (
                 <div className="calc-explain aps-import-card">
-                  <h4>Импорт проектной спецификации системы (PDF)</h4>
+                  <h4>Импорт проекта АПС (PDF по ГОСТ 21.110-2013)</h4>
                   <p className="hint-inline">
-                    Если PDF-проект загружен, расчёт по этой системе выполняется по спецификации проекта. Внутренние алгоритмы подбора объёмов для этой системы больше не формируют состав оборудования и материалов, а используются только как резервный контур там, где проектных данных нет.
+                    Если проект загружен, расчет АПС выполняется по спецификации проекта. AI-модуль распознает строки, валидирует единицы,
+                    проверяет риск цен и защищает итог от недооценки работ. Если проект не загружен, используется внутренняя расчетная модель.
                   </p>
-                  <p className="hint-inline">Для АПС дополнительно применяется профиль СПДС/ГОСТ 21.110-2013 и AI-уточнение строк. Для остальных систем загруженная PDF-спецификация также получает приоритет над алгоритмическим расчётом.</p>
+                  <p className="hint-inline">Норматив: СПДС, ГОСТ Р 21.101-2020 и ГОСТ 21.110-2013. Итог по СМР+ПНР дополнительно защищается рыночным полом и AI-проверкой.</p>
 
                   <div className="aps-import-actions">
-                    <label
-                      className="ghost-btn file-upload-btn"
-                      htmlFor={isApsImportLoading ? undefined : `aps-pdf-${system.id}`}
-                      style={isApsImportLoading ? { opacity: 0.55, cursor: "not-allowed" } : undefined}
-                      aria-disabled={isApsImportLoading}
-                    >
+                    <label className={`ghost-btn file-upload-btn ${demoMode ? "is-disabled" : ""}`} htmlFor={`aps-pdf-${system.id}`}>
                       <FileUp size={14} /> Загрузить PDF
                     </label>
                     <input
@@ -971,12 +496,9 @@ export default function SystemsStep({
                       className="file-upload-input"
                       type="file"
                       accept=".pdf,application/pdf"
-                      disabled={isApsImportLoading}
+                      disabled={demoMode}
                       onChange={async (event) => {
-                        if (isApsImportLoading) {
-                          event.target.value = "";
-                          return;
-                        }
+                        if (demoMode) return;
                         const file = event.target.files?.[0];
                         if (!file) return;
                         try {
@@ -989,24 +511,14 @@ export default function SystemsStep({
                       }}
                     />
                     {apsSnapshot ? (
-                      <button className="danger-btn" type="button" onClick={() => clearApsProjectPdf(system.id)} disabled={isApsImportLoading}>
+                      <button className="danger-btn" type="button" onClick={() => clearApsProjectPdf(system.id)} disabled={demoMode}>
                         Очистить проект
                       </button>
                     ) : null}
-                    {isApsImportLoading ? (
-                      <button className="ghost-btn" type="button" onClick={() => cancelApsProjectPdfImport(system.id)}>
-                        Отменить обработку
-                      </button>
-                    ) : null}
                   </div>
+                  {demoMode ? <small className="hint-inline demo-inline-note">PDF-импорт доступен в полной версии.</small> : null}
 
-                  {renderApsImportProgress(apsStatus, importElapsedSeconds)}
                   {renderApsImportStatus(apsStatus)}
-                  {apsStatus?.state === "warning" && !apsStatus?.cancelled ? (
-                    <p className="hint-inline">
-                      Обработка завершена в резервном режиме: PDF распознан, но часть или все цены подставлены из fallback-логики.
-                    </p>
-                  ) : null}
                   {apsSnapshot?.gostStandard ? <p className="hint-inline">Стандарт PDF: {apsSnapshot.gostStandard}</p> : null}
 
                   {apsSnapshot ? (
@@ -1047,10 +559,10 @@ export default function SystemsStep({
                       </div>
 
                       <div className="calc-explain">
-                        <h4>РџРѕР»РЅС‹Р№ РїРµСЂРµС‡РµРЅСЊ СЂР°СЃРїРѕР·РЅР°РЅРЅРѕРіРѕ РѕР±РѕСЂСѓРґРѕРІР°РЅРёСЏ Рё РјР°С‚РµСЂРёР°Р»РѕРІ РёР· СЃРїРµС†РёС„РёРєР°С†РёРё</h4>
+                        <h4>Полный перечень распознанного оборудования и материалов из спецификации</h4>
                         <p className="hint-inline">
-                          Р’ С‚Р°Р±Р»РёС†Рµ РЅРёР¶Рµ РІС‹РІРѕРґСЏС‚СЃСЏ РІСЃРµ РїРѕР·РёС†РёРё, РєРѕС‚РѕСЂС‹Рµ AI-РјРѕРґСѓР»СЊ СЂР°СЃРїРѕР·РЅР°Р» РїРѕ Р·Р°РіСЂСѓР¶РµРЅРЅРѕР№ СЃРїРµС†РёС„РёРєР°С†РёРё, РІРєР»СЋС‡Р°СЏ
-                          РѕР±РѕСЂСѓРґРѕРІР°РЅРёРµ, РјР°С‚РµСЂРёР°Р»С‹, РєР°Р±РµР»СЊРЅС‹Рµ РїРѕР·РёС†РёРё Рё РІСЂСѓС‡РЅСѓСЋ РґРѕР±Р°РІР»РµРЅРЅС‹Рµ СЃС‚СЂРѕРєРё.
+                          В таблице ниже выводятся все позиции, которые AI-модуль распознал по загруженной спецификации, включая
+                          оборудование, материалы, кабельные позиции и вручную добавленные строки.
                         </p>
                       </div>
 
@@ -1058,13 +570,13 @@ export default function SystemsStep({
                         <table>
                           <thead>
                             <tr>
-                              <th>РќР°РёРјРµРЅРѕРІР°РЅРёРµ</th>
-                              <th>РњР°СЂРєР°/РјРѕРґРµР»СЊ</th>
-                              <th>РљР°С‚РµРіРѕСЂРёСЏ</th>
-                              <th>РљРѕР»-РІРѕ</th>
-                              <th>Р¦РµРЅР°, в‚Ѕ</th>
-                              <th>Р•Рґ. РїСЂРѕРµРєС‚/РїРѕСЃС‚Р°РІС‰РёРє</th>
-                              <th>РЎСѓРјРјР°</th>
+                              <th>Наименование</th>
+                              <th>Марка/модель</th>
+                              <th>Категория</th>
+                              <th>Кол-во</th>
+                              <th>Цена, ₽</th>
+                              <th>Ед. проект/поставщик</th>
+                              <th>Сумма</th>
                               <th />
                             </tr>
                           </thead>
@@ -1074,10 +586,10 @@ export default function SystemsStep({
                                 <td>
                                   <div className="aps-item-title">
                                     <span>{item.name}</span>
-                                    {item.position ? <small>РџСѓРЅРєС‚ СЃРїРµС†РёС„РёРєР°С†РёРё {item.position}</small> : null}
+                                    {item.position ? <small>Пункт спецификации {item.position}</small> : null}
                                   </div>
                                 </td>
-                                <td>{item.model || item.brand || "вЂ”"}</td>
+                                <td>{item.model || item.brand || "—"}</td>
                                 <td>{item.category}</td>
                                 <td>
                                   <div className="table-edit-cell">
@@ -1104,7 +616,7 @@ export default function SystemsStep({
                                 </td>
                                 <td>
                                   <span className={`unit-audit-badge ${item?.unitAudit?.status || "unknown"}`}>
-                                    {item?.unitAudit?.message || "РЅРµС‚ РґР°РЅРЅС‹С…"}
+                                    {item?.unitAudit?.message || "нет данных"}
                                   </span>
                                 </td>
                                 <td>{rub(item.total)}</td>
@@ -1113,9 +625,9 @@ export default function SystemsStep({
                                     className="table-action-btn"
                                     type="button"
                                     onClick={() => removeApsProjectItemById(system.id, item.id)}
-                                    title="РЈРґР°Р»РёС‚СЊ РїРѕР·РёС†РёСЋ"
+                                    title="Удалить позицию"
                                   >
-                                    РЈРґР°Р»РёС‚СЊ
+                                    Удалить
                                   </button>
                                 </td>
                               </tr>
@@ -1125,38 +637,38 @@ export default function SystemsStep({
                       </div>
 
                       <div className="calc-explain">
-                        <h4>Р”РѕР±Р°РІРёС‚СЊ РїРѕР·РёС†РёСЋ РІСЂСѓС‡РЅСѓСЋ</h4>
+                        <h4>Добавить позицию вручную</h4>
                         <div className="manual-item-grid">
                           <div className="input-card">
-                            <label>РўРёРї</label>
+                            <label>Тип</label>
                             <select
                               value={getManualDraft(system.id).kind}
                               onChange={(event) => updateManualDraft(system.id, "kind", event.target.value)}
                             >
-                              <option value="equipment">РћР±РѕСЂСѓРґРѕРІР°РЅРёРµ</option>
-                              <option value="material">РњР°С‚РµСЂРёР°Р»</option>
+                              <option value="equipment">Оборудование</option>
+                              <option value="material">Материал</option>
                             </select>
                           </div>
                           <div className="input-card">
-                            <label>РќР°РёРјРµРЅРѕРІР°РЅРёРµ</label>
+                            <label>Наименование</label>
                             <input
                               type="text"
                               value={getManualDraft(system.id).name}
                               onChange={(event) => updateManualDraft(system.id, "name", event.target.value)}
-                              placeholder="Р’РІРµРґРёС‚Рµ РїРѕР·РёС†РёСЋ"
+                              placeholder="Введите позицию"
                             />
                           </div>
                           <div className="input-card">
-                            <label>РњР°СЂРєР°/РјРѕРґРµР»СЊ</label>
+                            <label>Марка/модель</label>
                             <input
                               type="text"
                               value={getManualDraft(system.id).model}
                               onChange={(event) => updateManualDraft(system.id, "model", event.target.value)}
-                              placeholder="РњРѕРґРµР»СЊ"
+                              placeholder="Модель"
                             />
                           </div>
                           <div className="input-card">
-                            <label>Р•Рґ. РёР·Рј</label>
+                            <label>Ед. изм</label>
                             <select
                               value={getManualDraft(system.id).unit}
                               onChange={(event) => updateManualDraft(system.id, "unit", event.target.value)}
@@ -1169,7 +681,7 @@ export default function SystemsStep({
                             </select>
                           </div>
                           <div className="input-card">
-                            <label>РљРѕР»РёС‡РµСЃС‚РІРѕ</label>
+                            <label>Количество</label>
                             <input
                               type="number"
                               min="0"
@@ -1179,7 +691,7 @@ export default function SystemsStep({
                             />
                           </div>
                           <div className="input-card">
-                            <label>Р¦РµРЅР°, в‚Ѕ</label>
+                            <label>Цена, ₽</label>
                             <input
                               type="number"
                               min="0"
@@ -1199,7 +711,7 @@ export default function SystemsStep({
                                 resetManualDraft(system.id);
                               }}
                             >
-                              Р”РѕР±Р°РІРёС‚СЊ РїРѕР·РёС†РёСЋ
+                              Добавить позицию
                             </button>
                           </div>
                         </div>
@@ -1207,24 +719,24 @@ export default function SystemsStep({
 
                       {apsSnapshot.itemsWithoutPrice?.length ? (
                         <div className="calc-explain">
-                          <h4>РџРѕР·РёС†РёРё Р±РµР· РЅР°Р№РґРµРЅРЅРѕР№ С†РµРЅС‹ РїРѕСЃС‚Р°РІС‰РёРєР°</h4>
+                          <h4>Позиции без найденной цены поставщика</h4>
                           <div className="table-wrap compact">
                             <table>
                               <thead>
                                 <tr>
-                                  <th>РџРѕР·.</th>
-                                  <th>РќР°РёРјРµРЅРѕРІР°РЅРёРµ</th>
-                                  <th>РњР°СЂРєР°/РјРѕРґРµР»СЊ</th>
-                                  <th>РљРѕР»-РІРѕ</th>
-                                  <th>РџСЂРёС‡РёРЅР°</th>
+                                  <th>Поз.</th>
+                                  <th>Наименование</th>
+                                  <th>Марка/модель</th>
+                                  <th>Кол-во</th>
+                                  <th>Причина</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {apsSnapshot.itemsWithoutPrice.map((item) => (
                                   <tr key={`${system.id}-no-price-${item.id}`}>
-                                    <td>{item.position || "вЂ”"}</td>
+                                    <td>{item.position || "—"}</td>
                                     <td>{item.name}</td>
-                                    <td>{item.model || "вЂ”"}</td>
+                                    <td>{item.model || "—"}</td>
                                     <td>
                                       {num(item.qty, 0)} {item.unit}
                                     </td>
@@ -1239,20 +751,20 @@ export default function SystemsStep({
 
                       {apsSnapshot.unrecognizedRows?.length ? (
                         <div className="calc-explain">
-                          <h4>РќРµСЂР°СЃРїРѕР·РЅР°РЅРЅС‹Рµ РїРѕР·РёС†РёРё PDF (С‚СЂРµР±СѓСЋС‚ РїСЂРѕРІРµСЂРєРё)</h4>
+                          <h4>Нераспознанные позиции PDF (требуют проверки)</h4>
                           <div className="table-wrap compact">
                             <table>
                               <thead>
                                 <tr>
-                                  <th>РџРѕР·.</th>
-                                  <th>РЎС‚СЂРѕРєР° РёР· PDF</th>
-                                  <th>РџСЂРёС‡РёРЅР°</th>
+                                  <th>Поз.</th>
+                                  <th>Строка из PDF</th>
+                                  <th>Причина</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {apsSnapshot.unrecognizedRows.map((row) => (
                                   <tr key={`${system.id}-unrecognized-${row.id}`}>
-                                    <td>{row.position || "вЂ”"}</td>
+                                    <td>{row.position || "—"}</td>
                                     <td>{row.rawLine}</td>
                                     <td>{resolveUnrecognizedReason(row.reason)}</td>
                                   </tr>
@@ -1265,29 +777,29 @@ export default function SystemsStep({
 
                       <div className="calc-explain aps-ops-card">
                         <div className="aps-ops-header">
-                          <h4>РўСЂСѓРґРѕРµРјРєРѕСЃС‚СЊ, РїСЂРѕРІРµСЂРєР° РµРґРёРЅРёС†, РєР°Р±РµР»СЊ Рё РєСЂРµРїРµР¶</h4>
+                          <h4>Трудоемкость, проверка единиц, кабель и крепеж</h4>
                           <button className="ghost-btn" type="button" onClick={() => toggleUnitAudit(system.id)}>
                             {showUnitAudit ? <EyeOff size={14} /> : <Eye size={14} />}
-                            {showUnitAudit ? "РЎРєСЂС‹С‚СЊ РїСЂРѕРІРµСЂРєСѓ РµРґРёРЅРёС†" : "РџРѕРєР°Р·Р°С‚СЊ РїСЂРѕРІРµСЂРєСѓ РµРґРёРЅРёС†"}
+                            {showUnitAudit ? "Скрыть проверку единиц" : "Показать проверку единиц"}
                           </button>
                         </div>
 
                         <div className="equipment-principles">
                           <p>
-                            <strong>РўСЂСѓРґРѕРµРјРєРѕСЃС‚СЊ РЎРњР +РџРќР :</strong> {num(apsSnapshot.labor.executionHoursBase, 1)} С‡; Р±СЂРёРіР°РґР°{" "}
-                            {num(apsSnapshot.labor.crewSize, 0)} С‡РµР».; СЃСЂРѕРє {num(apsSnapshot.labor.executionDays, 0)} СЂР°Р±. РґРЅРµР№.
+                            <strong>Трудоемкость СМР+ПНР:</strong> {num(apsSnapshot.labor.executionHoursBase, 1)} ч; бригада{" "}
+                            {num(apsSnapshot.labor.crewSize, 0)} чел.; срок {num(apsSnapshot.labor.executionDays, 0)} раб. дней.
                           </p>
                           <p>
-                            <strong>РўСЂСѓРґРѕРµРјРєРѕСЃС‚СЊ РїСЂРѕРµРєС‚РёСЂРѕРІР°РЅРёСЏ:</strong> {num(apsSnapshot.labor.designHoursBase, 1)} С‡; РіСЂСѓРїРїР°{" "}
-                            {num(apsSnapshot.labor.designTeamSize, 0)} С‡РµР».; СЃСЂРѕРє {num(apsSnapshot.labor.designMonths, 0)} РјРµСЃ.
+                            <strong>Трудоемкость проектирования:</strong> {num(apsSnapshot.labor.designHoursBase, 1)} ч; группа{" "}
+                            {num(apsSnapshot.labor.designTeamSize, 0)} чел.; срок {num(apsSnapshot.labor.designMonths, 0)} мес.
                           </p>
                           <p>
-                            <strong>РџСЂРѕРІРµСЂРєР° РµРґРёРЅРёС†:</strong> СЃРѕРІРїР°Р»Рѕ {num(apsSnapshot.sourceStats.unitMatch, 0)}, С‚СЂРµР±СѓРµС‚СЃСЏ РїСЂРѕРІРµСЂРєР°{" "}
-                            {num(apsSnapshot.sourceStats.unitMismatch, 0)}, Р±РµР· РґР°РЅРЅС‹С… {num(apsSnapshot.sourceStats.unitUnknown, 0)}.
+                            <strong>Проверка единиц:</strong> совпало {num(apsSnapshot.sourceStats.unitMatch, 0)}, требуется проверка{" "}
+                            {num(apsSnapshot.sourceStats.unitMismatch, 0)}, без данных {num(apsSnapshot.sourceStats.unitUnknown, 0)}.
                           </p>
                           <p>
-                            <strong>РљР°Р±РµР»СЊ Рё РєСЂРµРїРµР¶:</strong> РєР°Р±РµР»СЊ {num(apsSnapshot.metrics?.cableLengthM || 0, 1)} Рј, Р»РёРЅРёР№{" "}
-                            {num(apsSnapshot.metrics?.cableLines || 0, 0)}; РєСЂРµРїРµР¶ {num(apsSnapshot.metrics?.fastenerQty || 0, 0)} С€С‚, РїРѕР·РёС†РёР№{" "}
+                            <strong>Кабель и крепеж:</strong> кабель {num(apsSnapshot.metrics?.cableLengthM || 0, 1)} м, линий{" "}
+                            {num(apsSnapshot.metrics?.cableLines || 0, 0)}; крепеж {num(apsSnapshot.metrics?.fastenerQty || 0, 0)} шт, позиций{" "}
                             {num(apsSnapshot.metrics?.fastenerLines || 0, 0)}.
                           </p>
                         </div>
@@ -1297,23 +809,23 @@ export default function SystemsStep({
                             <table>
                               <thead>
                                 <tr>
-                                  <th>РџРѕР·.</th>
-                                  <th>РќР°РёРјРµРЅРѕРІР°РЅРёРµ</th>
-                                  <th>Р•Рґ. РїСЂРѕРµРєС‚Р°</th>
-                                  <th>Р•Рґ. РїРѕСЃС‚Р°РІС‰РёРєР°</th>
-                                  <th>РЎС‚Р°С‚СѓСЃ</th>
+                                  <th>Поз.</th>
+                                  <th>Наименование</th>
+                                  <th>Ед. проекта</th>
+                                  <th>Ед. поставщика</th>
+                                  <th>Статус</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {unitAuditRows.map((item) => (
                                   <tr key={`${system.id}-unit-audit-${item.id}`}>
-                                    <td>{item.position || "вЂ”"}</td>
+                                    <td>{item.position || "—"}</td>
                                     <td>{item.name}</td>
-                                    <td>{item?.unitAudit?.projectUnit || item.unit || "вЂ”"}</td>
-                                    <td>{item?.unitAudit?.supplierUnits?.join(", ") || "РЅРµС‚ РґР°РЅРЅС‹С…"}</td>
+                                    <td>{item?.unitAudit?.projectUnit || item.unit || "—"}</td>
+                                    <td>{item?.unitAudit?.supplierUnits?.join(", ") || "нет данных"}</td>
                                     <td>
                                       <span className={`unit-audit-badge ${item?.unitAudit?.status || "unknown"}`}>
-                                        {item?.unitAudit?.message || "С‚СЂРµР±СѓРµС‚СЃСЏ РїСЂРѕРІРµСЂРєР°"}
+                                        {item?.unitAudit?.message || "требуется проверка"}
                                       </span>
                                     </td>
                                   </tr>
@@ -1343,49 +855,37 @@ export default function SystemsStep({
 
               <div className="system-subgrid">
                 <div className="calc-explain">
-                  <div className="aps-ops-header">
-                    <h4>РљРѕСЌС„С„РёС†РёРµРЅС‚С‹ СЃРёСЃС‚РµРјС‹</h4>
-                    <button className="ghost-btn" type="button" onClick={() => toggleCoefficients(system.id)}>
-                      {showCoefficients ? "РЎРєСЂС‹С‚СЊ РєРѕСЌС„С„РёС†РёРµРЅС‚С‹" : "РџРѕРєР°Р·Р°С‚СЊ РєРѕСЌС„С„РёС†РёРµРЅС‚С‹"}
-                    </button>
-                  </div>
-                  {showCoefficients ? (
-                    <div className="coeff-list">
-                      {(result?.coefficientInsights || []).map((item) => (
-                        <div className="coeff-item" key={`${system.id}-${item.key}`}>
-                          <div className="coeff-head">
-                            <strong>{item.label}</strong>
-                            <span>x{num(item.value, 2)}</span>
-                          </div>
-                          <p>{item.useCase}</p>
-                          <small>{item.recommended}</small>
+                  <h4>Коэффициенты системы</h4>
+                  <div className="coeff-list">
+                    {(result?.coefficientInsights || []).map((item) => (
+                      <div className="coeff-item" key={`${system.id}-${item.key}`}>
+                        <div className="coeff-head">
+                          <strong>{item.label}</strong>
+                          <span>x{num(item.value, 2)}</span>
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="hint-inline">РљРѕСЌС„С„РёС†РёРµРЅС‚С‹ СЃРєСЂС‹С‚С‹ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ. РќР°Р¶РјРёС‚Рµ РєРЅРѕРїРєСѓ РІС‹С€Рµ, С‡С‚РѕР±С‹ СЂР°СЃРєСЂС‹С‚СЊ СЂР°СЃС‡РµС‚РЅС‹Рµ РїРѕРїСЂР°РІРєРё СЃРёСЃС‚РµРјС‹.</p>
-                  )}
+                        <p>{item.useCase}</p>
+                        <small>{item.recommended}</small>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
-                {!projectBasedMode && keyEquipment.length ? (
                 <div className="calc-explain">
-                  <h4>РљР»СЋС‡РµРІРѕРµ РѕР±РѕСЂСѓРґРѕРІР°РЅРёРµ, РѕРїСЂРµРґРµР»СЏСЋС‰РµРµ С†РµРЅСѓ</h4>
+                  <h4>Ключевое оборудование, определяющее цену</h4>
                   <div className="table-wrap compact">
                     <table>
                       <thead>
                         <tr>
-                          <th>{"\u041d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435"}</th>
-                          <th>{"\u041c\u043e\u0434\u0435\u043b\u044c"}</th>
-                          <th>{"\u041a\u043e\u043b-\u0432\u043e"}</th>
-                          <th>{"\u0426\u0435\u043d\u0430"}</th>
-                          <th>{"\u0421\u0443\u043c\u043c\u0430"}</th>
+                          <th>Наименование</th>
+                          <th>Кол-во</th>
+                          <th>Цена</th>
+                          <th>Сумма</th>
                         </tr>
                       </thead>
                       <tbody>
                         {keyEquipment.map((item) => (
                           <tr key={`${system.id}-key-${item.code}`}>
                             <td>{item.name}</td>
-                            <td>{resolveKeyEquipmentModel(system, item)}</td>
                             <td>{num(item.qty, 0)}</td>
                             <td>{rub(item.unitPrice)}</td>
                             <td>{rub(item.total)}</td>
@@ -1394,7 +894,6 @@ export default function SystemsStep({
                       </tbody>
                     </table>
                   </div>
-                  
                   <div className="equipment-principles">
                     {keyEquipment.map((item) => (
                       <p key={`${system.id}-${item.code}-basis`}>
@@ -1402,31 +901,27 @@ export default function SystemsStep({
                       </p>
                     ))}
                     <p>
-                      <strong>РљР°Р±РµР»СЊ:</strong> {num(result?.cable || 0, 1)} Рј; <strong>РљСЂРµРїРµР¶:</strong>{" "}
-                      {num(apsSnapshot?.metrics?.fastenerQty ?? result?.fastenerUnits ?? 0, 0)} С€С‚; <strong>РљРќРЎ:</strong>{" "}
-                      {num(result?.knsLength || result?.trace?.knsLengthM || 0, 1)} Рј.
+                      <strong>Кабель:</strong> {num(result?.cable || 0, 1)} м; <strong>Крепеж:</strong>{" "}
+                      {num(apsSnapshot?.metrics?.fastenerQty ?? result?.fastenerUnits ?? 0, 0)} шт; <strong>КНС:</strong>{" "}
+                      {num(result?.knsLength || result?.trace?.knsLengthM || 0, 1)} м.
                     </p>
                   </div>
                 </div>
-                ) : null}
               </div>
 
               {technicalRecommendation ? (
                 <div className="calc-explain ai-configurator-card">
                   <div className="ai-configurator-card__head">
                     <div>
-                      <h4>AI-РљРѕРЅС„РёРіСѓСЂР°С‚РѕСЂ С‚РµС…РЅРёС‡РµСЃРєРѕРіРѕ СЂРµС€РµРЅРёСЏ</h4>
+                      <h4>AI-Конфигуратор технического решения</h4>
                       <p className="hint-inline">
-                        РЎРїРµС†РёС„РёРєР°С†РёСЏ СЃРѕР±СЂР°РЅР° РїРѕ РґР°РЅРЅС‹Рј РІРєР»Р°РґРєРё "РћР±СЉРµРєС‚", Р·РѕРЅРёСЂРѕРІР°РЅРёСЋ, СЌС‚Р°Р¶РЅРѕСЃС‚Рё, СЃС‚Р°С‚СѓСЃСѓ Р·РґР°РЅРёСЏ, РѕС‚РІРµС‚Р°Рј РѕР±СЃР»РµРґРѕРІР°РЅРёСЏ Рё РїСЂРѕРµРєС‚РЅС‹Рј РґР°РЅРЅС‹Рј.
-                      </p>
-                      <p className="hint-inline">
-                        Р¤РѕС‚Рѕ РєРѕСЂРёРґРѕСЂРѕРІ Рё РѕС‚РІРµС‚С‹ Рѕ Р»РѕС‚РєР°С…, С„Р°Р»СЊС€-РїРѕР»Р°С… Рё Р·Р°РїРѕС‚РѕР»РѕС‡РЅРѕРј РїСЂРѕСЃС‚СЂР°РЅСЃС‚РІРµ СѓС‡РёС‚С‹РІР°СЋС‚СЃСЏ РІ С‚РµС…РЅРёС‡РµСЃРєРѕРј СЂРµС€РµРЅРёРё, РјР°С‚РµСЂРёР°Р»Р°С…, РЎРњР  Рё РёС‚РѕРіРѕРІРѕР№ СЃС‚РѕРёРјРѕСЃС‚Рё СЃРёСЃС‚РµРјС‹.
+                        Спецификация собрана по данным вкладки "Объект", зонированию, этажности, статусу здания, ответам обследования и проектным данным.
                       </p>
                     </div>
                     <div className="ai-configurator-badges">
-                      <span className="pricing-source-chip ok">Р“РѕС‚РѕРІРЅРѕСЃС‚СЊ: {num(technicalRecommendation.readinessScore, 0)}%</span>
+                      <span className="pricing-source-chip ok">Готовность: {num(technicalRecommendation.readinessScore, 0)}%</span>
                       <span className={`pricing-source-chip ${technicalRecommendation.hasWorkingDocs ? "muted" : "warn"}`}>
-                        {technicalRecommendation.hasWorkingDocs ? "Р•СЃС‚СЊ Р Р”" : "Р‘РµР· Р Р”"}
+                        {technicalRecommendation.hasWorkingDocs ? "Есть РД" : "Без РД"}
                       </span>
                     </div>
                   </div>
@@ -1460,77 +955,20 @@ export default function SystemsStep({
                     </div>
                   ) : null}
 
-                  {(() => {
-                    const hasPricesAboveManufacturer = (technicalRecommendation.specRows || []).some((row) =>
-                      buildTechnicalSpecPriceMeta(row, result, manufacturerSource).isAboveManufacturer
-                    );
-                    return hasPricesAboveManufacturer ? (
-                      <p className="spec-price-warning">
-                        Красным шрифтом выделены цены, которые выше, чем на сайте производителя.
-                      </p>
-                    ) : null;
-                  })()}
-
                   <div className="table-wrap compact ai-configurator-table">
                     <table>
                       <thead>
                         <tr>
                           <th>Позиция</th>
-                          <th>Категория</th>
-                          <th>Источник</th>
                           <th>Основание</th>
                           <th>Кол-во</th>
                           <th>Ед. изм</th>
-                          <th>Цена</th>
-                          <th>Сумма</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {(technicalRecommendation.specRows || []).map((row) => {
-                          const modelOptions = buildSpecModelOptions(system, row);
-                          const canEditModel = modelOptions.length > 0 && row.source !== "project_pdf";
-                          return (
+                        {(technicalRecommendation.specRows || []).map((row) => (
                           <tr key={`${system.id}-${row.key}`}>
-                            <td>
-                              <div style={{ display: "grid", gap: 6 }}>
-                                <span>{formatTechnicalSpecPosition(row)}</span>
-                                {canEditModel ? (
-                                  <select
-                                    value={row.model || ""}
-                                    onChange={(event) => {
-                                      const nextOverride = resolveModelPriceOverride(
-                                        system.type,
-                                        system.vendor,
-                                        row.itemCode,
-                                        event.target.value,
-                                        row.model,
-                                        row.unitPrice
-                                      );
-                                      updateTechnicalSpecOverride(system.id, row.key, nextOverride);
-                                    }}
-                                  >
-                                    {modelOptions.map((option) => (
-                                      <option key={`${row.key}-${option.optionKey || option.model}`} value={option.model}>
-                                        {option.model}
-                                      </option>
-                                    ))}
-                                  </select>
-                                ) : null}
-                              </div>
-                            </td>
-                            <td>{row.category === "equipment" ? "РћР±РѕСЂСѓРґРѕРІР°РЅРёРµ" : "РњР°С‚РµСЂРёР°Р»С‹"}</td>
-                            <td>
-                              {(() => {
-                                const sourceMeta = buildTechnicalSpecSourceMeta(row, result, system, manufacturerSource);
-                                return sourceMeta.url ? (
-                                  <a href={sourceMeta.url} target="_blank" rel="noreferrer" className="hint-inline">
-                                    {sourceMeta.label}
-                                  </a>
-                                ) : (
-                                  <span className="hint-inline">{sourceMeta.label}</span>
-                                );
-                              })()}
-                            </td>
+                            <td>{row.name}</td>
                             <td>{row.basis}</td>
                             <td>
                               <input
@@ -1546,25 +984,19 @@ export default function SystemsStep({
                               />
                             </td>
                             <td>{row.unit}</td>
-                            <td className={buildTechnicalSpecPriceMeta(row, result, manufacturerSource).isAboveManufacturer ? "price-over-manufacturer" : ""}>
-                              {rub(row.unitPrice || 0)}
-                            </td>
-                            <td>{rub(row.total || 0)}</td>
                           </tr>
-                          );
-                        })}
+                        ))}
                       </tbody>
                     </table>
                   </div>
-                  
                 </div>
               ) : null}
 
               <div className="action-cell">
-                <button className="ghost-btn" type="button" onClick={() => exportSystemSpecification?.(system.id)}>
+                <button className="ghost-btn" type="button" onClick={() => exportSystemSpecification?.(system.id)} disabled={demoMode}>
                   <Download size={16} /> Excel-спецификация
                 </button>
-                <button className="danger-btn" type="button" onClick={() => removeSystem(system.id)} disabled={systems.length <= 1}>
+                <button className="danger-btn" type="button" onClick={() => removeSystem(system.id)} disabled={demoMode || systems.length <= 1}>
                   <Trash2 size={16} /> Удалить систему
                 </button>
               </div>
@@ -1574,11 +1006,4 @@ export default function SystemsStep({
       </div>
     </section>
   );
-
-  return repairReactTextTree(content);
 }
-
-
-
-
-
