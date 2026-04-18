@@ -204,7 +204,6 @@ export function HomePage() {
               <span>предварительная</span>
               <span>бюджетная оценка</span>
               <span>систем безопасности</span>
-              <span>без Excel-хаоса</span>
             </span>
           </h1>
           <p className="hero__lead">
