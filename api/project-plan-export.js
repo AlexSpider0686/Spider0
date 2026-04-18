@@ -25,12 +25,41 @@ $ErrorActionPreference = 'Stop'
 $xmlPath = '${xmlPath.replace(/'/g, "''")}'
 $mppPath = '${mppPath.replace(/'/g, "''")}'
 $app = $null
+$opened = $false
+
+function Save-MppFile {
+  param(
+    [Parameter(Mandatory = $true)] $Application,
+    [Parameter(Mandatory = $true)] [string] $TargetPath
+  )
+
+  try {
+    $null = $Application.FileSaveAs($TargetPath, $null, $false, $false, $null, $false, $null, $null, $null, 'MSProject.mpp')
+    return
+  } catch {
+    try {
+      $null = $Application.FileSaveAs($TargetPath)
+      return
+    } catch {
+      throw $_
+    }
+  }
+}
+
 try {
   $app = New-Object -ComObject MSProject.Application
   $app.Visible = $false
   $app.DisplayAlerts = 0
-  $null = $app.FileOpen($xmlPath)
-  $null = $app.FileSaveAs($mppPath)
+  try {
+    $opened = [bool]$app.FileOpenEx($xmlPath, $false, 0, $true, $null, $null, $false, $null, $null, 'MSProject.xml', $null, $null, $null, $null, $true, $null, $true)
+  } catch {
+    $opened = [bool]$app.FileOpen($xmlPath)
+  }
+  Start-Sleep -Milliseconds 500
+  $project = $app.ActiveProject
+  if ($project -eq $null -and $app.Projects.Count -gt 0) { $project = $app.Projects.Item(1) }
+  if (-not $opened -and $project -eq $null) { throw 'Microsoft Project did not open the XML plan as an active project.' }
+  Save-MppFile -Application $app -TargetPath $mppPath
   $app.FileCloseAllEx(0)
 } finally {
   if ($app -ne $null) {

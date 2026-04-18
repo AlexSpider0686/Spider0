@@ -360,16 +360,38 @@ namespace ProjectCoreLocalBridgeAgent
                          "$xmlPath = '" + EscapePowerShellLiteral(xmlPath) + "'\n" +
                          "$mppPath = '" + EscapePowerShellLiteral(targetPath) + "'\n" +
                          "$app = $null\n" +
+                         "$opened = $false\n" +
+                         "function Save-MppFile {\n" +
+                         "  param(\n" +
+                         "    [Parameter(Mandatory = $true)] $Application,\n" +
+                         "    [Parameter(Mandatory = $true)] [string] $TargetPath\n" +
+                         "  )\n" +
+                         "  try {\n" +
+                         "    $null = $Application.FileSaveAs($TargetPath, $null, $false, $false, $null, $false, $null, $null, $null, 'MSProject.mpp')\n" +
+                         "    return\n" +
+                         "  } catch {\n" +
+                         "    try {\n" +
+                         "      $null = $Application.FileSaveAs($TargetPath)\n" +
+                         "      return\n" +
+                         "    } catch {\n" +
+                         "      throw $_\n" +
+                         "    }\n" +
+                         "  }\n" +
+                         "}\n" +
                          "try {\n" +
                          "  $app = New-Object -ComObject MSProject.Application\n" +
                          "  $app.Visible = $false\n" +
                          "  $app.DisplayAlerts = 0\n" +
-                         "  $null = $app.FileOpen($xmlPath)\n" +
+                         "  try {\n" +
+                         "    $opened = [bool]$app.FileOpenEx($xmlPath, $false, 0, $true, $null, $null, $false, $null, $null, 'MSProject.xml', $null, $null, $null, $null, $true, $null, $true)\n" +
+                         "  } catch {\n" +
+                         "    $opened = [bool]$app.FileOpen($xmlPath)\n" +
+                         "  }\n" +
                          "  Start-Sleep -Milliseconds 500\n" +
                          "  $project = $app.ActiveProject\n" +
                          "  if ($project -eq $null -and $app.Projects.Count -gt 0) { $project = $app.Projects.Item(1) }\n" +
-                         "  if ($project -eq $null) { throw 'Microsoft Project не открыл XML-план как активный проект.' }\n" +
-                         "  $null = $project.SaveAs($mppPath)\n" +
+                         "  if (-not $opened -and $project -eq $null) { throw 'Microsoft Project не открыл XML-план как активный проект.' }\n" +
+                         "  Save-MppFile -Application $app -TargetPath $mppPath\n" +
                          "  try { $app.FileCloseAllEx(0) | Out-Null } catch {}\n" +
                          "} finally {\n" +
                          "  if ($app -ne $null) {\n" +
