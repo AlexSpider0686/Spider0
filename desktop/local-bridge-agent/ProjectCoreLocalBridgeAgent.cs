@@ -556,10 +556,19 @@ namespace ProjectCoreLocalBridgeAgent
             response.Headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS";
             response.Headers["Access-Control-Allow-Headers"] = "Content-Type";
             response.Headers["Access-Control-Allow-Private-Network"] = "true";
-            response.ContentType = "application/json; charset=utf-8";
             response.StatusCode = statusCode;
 
+            if (statusCode == 204)
+            {
+                response.ContentLength64 = 0;
+                response.Close();
+                return;
+            }
+
+            response.ContentType = "application/json; charset=utf-8";
+
             var bytes = Encoding.UTF8.GetBytes(Json.Serialize(payload));
+            response.ContentLength64 = bytes.Length;
             response.OutputStream.Write(bytes, 0, bytes.Length);
             response.Close();
         }
