@@ -64,11 +64,12 @@ const CP1251_SPECIAL_CHAR_TO_BYTE = new Map([
   [0x0457, 0xbf],
 ]);
 
-const SUSPICIOUS_MOJIBAKE_REGEX =
-  /(?:\u0420[\u0400-\u045f\u2013\u2014\u2018-\u201e\u2020-\u2022\u2030\u2039\u203a\u20ac\u2116\u00a0-\u00bf]|\u0421[\u0400-\u045f\u2013\u2014\u2018-\u201e\u2020-\u2022\u2030\u2039\u203a\u20ac\u2116\u00a0-\u00bf]|вЂ|в„ў)/u;
+const MOJIBAKE_TRAIL_RANGE = "\u0080-\u00bf\u0400-\u045f\u2013\u2014\u2018-\u201e\u2020-\u2022\u2030\u2039\u203a\u20ac\u2116";
+const SUSPICIOUS_MOJIBAKE_REGEX = new RegExp(`(?:[РС][${MOJIBAKE_TRAIL_RANGE}]|В[«»${MOJIBAKE_TRAIL_RANGE}]|РІР‚|РІвЂћСћ)`, "u");
 
 function getWindows1251Byte(codePoint) {
   if (codePoint <= 0x7f) return codePoint;
+  if (codePoint >= 0x80 && codePoint <= 0x9f) return codePoint;
   if (codePoint >= 0x00a0 && codePoint <= 0x00ff) return codePoint;
   if (codePoint >= 0x0410 && codePoint <= 0x044f) return codePoint - 848;
   if (CP1251_SPECIAL_CHAR_TO_BYTE.has(codePoint)) return CP1251_SPECIAL_CHAR_TO_BYTE.get(codePoint);
