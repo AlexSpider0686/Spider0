@@ -14,7 +14,7 @@ namespace ProjectCoreLocalBridgeAgent
 {
     internal static class Program
     {
-        private const string AgentVersion = "1.2.0";
+        private const string AgentVersion = "1.2.1";
         private const int DefaultPort = 32123;
         private const string InstalledExeName = "ProjectCoreLocalBridgeAgent.exe";
         private const string ShortcutName = "ProjectCore Local Bridge.lnk";
