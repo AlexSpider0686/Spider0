@@ -4,6 +4,7 @@ import { calculateSystem } from "../src/lib/estimate.js";
 import { calculateSystemWithBreakdown } from "../src/lib/systemCalculators/index.js";
 import { estimateSystemQuantities } from "../src/lib/system-estimator.js";
 import { aggregateInspectionPhotoResults } from "../src/lib/aiPhotoInspectionStrict.js";
+import { buildAiTechnicalRecommendations } from "../src/lib/aiTechnicalConfigurator.js";
 import { getConcreteModel, getEditableModelOptions, isLifecycleModelAllowed, resolveModelPriceOverride } from "../src/lib/equipment.js";
 import { repairUtf8Cp1251Mojibake } from "../src/lib/textEncoding.js";
 import { DEFAULT_BUDGET, DEFAULT_SYSTEM, DEFAULT_ZONE, VENDORS } from "../src/config/estimateConfig.js";
@@ -407,6 +408,7 @@ test("non-project model catalog does not expose discontinued models", () => {
 });
 
 test("lifecycle replacements resolve to current non-project models", () => {
+  assert.equal(getConcreteModel("aps", "Болид", "panel", 8), "Сириус");
   assert.equal(getConcreteModel("aps", "Рубеж", "panel", 8), "R3-Рубеж-20П");
   assert.equal(getConcreteModel("sots", "Рубеж", "panel", 8), "R3-Рубеж-20П");
 });
@@ -712,11 +714,11 @@ test("management equipment uses vendor-aligned models across all system types", 
     basementFloors: 0,
   };
   const cases = [
-    { systemType: "aps", vendor: "Болид", expectedModelPart: "Orion Pro" },
+    { systemType: "aps", vendor: "Болид", expectedModelPart: "Орион Про" },
     { systemType: "soue", vendor: "Рубеж", expectedModelPart: "FireSec 3" },
     { systemType: "sots", vendor: "Рубеж", expectedModelPart: "R3-Рубеж" },
     { systemType: "sot", vendor: "Hikvision", expectedModelPart: "HikCentral" },
-    { systemType: "ssoi", vendor: "TRASSIR", expectedModelPart: "NeuroStation" },
+    { systemType: "ssoi", vendor: "TRASSIR", expectedModelPart: "TRASSIR" },
     { systemType: "skud", vendor: "Sigur", expectedModelPart: "Sigur" },
   ];
 
@@ -730,23 +732,137 @@ test("management equipment uses vendor-aligned models across all system types", 
       selectedEquipmentParams,
     };
     const result = calculateSystemWithBreakdown(system, zones, DEFAULT_BUDGET, objectData);
-    const managementRow =
+    const managementSoftwareRow =
+      (result?.equipmentData?.details || []).find((item) => item.code === "SRV_SW") ||
+      (result?.equipmentData?.details || []).find((item) => item.code === "ARM_SW");
+    const managementHardwareRow =
       (result?.equipmentData?.details || []).find((item) => item.code === "SRV") ||
-      (scenario.systemType === "skud" ? (result?.equipmentData?.details || []).find((item) => item.code === "ARM") : null);
+      (result?.equipmentData?.details || []).find((item) => item.code === "ARM");
 
     assert.ok(
-      managementRow,
-      `${scenario.systemType}/${scenario.vendor} should include a vendor-aligned management row`
+      managementSoftwareRow,
+      `${scenario.systemType}/${scenario.vendor} should include a vendor-aligned management software row`
     );
     assert.match(
-      String(managementRow.model || ""),
+      String(managementSoftwareRow.model || ""),
       new RegExp(scenario.expectedModelPart.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"),
-      `${scenario.systemType}/${scenario.vendor} should use a vendor-aligned management model`
+      `${scenario.systemType}/${scenario.vendor} should use a vendor-aligned management software model`
     );
-    assert.doesNotMatch(
-      String(managementRow.model || ""),
-      /Dell/i,
-      `${scenario.systemType}/${scenario.vendor} should not fall back to Dell-branded management hardware`
+    assert.ok(
+      managementHardwareRow,
+      `${scenario.systemType}/${scenario.vendor} should include a separate management hardware row`
+    );
+    assert.notEqual(
+      String(managementSoftwareRow.model || "").trim(),
+      String(managementHardwareRow.model || "").trim(),
+      `${scenario.systemType}/${scenario.vendor} should not collapse software and hardware into one management model`
+    );
+  }
+});
+
+test("Bolid APS architecture separates Sirius, loop controllers, and server software from hardware", () => {
+  const zones = [DEFAULT_ZONE(1, "Office", "office", 12000, 5)];
+  const objectData = {
+    regionName: "Москва",
+    regionCoef: 1.2,
+    objectType: "public",
+    buildingStatus: "operational",
+    totalArea: 12000,
+    floors: 5,
+    basementFloors: 0,
+  };
+  const profile = getDefaultEquipmentProfiles("aps");
+  const selectedEquipmentParams = Object.fromEntries(Object.entries(profile || {}).map(([key, value]) => [key, value.default]));
+  const system = {
+    ...DEFAULT_SYSTEM(1, "aps"),
+    vendor: "Болид",
+    baseVendor: "Болид",
+    selectedEquipmentParams,
+  };
+
+  const result = calculateSystemWithBreakdown(system, zones, DEFAULT_BUDGET, objectData);
+  const mainPanelRow = (result?.equipmentData?.details || []).find((item) => item.code === "PANEL");
+  const loopControllerRow = (result?.equipmentData?.details || []).find((item) => item.code === "MOD");
+  const serverSoftwareRow = (result?.equipmentData?.details || []).find((item) => item.code === "SRV_SW");
+  const serverHardwareRow = (result?.equipmentData?.details || []).find((item) => item.code === "SRV");
+
+  assert.ok(mainPanelRow);
+  assert.match(String(mainPanelRow.model || ""), /Сириус/u);
+  assert.ok(loopControllerRow);
+  assert.match(String(loopControllerRow.model || ""), /С2000-КДЛ-С/u);
+  assert.ok(serverSoftwareRow);
+  assert.match(String(serverSoftwareRow.model || ""), /Орион Про/u);
+  assert.ok(serverHardwareRow);
+  assert.match(String(serverHardwareRow.model || ""), /ОПС512/u);
+});
+
+test("technical solution exposes full architecture roles across all six systems", () => {
+  const zones = [DEFAULT_ZONE(1, "Office", "office", 7000, 5)];
+  const objectData = {
+    regionName: "Москва",
+    regionCoef: 1.2,
+    objectType: "public",
+    buildingStatus: "operational",
+    totalArea: 7000,
+    floors: 5,
+    basementFloors: 0,
+  };
+
+  const cases = [
+    { systemType: "aps", vendor: "Болид", requiredCodes: ["DET", "PANEL", "MOD", "PWR"] },
+    { systemType: "soue", vendor: "Рубеж", requiredCodes: ["SPK", "AMP", "CTRL", "CAB"] },
+    { systemType: "sots", vendor: "Аргус-Спектр", requiredCodes: ["SEN", "PANEL", "MOD", "PWR"] },
+    { systemType: "sot", vendor: "Hikvision", requiredCodes: ["CAM", "NVR", "SW"] },
+    { systemType: "skud", vendor: "Parsec", requiredCodes: ["CTRL", "RDR", "LOCK", "CAB"] },
+    { systemType: "ssoi", vendor: "TRASSIR", requiredCodes: ["NVR", "SW", "GW"] },
+  ];
+
+  for (const scenario of cases) {
+    const profile = getDefaultEquipmentProfiles(scenario.systemType);
+    const selectedEquipmentParams = Object.fromEntries(Object.entries(profile || {}).map(([key, value]) => [key, value.default]));
+    const system = {
+      ...DEFAULT_SYSTEM(1, scenario.systemType),
+      vendor: scenario.vendor,
+      baseVendor: scenario.vendor,
+      selectedEquipmentParams,
+    };
+
+    const result = calculateSystemWithBreakdown(system, zones, DEFAULT_BUDGET, objectData);
+    const details = result?.equipmentData?.details || [];
+    const managementSoftwareRow = details.find((item) => item.code === "SRV_SW") || details.find((item) => item.code === "ARM_SW");
+    const managementHardwareRow = details.find((item) => item.code === "SRV") || details.find((item) => item.code === "ARM");
+
+    for (const code of scenario.requiredCodes) {
+      assert.ok(details.find((item) => item.code === code), `${scenario.systemType}/${scenario.vendor} is missing architecture row ${code}`);
+    }
+
+    assert.ok(
+      managementSoftwareRow,
+      `${scenario.systemType}/${scenario.vendor} should expose a dedicated management software row in BOM`
+    );
+    assert.ok(
+      managementHardwareRow,
+      `${scenario.systemType}/${scenario.vendor} should expose dedicated management hardware in BOM`
+    );
+
+    const recommendation = buildAiTechnicalRecommendations({
+      systems: [system],
+      systemResults: [result],
+      objectData,
+      zones,
+      surveyAnswers: {},
+      photoAnalyses: {},
+      apsProjectSnapshots: {},
+      specOverrides: {},
+    })[0];
+
+    assert.ok(
+      (recommendation?.summary || []).some((line) => /Архитектура/u.test(String(line || ""))),
+      `${scenario.systemType}/${scenario.vendor} should describe field architecture in technical solution summary`
+    );
+    assert.ok(
+      (recommendation?.summary || []).some((line) => /Управляющий контур разделён/u.test(String(line || ""))),
+      `${scenario.systemType}/${scenario.vendor} should describe software and hardware separation in technical solution summary`
     );
   }
 });

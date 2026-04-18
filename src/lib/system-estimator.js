@@ -251,7 +251,7 @@ const MANAGEMENT_CAPACITY_PROFILES = {
     operatorControllerCapacity: 22,
     operatorIntegrationCapacity: 18,
     operatorZoneCapacity: 28,
-    maxServers: 2,
+    maxServers: 1,
     maxArms: 2,
   },
   soue: {
@@ -523,7 +523,11 @@ function estimateAps(context) {
     safeCeil((detectors / Math.max(driver.detectorsPerLoop, 1)) * loopReserveFactor, 1),
     safeCeil(zkspsCount / 10, 1)
   );
-  const panels = Math.max(safeCeil(loops / Math.max(toNumber(driver.loopsPerPanel, 1) * 0.82, 1), 1), safeCeil(zkspsCount / 18, 1));
+  const mainPanels = Math.max(
+    objectClassification?.distributedArchitecture ? safeCeil(zkspsCount / 20, 1) : 1,
+    safeCeil(context.floorDistributedZoneCount / 16, 1)
+  );
+  const loopControllers = Math.max(loops - mainPanels, 0);
   const notification = Math.max(
     safeCeil(detectors * toNumber(driver.notificationPerPrimary, 0.15), 1),
     safeCeil(zkspsCount * 0.75, 1)
@@ -534,10 +538,10 @@ function estimateAps(context) {
     systemType: "aps",
     objectClassification,
     primaryUnits: detectors,
-    controllerUnits: panels + powerUnits,
+    controllerUnits: mainPanels + loopControllers + powerUnits,
     integrationPoints,
-    baseServerLoad: Math.max(panels / 2, zkspsCount / 18),
-    operatorLoad: Math.max(zkspsCount / 26, panels / 5),
+    baseServerLoad: Math.max((mainPanels + loopControllers) / 2, zkspsCount / 18),
+    operatorLoad: Math.max(zkspsCount / 26, (mainPanels + loopControllers) / 5),
     distributedZoneLoad: zkspsCount,
     activeSystemTypes: context.activeSystemTypes,
   });
@@ -546,7 +550,7 @@ function estimateAps(context) {
 
   const designHours =
     detectors * driver.designHours.primary +
-    (panels + powerUnits + servers + arms) * driver.designHours.controller +
+    (mainPanels + loopControllers + powerUnits + servers + arms) * driver.designHours.controller +
     integrationPoints * driver.designHours.integrationPoint;
 
   return {
@@ -554,22 +558,25 @@ function estimateAps(context) {
     markerUnits: detectors,
     primaryUnitKey: "detectors",
     primaryUnitLabel: "Извещатель",
-    controllerUnits: panels + powerUnits + servers + arms,
-    activeElements: detectors + notification + panels + powerUnits + servers + arms,
+    controllerUnits: mainPanels + loopControllers + powerUnits + servers + arms,
+    activeElements: detectors + notification + mainPanels + loopControllers + powerUnits + servers + arms,
     integrationPoints,
     designHoursBase: designHours,
     resourceRows: [
       { key: "detector", label: "Пожарные извещатели", qty: detectors, priceShare: 0.46 },
-      { key: "module", label: "ППКП и модули", qty: panels, priceShare: 0.26 },
+      { key: "panel", label: "Главные приборы / ППКП", qty: mainPanels, priceShare: 0.14 },
+      { key: "module", label: "Контроллеры адресных линий / модули", qty: loopControllers, priceShare: 0.12 },
       { key: "notification", label: "Оповещатели и табло", qty: notification, priceShare: 0.16 },
       { key: "power", label: "Питание и АКБ", qty: powerUnits, priceShare: 0.08 },
-      { key: "server", label: "Сервер / АРМ АПС", qty: servers, priceShare: 0.04 },
+      { key: "server", label: "Серверный / диспетчерский контур АПС", qty: servers + arms, priceShare: 0.04 },
     ],
     secondary: {
       zksps: zkspsCount,
       areaDrivenZksps,
       loops,
-      panels,
+      panels: mainPanels,
+      mainPanels,
+      loopControllers,
       notification,
       servers,
       arms,

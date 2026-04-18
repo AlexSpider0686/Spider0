@@ -1,5 +1,6 @@
 import { calculateZoneModelWithoutPlans } from "./evacuationPlanRecognition";
 import { repairUtf8Cp1251Mojibake } from "./textEncoding";
+import { buildArchitectureSummaryLines } from "./systemArchitecture.js";
 
 function num(value, fallback = 0) {
   const parsed = Number(value);
@@ -626,6 +627,12 @@ export function buildAiTechnicalRecommendations({
       (lowCurrentRooms > 0 ? 4 : 0) +
       (routeInfluence.tray > 0 || routeInfluence.ceilingVoid > 0 || routeInfluence.raisedFloor > 0 ? 4 : 0);
 
+    const architectureSummary = buildArchitectureSummaryLines({
+      systemType: system.type,
+      vendor: system.vendor,
+      details: result?.equipmentData?.details || [],
+    });
+
     return {
       systemId: system.id,
       systemType: system.type,
@@ -633,6 +640,7 @@ export function buildAiTechnicalRecommendations({
       readinessScore: Math.min(readinessScoreBase, 98),
       specRows: combinedRows,
       summary: [
+        ...architectureSummary,
         `Площадь и зонирование учтены через расчетные объемы системы: ${Math.round(num(result?.units, markerUnits))} базовых единиц.`,
         `Этажность и вертикальные переходы учтены через дополнительные материалы и узлы: ${Math.max(num(objectData?.floors, 1), 1)} этажей.`,
         system.hasWorkingDocs

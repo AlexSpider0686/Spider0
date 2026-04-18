@@ -1,6 +1,7 @@
 import { toNumber } from "./estimate.js";
 import { resolveVendorEquipment } from "../config/vendorResolver.js";
 import { repairUtf8Cp1251Mojibake } from "./textEncoding.js";
+import { getArchitectureComponent } from "./systemArchitecture.js";
 
 const MARKET_KEY_ALIASES = {
   camera: ["cameras", "camera"],
@@ -414,7 +415,7 @@ const CONCRETE_MODEL_CATALOG = repairCatalogNode({
     },
     "Болид": {
       detector: { "дымовой": "ДИП-34А-03", "тепловой": "С2000-ИП-03", "комбинированный": "С2000-ИПГ" },
-      panel: { 2: "С2000-4", 4: "С2000-КДЛ", 8: "С2000М + С2000-КДЛ" },
+      panel: { 2: "Сириус", 4: "Сириус", 8: "Сириус" },
     },
     "Рубеж": {
       detector: { "дымовой": "ИП 212-64-R3", "тепловой": "ИП 101-29-PR-R3", "комбинированный": "ИП 212/101-64-PR-R3" },
@@ -496,6 +497,37 @@ const MANAGEMENT_MODEL_FALLBACK = {
     default: "iRU Office 515 MT",
   },
 };
+
+const MANAGEMENT_HARDWARE_FALLBACK = {
+  server: {
+    compact: "Совместимый сервер управления, tower",
+    rack: "Совместимый сервер управления, rack",
+    enterprise: "Отказоустойчивый сервер управления",
+    default: "Совместимый сервер управления, rack",
+  },
+  arm: {
+    compact: "Совместимый АРМ оператора",
+    rack: "Совместимый АРМ оператора",
+    enterprise: "Совместимый диспетчерский АРМ",
+    default: "Совместимый АРМ оператора",
+  },
+};
+
+const BOLID_LIFE_SAFETY_SYSTEMS = new Set(["aps", "soue", "sots"]);
+const BOLID_SERVER_STACK_PRICE = 22964 + 266111 + 8857 + 4429;
+const BOLID_SERVER_HARDWARE_PRICE = Math.max(937591 - BOLID_SERVER_STACK_PRICE, 0);
+const BOLID_URM_PRICE = 199175;
+const BOLID_SIRIUS_PRICE = 36160;
+const BOLID_KDL_S_PRICE = 3847;
+const BOLID_ARM_EXTRA_SOFTWARE_PRICE = 8857 + 4429;
+const BOLID_OPERATIONAL_TASK_TIERS = [
+  { limit: 4, execution: 4, price: 17672 },
+  { limit: 10, execution: 10, price: 35487 },
+  { limit: 20, execution: 20, price: 62119 },
+  { limit: 127, execution: 127, price: 106527 },
+  { limit: 512, execution: 512, price: 266111 },
+  { limit: 1024, execution: 1024, price: 399165 },
+];
 
 const MANAGEMENT_MODEL_BY_VENDOR = {
   aps: {
@@ -668,6 +700,24 @@ function pushItem(details, item) {
   });
 }
 
+function hasDetailCode(details, code) {
+  return details.some((item) => item.code === code);
+}
+
+function buildSupplementalArchitectureRow(component, qty, priceMultiplier = 1) {
+  if (!component || qty <= 0) return null;
+  return {
+    code: component.code,
+    name: component.name,
+    model: component.model,
+    qty,
+    unitPrice: Math.max(toNumber(component.unitPrice, 0) * Math.max(toNumber(priceMultiplier, 1), 0.01), 0),
+    total: qty * Math.max(toNumber(component.unitPrice, 0) * Math.max(toNumber(priceMultiplier, 1), 0.01), 0),
+    isKey: Boolean(component.isKey),
+    basis: component.basis || "",
+  };
+}
+
 function minHddTbPerCamera(resolutionMp) {
   const perCameraPerDayTb = resolutionMp >= 8 ? 0.08 : resolutionMp >= 4 ? 0.045 : 0.025;
   return perCameraPerDayTb * 30;
@@ -765,6 +815,210 @@ function resolveManagementModel(systemType, vendor, unitType, modelTier) {
   return unitCatalog[modelTier] || unitCatalog.default || "";
 }
 
+function estimateBolidManagedDeviceCount(quantityContext) {
+  const secondary = quantityContext?.secondary || {};
+  return Math.max(
+    toNumber(secondary.mainPanels, 0) +
+      toNumber(secondary.loopControllers, 0) +
+      toNumber(secondary.controllers, 0) +
+      toNumber(secondary.amplifiers, 0) +
+      toNumber(secondary.powerUnits, 0),
+    toNumber(quantityContext?.controllerUnits, 0),
+    1
+  );
+}
+
+function resolveBolidOperationalTaskTier(quantityContext) {
+  return (
+    BOLID_OPERATIONAL_TASK_TIERS.find((item) => estimateBolidManagedDeviceCount(quantityContext) <= item.limit) ||
+    BOLID_OPERATIONAL_TASK_TIERS[BOLID_OPERATIONAL_TASK_TIERS.length - 1]
+  );
+}
+
+function resolveManagementSoftwareModel(systemType, vendor, unitType, modelTier, managementPlan, quantityContext) {
+  if (vendor === "Болид" && BOLID_LIFE_SAFETY_SYSTEMS.has(systemType)) {
+    if (unitType === "server" && managementPlan?.deploymentMode === "server") {
+      return 'ПО АРМ "Орион Про": Центральный сервер + Оперативная задача + АБД + ГО';
+    }
+    if (unitType === "arm") {
+      const tier = resolveBolidOperationalTaskTier(quantityContext);
+      return `ПО АРМ "Орион Про": Оперативная задача исп.${tier.execution} + АБД + ГО`;
+    }
+  }
+
+  const softwareNameOverrides = {
+    aps: {
+      Рубеж: 'ПО FireSec 3',
+      "Аргус-Спектр": 'ПО АРМ "Стрелец-Интеграл"',
+      Simplex: "ПО Simplex 4100ES",
+      Siemens: "ПО Cerberus PRO",
+    },
+    soue: {
+      Болид: 'ПО АРМ "Орион Про"',
+      Рубеж: "ПО FireSec 3",
+      Roxton: "ПО Roxton",
+    },
+    sots: {
+      Болид: 'ПО АРМ "Орион Про"',
+      Рубеж: "ПО R3-Рубеж",
+      "Аргус-Спектр": 'ПО АРМ "Стрелец-Интеграл"',
+    },
+    sot: {
+      Hikvision: "ПО HikCentral Professional",
+      Dahua: "ПО DSS Professional",
+      TRASSIR: "ПО TRASSIR",
+      Axis: "ПО AXIS Camera Station",
+      Uniview: "ПО EZStation",
+    },
+    ssoi: {
+      TRASSIR: "ПО TRASSIR",
+      "ISS (Интеллект)": "ПО Интеллект X",
+      Macroscop: "ПО Macroscop",
+      AxxonSoft: "ПО Axxon PSIM",
+    },
+    skud: {
+      Sigur: "ПО Sigur",
+      Parsec: "ПО ParsecNET 3",
+      PERCo: "ПО PERCo-Web",
+      Biosmart: "ПО BioSmart Studio",
+      RusGuard: "ПО RusGuard",
+      Bastion: "ПО SPRUT Access",
+    },
+  };
+  const vendorOverride = softwareNameOverrides?.[systemType]?.[vendor];
+  if (vendorOverride) return vendorOverride;
+
+  const model = resolveManagementModel(systemType, vendor, unitType, modelTier);
+  if (!model) return unitType === "server" ? "ПО сервера управления" : "ПО рабочего места оператора";
+  return /^ПО\b/i.test(model) ? model : `ПО ${model}`;
+}
+
+function resolveManagementHardwareModel(systemType, vendor, unitType, modelTier, managementPlan) {
+  if (vendor === "Болид" && BOLID_LIFE_SAFETY_SYSTEMS.has(systemType) && managementPlan?.deploymentMode === "server") {
+    if (unitType === "server") return "Сервер ОПС512 исп.02";
+    if (unitType === "arm") return "УРМ-ОРИОН исп.02";
+  }
+
+  const vendorHardwareOverrides = {
+    sot: {
+      TRASSIR: {
+        server: {
+          compact: "NeuroStation Compact",
+          rack: "NeuroStation 8800R",
+          enterprise: "NeuroStation Cluster",
+          default: "NeuroStation 8800R",
+        },
+      },
+    },
+    ssoi: {
+      TRASSIR: {
+        server: {
+          compact: "NeuroStation Compact",
+          rack: "NeuroStation 8800R",
+          enterprise: "NeuroStation Cluster",
+          default: "NeuroStation 8800R",
+        },
+      },
+    },
+  };
+
+  const vendorCatalog = vendorHardwareOverrides?.[systemType]?.[vendor]?.[unitType];
+  if (vendorCatalog) {
+    return vendorCatalog[modelTier] || vendorCatalog.default || "";
+  }
+
+  const fallbackCatalog = MANAGEMENT_HARDWARE_FALLBACK[unitType];
+  return fallbackCatalog?.[modelTier] || fallbackCatalog?.default || "";
+}
+
+function resolveManagementSoftwarePrice(systemType, vendor, unitType, marketRatios, priceMultiplier, managementPlan, quantityContext) {
+  if (vendor === "Болид" && BOLID_LIFE_SAFETY_SYSTEMS.has(systemType)) {
+    if (unitType === "server" && managementPlan?.deploymentMode === "server") {
+      return BOLID_SERVER_STACK_PRICE;
+    }
+    if (unitType === "arm") {
+      const tier = resolveBolidOperationalTaskTier(quantityContext);
+      return tier.price + BOLID_ARM_EXTRA_SOFTWARE_PRICE;
+    }
+  }
+
+  const bundlePrice = resolveManagementUnitPrice(systemType, vendor, unitType, marketRatios, priceMultiplier);
+  const share = unitType === "server" ? 0.28 : 0.34;
+  return Math.max(Number((bundlePrice * share).toFixed(2)), 0);
+}
+
+function resolveManagementHardwarePrice(
+  systemType,
+  vendor,
+  unitType,
+  marketRatios,
+  priceMultiplier,
+  managementPlan,
+  quantityContext,
+  softwareIncluded = false
+) {
+  if (vendor === "Болид" && BOLID_LIFE_SAFETY_SYSTEMS.has(systemType) && managementPlan?.deploymentMode === "server") {
+    if (unitType === "server") return BOLID_SERVER_HARDWARE_PRICE;
+    if (unitType === "arm") return BOLID_URM_PRICE;
+  }
+
+  const bundlePrice = resolveManagementUnitPrice(systemType, vendor, unitType, marketRatios, priceMultiplier);
+  if (!softwareIncluded) return bundlePrice;
+
+  const softwarePrice = resolveManagementSoftwarePrice(
+    systemType,
+    vendor,
+    unitType,
+    marketRatios,
+    priceMultiplier,
+    managementPlan,
+    quantityContext
+  );
+  const hardwareFloorShare = unitType === "server" ? 0.52 : 0.46;
+  return Math.max(Number((bundlePrice - softwarePrice).toFixed(2)), Number((bundlePrice * hardwareFloorShare).toFixed(2)), 0);
+}
+
+function appendFieldArchitectureRows(details, system, quantityContext, priceMultiplier) {
+  const secondary = quantityContext?.secondary || {};
+  const primaryUnits = Math.max(toNumber(quantityContext?.primaryUnits, 0), 0);
+
+  const appendRow = (role, qty) => {
+    if (qty <= 0) return;
+    const component = getArchitectureComponent(system.type, system.vendor, role);
+    const row = buildSupplementalArchitectureRow(component, qty, priceMultiplier);
+    if (!row || hasDetailCode(details, row.code)) return;
+    pushItem(details, row);
+  };
+
+  if (system.type === "aps") {
+    appendRow("power", Math.max(toNumber(secondary.powerUnits, 0), 0));
+    return;
+  }
+
+  if (system.type === "soue") {
+    appendRow("controller", Math.max(toNumber(secondary.controllers, 0), 0));
+    appendRow("cabinet", Math.max(Math.ceil((toNumber(secondary.controllers, 0) + toNumber(secondary.amplifiers, 0)) / 3), 0));
+    return;
+  }
+
+  if (system.type === "sots") {
+    appendRow("module", Math.max(toNumber(secondary.boundaries, 0), 0));
+    appendRow("power", Math.max(toNumber(secondary.cabinets, 0), 0));
+    return;
+  }
+
+  if (system.type === "skud") {
+    appendRow("reader", Math.max(toNumber(secondary.readers, 0), 0));
+    appendRow("lock", Math.max(toNumber(secondary.turnstiles, 0), primaryUnits, 0));
+    appendRow("cabinet", Math.max(toNumber(secondary.cabinets, 0), 0));
+    return;
+  }
+
+  if (system.type === "ssoi") {
+    appendRow("gateway", Math.max(toNumber(secondary.gateways, 0), 0));
+  }
+}
+
 function appendManagementInfrastructure(details, systemType, vendor, quantityContext, marketRatios, priceMultiplier) {
   const managementPlan = quantityContext?.secondary?.managementPlan;
   if (!managementPlan) return;
@@ -775,32 +1029,109 @@ function appendManagementInfrastructure(details, systemType, vendor, quantityCon
     managementPlan.modelTier === "enterprise" ? 1.28 : managementPlan.modelTier === "rack" ? 1.14 : managementPlan.modelTier === "compact" ? 0.9 : 1;
 
   if (serverQty > 0) {
-    const unitPrice = resolveManagementUnitPrice(systemType, vendor, "server", marketRatios, priceMultiplier * tierMultiplier);
-    const model = resolveManagementModel(systemType, vendor, "server", managementPlan.modelTier);
+    const softwareModel = resolveManagementSoftwareModel(
+      systemType,
+      vendor,
+      "server",
+      managementPlan.modelTier,
+      managementPlan,
+      quantityContext
+    );
+    const softwarePrice = resolveManagementSoftwarePrice(
+      systemType,
+      vendor,
+      "server",
+      marketRatios,
+      priceMultiplier * tierMultiplier,
+      managementPlan,
+      quantityContext
+    );
+    const hardwareModel = resolveManagementHardwareModel(systemType, vendor, "server", managementPlan.modelTier, managementPlan);
+    const hardwarePrice = resolveManagementHardwarePrice(
+      systemType,
+      vendor,
+      "server",
+      marketRatios,
+      priceMultiplier * tierMultiplier,
+      managementPlan,
+      quantityContext,
+      true
+    );
+
+    pushItem(details, {
+      code: "SRV_SW",
+      name: `ПО серверного контура ${systemType.toUpperCase()}`,
+      model: softwareModel,
+      qty: serverQty,
+      unitPrice: softwarePrice,
+      total: serverQty * softwarePrice,
+      isKey: true,
+      basis: `${managementPlan.reason || ""} Отдельно выделено серверное программное обеспечение.`.trim(),
+    });
     pushItem(details, {
       code: "SRV",
       name: `Сервер управления ${systemType.toUpperCase()}`,
-      model,
+      model: hardwareModel,
       qty: serverQty,
-      unitPrice,
-      total: serverQty * unitPrice,
+      unitPrice: hardwarePrice,
+      total: serverQty * hardwarePrice,
       isKey: true,
-      basis: managementPlan.reason || "Выбран выделенный сервер управления по масштабу объекта и нагрузке системы.",
+      basis: `${managementPlan.reason || ""} Серверное оборудование выделено отдельной позицией от ПО.`.trim(),
     });
   }
 
   if (armQty > 0) {
-    const unitPrice = resolveManagementUnitPrice(systemType, vendor, "arm", marketRatios, priceMultiplier);
-    const model = resolveManagementModel(systemType, vendor, "arm", managementPlan.modelTier);
+    const armSoftwareRequired = managementPlan.deploymentMode !== "server";
+    if (armSoftwareRequired) {
+      const softwareModel = resolveManagementSoftwareModel(
+        systemType,
+        vendor,
+        "arm",
+        managementPlan.modelTier,
+        managementPlan,
+        quantityContext
+      );
+      const softwarePrice = resolveManagementSoftwarePrice(
+        systemType,
+        vendor,
+        "arm",
+        marketRatios,
+        priceMultiplier,
+        managementPlan,
+        quantityContext
+      );
+      pushItem(details, {
+        code: "ARM_SW",
+        name: `ПО АРМ оператора ${systemType.toUpperCase()}`,
+        model: softwareModel,
+        qty: armQty,
+        unitPrice: softwarePrice,
+        total: armQty * softwarePrice,
+        isKey: false,
+        basis: "Локальное рабочее место должно учитывать отдельную лицензию операторского ПО.",
+      });
+    }
+
+    const hardwareModel = resolveManagementHardwareModel(systemType, vendor, "arm", managementPlan.modelTier, managementPlan);
+    const hardwarePrice = resolveManagementHardwarePrice(
+      systemType,
+      vendor,
+      "arm",
+      marketRatios,
+      priceMultiplier,
+      managementPlan,
+      quantityContext,
+      armSoftwareRequired
+    );
     pushItem(details, {
       code: "ARM",
       name: `АРМ оператора ${systemType.toUpperCase()}`,
-      model,
+      model: hardwareModel,
       qty: armQty,
-      unitPrice,
-      total: armQty * unitPrice,
+      unitPrice: hardwarePrice,
+      total: armQty * hardwarePrice,
       isKey: false,
-      basis: managementPlan.reason || "Добавлено рабочее место оператора для локального или дежурного управления системой.",
+      basis: `${managementPlan.reason || ""} Рабочее место оператора отражено как отдельное аппаратное место.`.trim(),
     });
   }
 }
@@ -1152,16 +1483,35 @@ export function calculateEquipment(
     const detectorsQty =
       details.find((item) => item.code === "DET")?.qty || details.find((item) => item.code === "SEN")?.qty || Math.max(Math.round(areaUnits * 20), 1);
     const qty = resolveQuantity(system.type, "panel", quantityContext, Math.ceil(detectorsQty / Math.max(loops * 64, 1)));
+    const isBolidAps = system.type === "aps" && system.vendor === "Болид";
     pushItem(details, {
       code: "PANEL",
-      name: makeDisplayName(`Панель / ППКП (${loops} шлейфа)`, model),
+      name: makeDisplayName(isBolidAps ? "Главный прибор АПС / ППКП" : `Панель / ППКП (${loops} шлейфа)`, model),
       model,
       qty,
-      unitPrice,
-      total: qty * unitPrice,
+      unitPrice: isBolidAps ? BOLID_SIRIUS_PRICE : unitPrice,
+      total: qty * (isBolidAps ? BOLID_SIRIUS_PRICE : unitPrice),
       isKey: true,
-      basis: "Панели и ППКП увязаны с расчетными шлейфами, зонами и мощностью системы.",
+      basis: isBolidAps
+        ? "Сириус учитывается как главный прибор приемно-контрольный и управления пожарный, отдельный от контроллеров адресных линий."
+        : "Панели и ППКП увязаны с расчетными шлейфами, зонами и мощностью системы.",
     });
+
+    if (isBolidAps) {
+      const loopControllerQty = Math.max(toNumber(quantityContext?.secondary?.loopControllers, 0), 0);
+      if (loopControllerQty > 0) {
+        pushItem(details, {
+          code: "MOD",
+          name: makeDisplayName("Контроллер / модуль адресной линии АПС", "С2000-КДЛ-С"),
+          model: "С2000-КДЛ-С",
+          qty: loopControllerQty,
+          unitPrice: BOLID_KDL_S_PRICE,
+          total: loopControllerQty * BOLID_KDL_S_PRICE,
+          isKey: true,
+          basis: "Дополнительные адресные линии к главному прибору АПС учитываются отдельными контроллерами С2000-КДЛ-С.",
+        });
+      }
+    }
   }
 
   if (vendorMeta.speaker) {
@@ -1201,6 +1551,7 @@ export function calculateEquipment(
     });
   }
 
+  appendFieldArchitectureRows(details, system, quantityContext, priceMultiplier);
   appendManagementInfrastructure(details, system.type, system.vendor, quantityContext, marketRatios, priceMultiplier);
 
   if (!details.length) {
