@@ -1,5 +1,6 @@
 import PptxGenJS from "pptxgenjs";
 import { buildProjectPlan, formatRub } from "./projectPlanModel.js";
+import { exportMppViaLocalProjectBridge, isHostedWebContour } from "./localProjectBridge.js";
 
 const C = {
   bg: "EEF4FA",
@@ -334,6 +335,11 @@ async function exportPptx(plan) {
 }
 
 async function exportMpp(payload) {
+  if (isHostedWebContour()) {
+    await exportMppViaLocalProjectBridge(payload);
+    return;
+  }
+
   const res = await fetch("/api/project-plan-export", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

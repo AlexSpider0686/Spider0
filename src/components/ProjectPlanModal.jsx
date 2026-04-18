@@ -1,16 +1,43 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { AlertCircle, CalendarRange, FileSpreadsheet, Presentation, X } from "lucide-react";
-
-function isHostedWebContour() {
-  if (typeof window === "undefined") return false;
-  const host = String(window.location.hostname || "").toLowerCase();
-  if (!host) return false;
-  if (host === "localhost" || host === "127.0.0.1") return false;
-  return host.endsWith(".vercel.app") || host.endsWith(".amvera.io");
-}
+import {
+  formatLocalProjectBridgeStatus,
+  getLocalProjectBridgeInstallerUrl,
+  getLocalProjectBridgeStatus,
+  isHostedWebContour,
+  isLocalProjectBridgeAvailable,
+} from "../lib/localProjectBridge";
 
 export default function ProjectPlanModal({ open, onClose, onSelectFormat }) {
-  const mppDisabled = useMemo(() => isHostedWebContour(), []);
+  const hostedContour = useMemo(() => isHostedWebContour(), []);
+  const [bridgeReady, setBridgeReady] = useState(false);
+  const [bridgeBusy, setBridgeBusy] = useState(false);
+  const [bridgeHint, setBridgeHint] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!open || !hostedContour) return undefined;
+
+    isLocalProjectBridgeAvailable()
+      .then((ready) => {
+        if (!cancelled) setBridgeReady(Boolean(ready));
+      })
+      .catch(() => {
+        if (!cancelled) setBridgeReady(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, hostedContour]);
+
+  const handleBridgeCheck = async () => {
+    setBridgeBusy(true);
+    const status = await getLocalProjectBridgeStatus();
+    setBridgeBusy(false);
+    setBridgeReady(status.ok === true);
+    setBridgeHint(status.ok ? formatLocalProjectBridgeStatus(status) : `${formatLocalProjectBridgeStatus(status)} Установщик: ${getLocalProjectBridgeInstallerUrl()}`);
+  };
 
   if (!open) return null;
 
@@ -23,8 +50,8 @@ export default function ProjectPlanModal({ open, onClose, onSelectFormat }) {
             <div className="project-plan-modal__eyebrow">AI-планирование</div>
             <h3 id="project-plan-modal-title">Сгенерировать план проекта</h3>
             <p>
-              Платформа соберет верхнеуровневый план реализации систем по данным объекта, составу систем, AI-аналитике,
-              рискам и расчетным срокам ТКП.
+              Платформа соберет верхнеуровневый план реализации систем по данным объекта, составу систем, AI-аналитике, рискам и расчетным
+              срокам ТКП.
             </p>
           </div>
           <button className="ghost-btn project-plan-modal__close" type="button" onClick={onClose}>
@@ -42,25 +69,49 @@ export default function ProjectPlanModal({ open, onClose, onSelectFormat }) {
           </button>
 
           <button
-            className={`project-plan-option${mppDisabled ? " project-plan-option--disabled" : ""}`}
+            className="project-plan-option"
             type="button"
-            onClick={() => !mppDisabled && onSelectFormat("mpp")}
-            disabled={mppDisabled}
-            title={mppDisabled ? "Формат .mpp доступен только в локальном Windows-контуре." : "Сформировать план проекта в формате Microsoft Project"}
+            onClick={() => onSelectFormat("mpp")}
+            title={
+              hostedContour
+                ? bridgeReady
+                  ? "Сформировать план проекта в формате Microsoft Project через локальный агент на этом ПК"
+                  : "Если локальный агент еще не установлен, платформа скачает его установщик и подскажет дальнейшие шаги"
+                : "Сформировать план проекта в формате Microsoft Project"
+            }
           >
             <span className="project-plan-option__icon">
               <FileSpreadsheet size={20} />
             </span>
             <strong>MS Project (.mpp)</strong>
             <span>Файл Microsoft Project для календарного планирования и ведения графика проекта.</span>
-            {mppDisabled ? (
+            {hostedContour ? (
               <span className="project-plan-option__warning">
                 <AlertCircle size={14} />
-                Формат .mpp доступен в локальном Windows-контуре с установленным Microsoft Project.
+                {bridgeReady
+                  ? "Локальный агент найден на этом ПК: экспорт .mpp пойдет через него, с выбором папки и открытием плана в Microsoft Project."
+                  : "Web-версия использует локальный агент на этом ПК. Если мост еще не установлен, по нажатию будет скачан установщик и показана инструкция."}
               </span>
             ) : null}
           </button>
         </div>
+
+        {hostedContour ? (
+          <div className="project-plan-modal__note" style={{ marginTop: 12, alignItems: "flex-start" }}>
+            <AlertCircle size={16} />
+            <div style={{ display: "grid", gap: 10 }}>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <button className="ghost-btn" type="button" onClick={handleBridgeCheck} disabled={bridgeBusy}>
+                  {bridgeBusy ? "Проверка агента..." : "Проверить локальный агент"}
+                </button>
+                <a className="ghost-btn" href={getLocalProjectBridgeInstallerUrl()} download="projectcore-local-bridge-install.ps1">
+                  Скачать установщик агента
+                </a>
+              </div>
+              {bridgeHint ? <span>{bridgeHint}</span> : <span>Для web-контура экспорт .mpp идет через локальный агент на этом ПК.</span>}
+            </div>
+          </div>
+        ) : null}
 
         <div className="project-plan-modal__note">
           <CalendarRange size={16} />
