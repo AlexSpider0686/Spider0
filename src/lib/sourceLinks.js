@@ -2,6 +2,18 @@ function normalizeMatchKey(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function isApiLikePathname(pathname = "") {
+  const normalized = String(pathname || "").toLowerCase();
+  return (
+    normalized.startsWith("/api/") ||
+    normalized.includes("/api/") ||
+    normalized.startsWith("/luisapi/") ||
+    normalized.includes("/luisapi/") ||
+    normalized.startsWith("/rplusapi/") ||
+    normalized.includes("/rplusapi/")
+  );
+}
+
 export function toSourceHost(url) {
   if (!url) return "";
   try {
@@ -15,8 +27,31 @@ export function toSourceHost(url) {
   }
 }
 
-export function isGenericSourceUrl(url) {
+export function toBrowserSourceUrl(url, fallbackQuery = "") {
   const value = String(url || "").trim();
+  if (!value) return "";
+
+  try {
+    const parsed = new URL(value);
+    const host = parsed.hostname.replace(/^www\./i, "").toLowerCase();
+    const query = String(fallbackQuery || "").trim();
+
+    if (host === "luis.ru" && isApiLikePathname(parsed.pathname)) {
+      return query ? `https://luis.ru/search/?q=${encodeURIComponent(query)}` : "https://luis.ru/search/";
+    }
+
+    if (isApiLikePathname(parsed.pathname)) {
+      return "";
+    }
+
+    return parsed.toString();
+  } catch {
+    return /luisapi|\/api\//i.test(value) ? "" : value;
+  }
+}
+
+export function isGenericSourceUrl(url) {
+  const value = toBrowserSourceUrl(url);
   if (!value) return true;
   try {
     const parsed = new URL(value);
@@ -34,14 +69,22 @@ export function isGenericSourceUrl(url) {
 }
 
 function scoreSourceUrl(url, manufacturerHosts = []) {
-  const host = toSourceHost(url);
+  const browserUrl = toBrowserSourceUrl(url);
+  const host = toSourceHost(browserUrl);
   const manufacturerMatch = manufacturerHosts.includes(host);
-  const generic = isGenericSourceUrl(url);
-  return (manufacturerMatch ? 100 : 0) + (generic ? 0 : 10) + Math.min(String(url || "").length / 50, 5);
+  const generic = isGenericSourceUrl(browserUrl);
+  return (manufacturerMatch ? 100 : 0) + (generic ? 0 : 10) + Math.min(String(browserUrl || "").length / 50, 5);
 }
 
-export function pickBestSourceUrl(candidateUrls = [], manufacturerHosts = []) {
-  const unique = [...new Set((candidateUrls || []).map((item) => String(item || "").trim()).filter(Boolean))];
+export function pickBestSourceUrl(candidateUrls = [], manufacturerHosts = [], fallbackQuery = "") {
+  const unique = [
+    ...new Set(
+      (candidateUrls || [])
+        .map((item) => toBrowserSourceUrl(item, fallbackQuery))
+        .map((item) => String(item || "").trim())
+        .filter(Boolean)
+    ),
+  ];
   const exactFirst = unique
     .map((url) => ({ url, score: scoreSourceUrl(url, manufacturerHosts) }))
     .sort((left, right) => right.score - left.score);
@@ -56,7 +99,8 @@ export function buildSourceLinkIndex(result, manufacturerHosts = []) {
   entries.forEach((entry) => {
     const sourceLink = pickBestSourceUrl(
       [...(entry?.matchedSources || []), ...(entry?.usedSources || []), entry?.sourceUrl],
-      manufacturerHosts
+      manufacturerHosts,
+      entry?.searchQuery || entry?.projectModel || entry?.projectName || entry?.equipmentLabel || ""
     );
     if (!sourceLink) return;
     [entry?.equipmentLabel, entry?.equipmentKey, entry?.projectModel, entry?.projectName, entry?.modelToken]
@@ -73,7 +117,11 @@ export function buildSourceLinkIndex(result, manufacturerHosts = []) {
 }
 
 export function resolvePreferredEquipmentSourceLink(item, result, manufacturerHosts = []) {
-  const ownLink = pickBestSourceUrl([...(item?.matchedSources || []), ...(item?.usedSources || []), item?.sourceUrl], manufacturerHosts);
+  const ownLink = pickBestSourceUrl(
+    [...(item?.matchedSources || []), ...(item?.usedSources || []), item?.sourceUrl],
+    manufacturerHosts,
+    item?.model || item?.name || item?.label || ""
+  );
   const linkIndex = buildSourceLinkIndex(result, manufacturerHosts);
   const indexedLink =
     [item?.name, item?.label, item?.model, item?.code]
@@ -82,5 +130,5 @@ export function resolvePreferredEquipmentSourceLink(item, result, manufacturerHo
       .map((key) => linkIndex.get(key) || "")
       .find(Boolean) || "";
 
-  return pickBestSourceUrl([indexedLink, ownLink], manufacturerHosts);
+  return pickBestSourceUrl([indexedLink, ownLink], manufacturerHosts, item?.model || item?.name || item?.label || "");
 }
