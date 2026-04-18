@@ -5,6 +5,20 @@ const LOCAL_BRIDGE_ORIGIN = `http://127.0.0.1:${LOCAL_PROJECT_BRIDGE_PORT}`;
 const LOCAL_BRIDGE_TIMEOUT_MS = 120000;
 const LOCAL_BRIDGE_EXE_NAME = "ProjectCoreLocalBridgeAgent.exe";
 
+function toBase64Utf8(value) {
+  const input = String(value ?? "");
+  if (typeof TextEncoder !== "undefined" && typeof btoa !== "undefined") {
+    const bytes = new TextEncoder().encode(input);
+    let binary = "";
+    for (let index = 0; index < bytes.length; index += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+    }
+    return btoa(binary);
+  }
+
+  return "";
+}
+
 function filePart(value, fallback) {
   return String(value || fallback).replace(/[<>:"/\\|?*]+/g, "_").slice(0, 80) || fallback;
 }
@@ -124,7 +138,7 @@ export async function exportMppViaLocalProjectBridge(payload) {
   const plan = buildProjectPlan(payload || {});
   const xml = buildMsProjectXml(plan);
   const requestBody = {
-    xml,
+    xmlBase64: toBase64Utf8(xml),
     projectName: plan?.summary?.projectName || payload?.objectData?.projectName || "project",
     fileName: `${filePart(plan?.summary?.projectName, "project")}_project_plan.mpp`,
     sourceOrigin: window.location.origin,

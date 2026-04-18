@@ -224,18 +224,34 @@ namespace ProjectCoreLocalBridgeAgent
             try
             {
                 var body = ReadRequestBody(request);
-                var payload = Json.Deserialize<ExportRequest>(body ?? string.Empty);
-                if (payload == null || string.IsNullOrWhiteSpace(payload.Xml))
+                var payload = Json.DeserializeObject(body ?? string.Empty) as Dictionary<string, object>;
+                if (payload == null)
+                {
+                    throw new InvalidOperationException("Не получено тело запроса.");
+                }
+
+                var xml = GetXmlPayload(payload);
+                if (string.IsNullOrWhiteSpace(xml))
                 {
                     throw new InvalidOperationException("Не получен XML плана проекта.");
                 }
 
-                var fileName = string.IsNullOrWhiteSpace(payload.FileName) ? "project_project_plan.mpp" : payload.FileName;
-                var targetFolder = ResolveTargetFolder(payload.TargetFolder, payload.PromptForFolder);
+                var projectName = GetStringValue(payload, "projectName");
+                var fileName = GetStringValue(payload, "fileName");
+                var targetFolder = ResolveTargetFolder(
+                    GetStringValue(payload, "targetFolder"),
+                    GetBoolValue(payload, "promptForFolder")
+                );
+                var openInMsProject = GetBoolValue(payload, "openInMsProject");
+                if (string.IsNullOrWhiteSpace(fileName))
+                {
+                    fileName = "project_project_plan.mpp";
+                }
+
                 Directory.CreateDirectory(targetFolder);
                 var targetPath = Path.Combine(targetFolder, fileName);
 
-                ConvertXmlToMpp(payload.Xml, targetPath, payload.OpenInMsProject);
+                ConvertXmlToMpp(xml, targetPath, openInMsProject);
 
                 WriteStatus(new StatusPayload
                 {
@@ -256,7 +272,7 @@ namespace ProjectCoreLocalBridgeAgent
                 {
                     { "ok", true },
                     { "savedPath", targetPath },
-                    { "projectName", payload.ProjectName ?? string.Empty }
+                    { "projectName", projectName ?? string.Empty }
                 }, origin, allowedOrigins);
             }
             catch (Exception ex)
@@ -308,23 +324,9 @@ namespace ProjectCoreLocalBridgeAgent
             var xmlPath = Path.Combine(tempDir, "project-plan.xml");
             File.WriteAllText(xmlPath, xmlText, new UTF8Encoding(true));
 
-            object app = null;
-            var keepOpen = false;
-
             try
             {
-                var type = Type.GetTypeFromProgID("MSProject.Application");
-                if (type == null)
-                {
-                    throw new InvalidOperationException("Microsoft Project не найден через COM.");
-                }
-
-                app = Activator.CreateInstance(type);
-                dynamic projectApp = app;
-                projectApp.Visible = false;
-                projectApp.DisplayAlerts = 0;
-                projectApp.FileOpen(xmlPath);
-                projectApp.FileSaveAs(targetPath);
+                RunMsProjectPowerShell(xmlPath, targetPath);
 
                 if (!File.Exists(targetPath))
                 {
@@ -333,44 +335,15 @@ namespace ProjectCoreLocalBridgeAgent
 
                 if (openInMsProject)
                 {
-                    projectApp.Visible = true;
-                    keepOpen = true;
-                }
-                else
-                {
-                    try
+                    Process.Start(new ProcessStartInfo
                     {
-                        projectApp.FileCloseAllEx(0);
-                    }
-                    catch
-                    {
-                    }
+                        FileName = targetPath,
+                        UseShellExecute = true,
+                    });
                 }
             }
             finally
             {
-                if (app != null)
-                {
-                    if (!keepOpen)
-                    {
-                        try
-                        {
-                            ((dynamic)app).Quit();
-                        }
-                        catch
-                        {
-                        }
-                    }
-
-                    try
-                    {
-                        Marshal.FinalReleaseComObject(app);
-                    }
-                    catch
-                    {
-                    }
-                }
-
                 try
                 {
                     Directory.Delete(tempDir, true);
@@ -379,6 +352,67 @@ namespace ProjectCoreLocalBridgeAgent
                 {
                 }
             }
+        }
+
+        private static void RunMsProjectPowerShell(string xmlPath, string targetPath)
+        {
+            var script = "$ErrorActionPreference = 'Stop'\n" +
+                         "$xmlPath = '" + EscapePowerShellLiteral(xmlPath) + "'\n" +
+                         "$mppPath = '" + EscapePowerShellLiteral(targetPath) + "'\n" +
+                         "$app = $null\n" +
+                         "try {\n" +
+                         "  $app = New-Object -ComObject MSProject.Application\n" +
+                         "  $app.Visible = $false\n" +
+                         "  $app.DisplayAlerts = 0\n" +
+                         "  $null = $app.FileOpen($xmlPath)\n" +
+                         "  Start-Sleep -Milliseconds 500\n" +
+                         "  $project = $app.ActiveProject\n" +
+                         "  if ($project -eq $null -and $app.Projects.Count -gt 0) { $project = $app.Projects.Item(1) }\n" +
+                         "  if ($project -eq $null) { throw 'Microsoft Project не открыл XML-план как активный проект.' }\n" +
+                         "  $null = $project.SaveAs($mppPath)\n" +
+                         "  try { $app.FileCloseAllEx(0) | Out-Null } catch {}\n" +
+                         "} finally {\n" +
+                         "  if ($app -ne $null) {\n" +
+                         "    try { $app.Quit() | Out-Null } catch {}\n" +
+                         "    try { [void][System.Runtime.InteropServices.Marshal]::FinalReleaseComObject($app) } catch {}\n" +
+                         "    [GC]::Collect()\n" +
+                         "    [GC]::WaitForPendingFinalizers()\n" +
+                         "  }\n" +
+                         "}\n" +
+                         "if (-not (Test-Path -LiteralPath $mppPath)) { throw 'MPP file was not created.' }\n";
+
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = "powershell.exe",
+                Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"" + script.Replace("\"", "\\\"") + "\"",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardError = true,
+                RedirectStandardOutput = true
+            };
+
+            using (var process = Process.Start(startInfo))
+            {
+                var stdOut = process.StandardOutput.ReadToEnd();
+                var stdErr = process.StandardError.ReadToEnd();
+                process.WaitForExit();
+
+                if (process.ExitCode != 0)
+                {
+                    var message = string.IsNullOrWhiteSpace(stdErr) ? stdOut : stdErr;
+                    if (string.IsNullOrWhiteSpace(message))
+                    {
+                        message = "PowerShell-конвертация MS Project завершилась с ошибкой.";
+                    }
+
+                    throw new InvalidOperationException(message.Trim());
+                }
+            }
+        }
+
+        private static string EscapePowerShellLiteral(string value)
+        {
+            return (value ?? string.Empty).Replace("'", "''");
         }
 
         private static AgentConfig LoadConfig(AgentOptions options)
@@ -538,6 +572,53 @@ namespace ProjectCoreLocalBridgeAgent
             {
                 return reader.ReadToEnd();
             }
+        }
+
+        private static string GetStringValue(IDictionary<string, object> payload, string key)
+        {
+            object value;
+            if (!payload.TryGetValue(key, out value) || value == null)
+            {
+                return string.Empty;
+            }
+
+            return Convert.ToString(value) ?? string.Empty;
+        }
+
+        private static bool GetBoolValue(IDictionary<string, object> payload, string key)
+        {
+            object value;
+            if (!payload.TryGetValue(key, out value) || value == null)
+            {
+                return false;
+            }
+
+            if (value is bool)
+            {
+                return (bool)value;
+            }
+
+            var text = Convert.ToString(value);
+            bool parsed;
+            return bool.TryParse(text, out parsed) && parsed;
+        }
+
+        private static string GetXmlPayload(IDictionary<string, object> payload)
+        {
+            var xmlBase64 = GetStringValue(payload, "xmlBase64");
+            if (!string.IsNullOrWhiteSpace(xmlBase64))
+            {
+                try
+                {
+                    var bytes = Convert.FromBase64String(xmlBase64);
+                    return Encoding.UTF8.GetString(bytes);
+                }
+                catch
+                {
+                }
+            }
+
+            return GetStringValue(payload, "xml");
         }
 
         private static void SendJson(
