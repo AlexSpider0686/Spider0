@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Building2, Layers, Wallet, Download, PieChart, FileText, Ruler, ShieldAlert, CalendarRange, Scale, Upload } from "lucide-react";
+import { useLocation } from "react-router-dom";
 import useEstimate from "../hooks/useEstimate";
 import ObjectStep from "./ObjectStep";
 import SystemsStep from "./SystemsStep";
@@ -50,6 +51,7 @@ function assetUrl(path) {
 const BACKGROUND_VIDEO_URLS = [assetUrl("assets/background/city-loop.mp4"), assetUrl("assets/background/manhattan-loop-2min.mp4")];
 
 export default function EstimatorApp() {
+  const location = useLocation();
   const vm = useEstimate();
   const [videoIndex, setVideoIndex] = useState(0);
   const [videoUnavailable, setVideoUnavailable] = useState(false);
@@ -59,8 +61,11 @@ export default function EstimatorApp() {
   const [passportImportBusy, setPassportImportBusy] = useState(false);
   const [passportHint, setPassportHint] = useState("");
   const passportFileInputRef = useRef(null);
+  const demoInitializedRef = useRef(false);
+  const demoMode = useMemo(() => new URLSearchParams(location.search).get("demo") === "1", [location.search]);
   const [authorized, setAuthorized] = useState(() => {
     if (typeof window === "undefined") return false;
+    if (new URLSearchParams(window.location.search).get("demo") === "1") return true;
     const storedToken = window.localStorage.getItem("smetacore_auth_token");
     const siteAuth = window.sessionStorage.getItem("smetacore_site_auth") === "ok";
     return isStoredAuthTokenValid(storedToken) || siteAuth;
@@ -84,6 +89,19 @@ export default function EstimatorApp() {
   useEffect(() => {
     setVideoReady(false);
   }, [currentVideoUrl]);
+
+  useEffect(() => {
+    if (!demoMode) {
+      demoInitializedRef.current = false;
+      return;
+    }
+
+    setAuthorized(true);
+    if (demoInitializedRef.current) return;
+
+    vm.loadDemoScenario?.();
+    demoInitializedRef.current = true;
+  }, [demoMode]);
 
   const handleAuthorized = (accessToken) => {
     if (typeof window !== "undefined" && accessToken) {
@@ -266,7 +284,7 @@ export default function EstimatorApp() {
         {!hideSummary ? <Summary totals={vm.totals} systemResults={vm.systemResults} objectData={vm.objectData} /> : null}
       </div>
 
-      {!authorized ? <AuthGate onAuthorized={handleAuthorized} /> : null}
+      {!authorized && !demoMode ? <AuthGate onAuthorized={handleAuthorized} /> : null}
       <ProjectPlanModal open={authorized && planModalOpen} onClose={() => setPlanModalOpen(false)} onSelectFormat={handlePlanExport} />
     </div>
   );

@@ -130,6 +130,40 @@ function deriveSurveyAreaRefinement(photoAnalyses = {}, fallbackTotalArea = 0) {
   };
 }
 
+function buildDemoScenario() {
+  const regionName = "Москва";
+
+  return {
+    objectData: {
+      ...createProjectIdentity(),
+      projectName: "Демо: бизнес-центр Project.Core",
+      address: "Москва, Пресненская набережная, 12",
+      objectType: "public",
+      totalArea: 12800,
+      floors: 7,
+      basementFloors: 1,
+      buildingStatus: "operational",
+      ceilingHeight: 3.4,
+      regionName,
+      regionCoef: getRegionCoef(regionName),
+      notes: "Демо-сценарий для знакомства с платформой и базовой логикой расчёта.",
+    },
+    zones: [
+      DEFAULT_ZONE(101, "Офисные этажи", "office", 7600, 7),
+      DEFAULT_ZONE(102, "Лобби и общественные зоны", "lobby", 2200, 2),
+      DEFAULT_ZONE(103, "Подземный паркинг", "parking", 3000, 2),
+    ],
+    systems: [DEFAULT_SYSTEM(201, "aps"), DEFAULT_SYSTEM(202, "sot"), DEFAULT_SYSTEM(203, "skud")],
+    budget: {
+      ...DEFAULT_BUDGET,
+      overhead: 0.16,
+      profit: 0.12,
+      contingency: 0.07,
+      projectMarkup: 0.08,
+    },
+  };
+}
+
 export default function useEstimate() {
   const t = repairUtf8Cp1251Mojibake;
   const initialIdentityRef = useRef(createProjectIdentity());
@@ -1957,6 +1991,39 @@ export default function useEstimate() {
 
   const applyNormativeRequirements = () => setNormativeRequirementsApplied(true);
   const excludeNormativeRequirements = () => setNormativeRequirementsApplied(false);
+  const loadDemoScenario = () => {
+    const demo = buildDemoScenario();
+
+    setStep(0);
+    setObjectData(demo.objectData);
+    setZones(demo.zones);
+    setSystems(demo.systems);
+    setBudget(demo.budget);
+    setNormativeRequirementsApplied(true);
+    setZonePreset("business_center");
+    setLockedZoneIds([]);
+    setVendorPriceSnapshots({});
+    setVendorPricingProgressBySystem({});
+    setVendorComparisonsBySystem({});
+    setApsProjectSnapshots({});
+    setApsImportStatuses({});
+    setTechnicalSolution({
+      surveyStartedAt: null,
+      answers: {},
+      photoAnalyses: {},
+      appliedAnswers: {},
+      appliedPhotoAnalyses: {},
+      appliedAt: null,
+      specOverrides: {},
+    });
+    setAddressVerification({
+      state: "idle",
+      message: "Демо-объект предзагружен. Можно пройти шаги платформы и посмотреть расчёт.",
+      result: null,
+    });
+    setTravelEstimate(createEmptyTravelEstimate());
+    return true;
+  };
 
   return {
     step,
@@ -2040,6 +2107,7 @@ export default function useEstimate() {
     exportProjectPassport,
     importProjectPassport,
     exportAiSurveyChecklist,
+    loadDemoScenario,
     setZones,
     canAddMoreSystems: systems.length < SYSTEM_TYPES.length,
   };

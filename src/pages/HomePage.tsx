@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { AuthModal } from "../components/AuthModal";
 import { DevelopmentPlanModal } from "../components/DevelopmentPlanModal";
 import { HeroVideo } from "../components/HeroVideo";
@@ -189,6 +189,7 @@ export function HomePage() {
   const [promoOpen, setPromoOpen] = useState(false);
   const [developmentPlanOpen, setDevelopmentPlanOpen] = useState(false);
   const [activeMetric, setActiveMetric] = useState<(typeof metrics)[number] | null>(null);
+  const navigate = useNavigate();
 
   return (
     <main>
@@ -307,8 +308,8 @@ export function HomePage() {
               {siteConfig.brand} не просто выдает сумму, а показывает, из чего она собрана: объемы, источники цен, единичные расценки, коэффициенты, рыночный
               floor и AI-проверку риска дисбаланса.
             </p>
-            <button className="btn btn--primary" onClick={() => setAuthOpen(true)}>
-              Получить доступ к демо
+            <button className="btn btn--primary" onClick={() => navigate("/system?demo=1")}>
+              Запустить демо-версию
             </button>
           </div>
         </div>
