@@ -3,20 +3,31 @@ import { DEFAULT_BUDGET, DEFAULT_SYSTEM, DEFAULT_ZONE, OBJECT_TYPES, SYSTEM_TYPE
 import { buildEstimateRows, downloadCsv, num, toNumber } from "../lib/estimate";
 import { calculateEstimateEngine } from "../lib/estimateEngine";
 import { buildZonesFromPreset, normalizeZoneAreas, rebalanceZoneAreasWithLocks, validateZoneDistribution } from "../lib/zoneEngine";
-import { fetchPricesByRequests, fetchVendorPrices } from "../lib/priceCollector";
+import { buildProjectPriceRequests, fetchPricesByRequests, fetchVendorPrices, summarizePriceSnapshot } from "../lib/priceCollector";
 import { VENDOR_EQUIPMENT } from "../config/vendorConfig";
 import { DEFAULT_REGION_NAME, getRegionCoef } from "../config/regionsConfig";
 import { validateEstimateInput } from "../lib/input-normalization";
-import { appendManualApsProjectItem, recalculateApsProjectSnapshot, removeApsProjectItem } from "../lib/apsProjectEstimate";
+import {
+  appendManualApsProjectItem,
+  buildApsProjectPriceRequests,
+  buildApsProjectSnapshot,
+  recalculateApsProjectSnapshot,
+  removeApsProjectItem,
+} from "../lib/apsProjectEstimate";
 import { calculateProtectedArea } from "../lib/protectedArea";
 import { verifyObjectAddress as verifyObjectAddressOnline } from "../lib/addressVerification";
 import { createProjectIdentity } from "../lib/projectIdentity";
-import { analyzeInspectionPhoto } from "../lib/aiPhotoInspectionStrict";
+import { aggregateInspectionPhotoResults, analyzeInspectionPhoto } from "../lib/aiPhotoInspectionStrict";
 import { buildAiSurveyPlan, calculateAiSurveyCompletion } from "../lib/aiTechnicalChecklist";
-import { buildAiTechnicalRecommendations } from "../lib/aiTechnicalConfigurator";
+import { buildAiTechnicalRecommendations, estimateSurveyZoneCount } from "../lib/aiTechnicalConfigurator";
 import { buildAiProjectRisks } from "../lib/aiProjectRiskEngine";
 import { aggregatePlanRecognitions } from "../lib/evacuationPlanRecognition";
-import { downloadSystemSpecificationExcel } from "../lib/specExport";
+import { downloadAllSystemsSpecificationExcel, downloadSystemSpecificationExcel } from "../lib/specExport";
+import { buildNormativeRequirements } from "../lib/normativeRequirements";
+import { repairUtf8Cp1251Mojibake } from "../lib/textEncoding";
+import { applyTravelToResults, buildInitialTravelEstimate, createEmptyTravelEstimate, recalculateTravelEstimateDraft } from "../lib/travelEstimate";
+import { downloadProjectPassport, readProjectPassport } from "../lib/projectPassport";
+import { exportAiSurveyChecklist as exportAiSurveyChecklistDoc } from "../lib/aiSurveyChecklistExport";
 
 function removeById(mapObject, id) {
   if (!(id in mapObject)) return mapObject;
@@ -42,6 +53,41 @@ function hasKeys(value) {
   return Boolean(value && Object.keys(value).length);
 }
 
+function buildFallbackPriceSnapshot() {
+  return {
+    fetchedAt: new Date().toISOString(),
+    entries: [],
+    warning: "price_collection_unavailable_fallback_mode",
+  };
+}
+
+function buildVendorPricingFallbackSnapshot(previousSnapshot = null, error = null) {
+  return {
+    ...(previousSnapshot || {}),
+    fetchedAt: new Date().toISOString(),
+    entries: Array.isArray(previousSnapshot?.entries) ? previousSnapshot.entries : [],
+    warning:
+      error?.message ||
+      "Сервис сбора цен временно недоступен. Использован резервный режим с сохранением текущих данных и fallback-логики.",
+    error: "",
+    stale: true,
+  };
+}
+
+function buildApsImportStatus(state, message, extra = {}) {
+  return {
+    state,
+    message,
+    startedAt: extra.startedAt || new Date().toISOString(),
+    stage: extra.stage || "",
+    ...extra,
+  };
+}
+
+function isAbortLikeError(error) {
+  return error?.name === "AbortError" || error?.code === 20;
+}
+
 function deriveSurveyAreaRefinement(photoAnalyses = {}, fallbackTotalArea = 0) {
   const byZone = new Map();
 
@@ -57,9 +103,9 @@ function deriveSurveyAreaRefinement(photoAnalyses = {}, fallbackTotalArea = 0) {
 
   const aggregate = Array.from(byZone.values()).reduce(
     (sum, item) => {
-      sum.userTotalArea += num(item?.userTotalArea, 0);
-      sum.predictedTotalArea += num(item?.predictedTotalArea, 0);
-      sum.recognizedAverageFloorArea += num(item?.recognizedAverageFloorArea, 0);
+      sum.userTotalArea += toNumber(item?.userTotalArea, 0);
+      sum.predictedTotalArea += toNumber(item?.predictedTotalArea, 0);
+      sum.recognizedAverageFloorArea += toNumber(item?.recognizedAverageFloorArea, 0);
       return sum;
     },
     {
@@ -69,7 +115,7 @@ function deriveSurveyAreaRefinement(photoAnalyses = {}, fallbackTotalArea = 0) {
     }
   );
 
-  const userTotalArea = aggregate.userTotalArea || num(fallbackTotalArea, 0);
+  const userTotalArea = aggregate.userTotalArea || toNumber(fallbackTotalArea, 0);
   const predictedTotalArea = aggregate.predictedTotalArea || userTotalArea;
   const adjustedTotalArea = Number(((predictedTotalArea * 0.75 + userTotalArea * 0.25) || userTotalArea).toFixed(1));
   const deviationPercent = userTotalArea > 0 ? Number((((adjustedTotalArea - userTotalArea) / userTotalArea) * 100).toFixed(1)) : 0;
@@ -84,40 +130,10 @@ function deriveSurveyAreaRefinement(photoAnalyses = {}, fallbackTotalArea = 0) {
   };
 }
 
-function buildDemoScenario() {
-  return {
-    objectData: {
-      ...createProjectIdentity(),
-      projectName: "Демо: бизнес-центр Project.Core",
-      address: "Москва, Пресненская набережная, 12",
-      objectType: "public",
-      totalArea: 12800,
-      floors: 7,
-      basementFloors: 1,
-      buildingStatus: "operational",
-      ceilingHeight: 3.4,
-      regionName: "Москва",
-      regionCoef: getRegionCoef("Москва"),
-      notes: "Демонстрационный сценарий для бизнес-центра с офисами, лобби и подземным паркингом.",
-    },
-    zones: [
-      DEFAULT_ZONE(101, "Офисные этажи", "office", 7600, 7),
-      DEFAULT_ZONE(102, "Лобби и общественные зоны", "lobby", 2200, 2),
-      DEFAULT_ZONE(103, "Подземный паркинг", "parking", 3000, 2),
-    ],
-    systems: [DEFAULT_SYSTEM(201, "aps"), DEFAULT_SYSTEM(202, "sot"), DEFAULT_SYSTEM(203, "skud")],
-    budget: {
-      ...DEFAULT_BUDGET,
-      overhead: 0.16,
-      profit: 0.12,
-      contingency: 0.07,
-      projectMarkup: 0.08,
-    },
-  };
-}
-
 export default function useEstimate() {
+  const t = repairUtf8Cp1251Mojibake;
   const initialIdentityRef = useRef(createProjectIdentity());
+  const apsImportTasksRef = useRef(new Map());
   const [step, setStep] = useState(0);
   const [objectData, setObjectData] = useState({
     ...initialIdentityRef.current,
@@ -141,9 +157,12 @@ export default function useEstimate() {
   ]);
   const [systems, setSystems] = useState([DEFAULT_SYSTEM(1, "sot"), DEFAULT_SYSTEM(2, "sots"), DEFAULT_SYSTEM(3, "skud")]);
   const [budget, setBudget] = useState(DEFAULT_BUDGET);
+  const [normativeRequirementsApplied, setNormativeRequirementsApplied] = useState(true);
   const [zonePreset, setZonePreset] = useState("business_center");
   const [lockedZoneIds, setLockedZoneIds] = useState([]);
   const [vendorPriceSnapshots, setVendorPriceSnapshots] = useState({});
+  const [vendorPricingProgressBySystem, setVendorPricingProgressBySystem] = useState({});
+  const [vendorComparisonsBySystem, setVendorComparisonsBySystem] = useState({});
   const [apsProjectSnapshots, setApsProjectSnapshots] = useState({});
   const [apsImportStatuses, setApsImportStatuses] = useState({});
   const [technicalSolution, setTechnicalSolution] = useState({
@@ -162,6 +181,7 @@ export default function useEstimate() {
   });
 
   const pricingSignaturesRef = useRef(new Map());
+  const [travelEstimate, setTravelEstimate] = useState(() => createEmptyTravelEstimate());
   const appliedSurveyAreaRefinement = useMemo(
     () => deriveSurveyAreaRefinement(technicalSolution.appliedPhotoAnalyses, objectData.totalArea),
     [technicalSolution.appliedPhotoAnalyses, objectData.totalArea]
@@ -196,11 +216,53 @@ export default function useEstimate() {
   );
   const protectedAreaMeta = useMemo(() => calculateProtectedArea(effectiveObjectData), [effectiveObjectData]);
   const recalculatedArea = protectedAreaMeta.protectedAreaM2;
-  const { systemsDetailed: systemResults, totals } = useMemo(
-    () => calculateEstimateEngine(systems, zones, budget, effectiveObjectData, vendorPriceSnapshots, apsProjectSnapshots, technicalSolution.appliedAnswers),
-    [systems, zones, budget, effectiveObjectData, vendorPriceSnapshots, apsProjectSnapshots, technicalSolution.appliedAnswers]
+  const normativeProfile = useMemo(
+    () =>
+      buildNormativeRequirements({
+        objectData: effectiveObjectData,
+        zones,
+        systems,
+      }),
+    [effectiveObjectData, zones, systems]
+  );
+  const normativeContext = useMemo(
+    () => ({
+      applied: normativeRequirementsApplied,
+      profile: normativeProfile,
+    }),
+    [normativeProfile, normativeRequirementsApplied]
+  );
+  const { systemsDetailed: baseSystemResults, totals: baseTotals } = useMemo(
+    () =>
+      calculateEstimateEngine(
+        systems,
+        zones,
+        budget,
+        effectiveObjectData,
+        vendorPriceSnapshots,
+        apsProjectSnapshots,
+        technicalSolution.appliedAnswers,
+        technicalSolution.appliedPhotoAnalyses,
+        normativeContext
+      ),
+    [
+      systems,
+      zones,
+      budget,
+      effectiveObjectData,
+      vendorPriceSnapshots,
+      apsProjectSnapshots,
+      technicalSolution.appliedAnswers,
+      technicalSolution.appliedPhotoAnalyses,
+      normativeContext,
+    ]
   );
   const zoneDistribution = useMemo(() => validateZoneDistribution(zones, recalculatedArea), [zones, recalculatedArea]);
+  const initializedTravelEstimate = useMemo(() => buildInitialTravelEstimate(baseSystemResults, systems.length), [baseSystemResults, systems.length]);
+  const { systemResults, totals, travelEstimate: normalizedTravelEstimate } = useMemo(
+    () => applyTravelToResults(baseSystemResults, baseTotals, travelEstimate),
+    [baseSystemResults, baseTotals, travelEstimate]
+  );
   const aiSurveyPlan = useMemo(
     () =>
       buildAiSurveyPlan({
@@ -211,19 +273,88 @@ export default function useEstimate() {
       }),
     [surveyPlanObjectData, zones, systems, recalculatedArea]
   );
+
+  const getAutoCalculatedSurveyAnswer = (question) => {
+    if (!question?.autoCalculate) return undefined;
+
+    if (question.autoCalculate === "aps-zksps-zones") {
+      return Math.max(
+        estimateSurveyZoneCount({
+          systemType: "aps",
+          objectData: surveyPlanObjectData,
+          zones,
+          photoAnalyses: technicalSolution.photoAnalyses,
+        }) || 1,
+        1
+      );
+    }
+
+    return undefined;
+  };
+
+  useEffect(() => {
+    if (!technicalSolution?.surveyStartedAt) return;
+
+    setTechnicalSolution((prev) => {
+      const validQuestions = aiSurveyPlan?.allQuestions || [];
+      const validIds = new Set(validQuestions.map((question) => question.id));
+      const nextAnswers = {};
+      let changed = false;
+
+      Object.entries(prev.answers || {}).forEach(([key, value]) => {
+        if (validIds.has(key)) {
+          nextAnswers[key] = value;
+        } else {
+          changed = true;
+        }
+      });
+
+      validQuestions.forEach((question) => {
+        if (question.enabledByQuestionId && nextAnswers[question.enabledByQuestionId] !== true) {
+          if (question.id in nextAnswers) {
+            delete nextAnswers[question.id];
+            changed = true;
+          }
+          return;
+        }
+
+        if (nextAnswers[question.id] !== undefined) return;
+
+        const autoValue = getAutoCalculatedSurveyAnswer(question);
+        if (autoValue !== undefined) {
+          nextAnswers[question.id] = autoValue;
+          changed = true;
+          return;
+        }
+
+        if (question.defaultValue !== undefined) {
+          nextAnswers[question.id] = Array.isArray(question.defaultValue) ? [...question.defaultValue] : question.defaultValue;
+          changed = true;
+        }
+      });
+
+      if (!changed) return prev;
+
+      return {
+        ...prev,
+        answers: nextAnswers,
+      };
+    });
+  }, [aiSurveyPlan, surveyPlanObjectData, zones, technicalSolution.photoAnalyses, technicalSolution.surveyStartedAt]);
+
   const aiSurveyCompletion = useMemo(
-    () => calculateAiSurveyCompletion(aiSurveyPlan, technicalSolution.answers),
-    [aiSurveyPlan, technicalSolution.answers]
+    () => calculateAiSurveyCompletion(aiSurveyPlan, technicalSolution.answers, technicalSolution.photoAnalyses),
+    [aiSurveyPlan, technicalSolution.answers, technicalSolution.photoAnalyses]
   );
   const appliedAiSurveyCompletion = useMemo(
-    () => calculateAiSurveyCompletion(aiSurveyPlan, technicalSolution.appliedAnswers),
-    [aiSurveyPlan, technicalSolution.appliedAnswers]
+    () => calculateAiSurveyCompletion(aiSurveyPlan, technicalSolution.appliedAnswers, technicalSolution.appliedPhotoAnalyses),
+    [aiSurveyPlan, technicalSolution.appliedAnswers, technicalSolution.appliedPhotoAnalyses]
   );
   const technicalRecommendations = useMemo(
     () =>
       buildAiTechnicalRecommendations({
         systems,
-        systemResults,
+        systemResults: baseSystemResults,
         objectData: effectiveObjectData,
         zones,
         surveyAnswers: technicalSolution.appliedAnswers,
@@ -233,7 +364,7 @@ export default function useEstimate() {
       }),
     [
       systems,
-      systemResults,
+      baseSystemResults,
       effectiveObjectData,
       zones,
       technicalSolution.appliedAnswers,
@@ -248,12 +379,12 @@ export default function useEstimate() {
         objectData: { ...effectiveObjectData, protectedAreaM2: recalculatedArea },
         zones,
         systems,
-        systemResults,
+        systemResults: baseSystemResults,
         technicalSolution,
         aiSurveyCompletion: appliedAiSurveyCompletion,
         apsProjectSnapshots,
       }),
-    [effectiveObjectData, recalculatedArea, zones, systems, systemResults, technicalSolution, appliedAiSurveyCompletion, apsProjectSnapshots]
+    [effectiveObjectData, recalculatedArea, zones, systems, baseSystemResults, technicalSolution, appliedAiSurveyCompletion, apsProjectSnapshots]
   );
   const inputValidation = useMemo(
     () =>
@@ -266,6 +397,21 @@ export default function useEstimate() {
       }),
     [systems, zones, budget, effectiveObjectData, recalculatedArea]
   );
+
+  useEffect(() => {
+    setTravelEstimate((prev) => {
+      const next = recalculateTravelEstimateDraft(
+        {
+          ...initializedTravelEstimate,
+          ...prev,
+          crewSize: prev?.crewSize || initializedTravelEstimate.crewSize,
+          workDurationDays: prev?.workDurationDays || initializedTravelEstimate.workDurationDays,
+        },
+        systems.length
+      );
+      return JSON.stringify(next) === JSON.stringify(prev) ? prev : next;
+    });
+  }, [initializedTravelEstimate, systems.length]);
 
   const updateObject = (key, value) => {
     if (key === "regionName") {
@@ -323,6 +469,99 @@ export default function useEstimate() {
     }
   };
 
+  const updateTravelField = (key, value) => {
+    setTravelEstimate((prev) => recalculateTravelEstimateDraft({ ...prev, enabled: true, [key]: value }, systems.length));
+  };
+
+  const setTravelEstimateEnabled = (enabled) => {
+    setTravelEstimate((prev) =>
+      recalculateTravelEstimateDraft(
+        {
+          ...prev,
+          enabled: enabled === true,
+          alerts: enabled ? prev?.alerts || [] : [],
+          notes: enabled ? prev?.notes || "" : "",
+        },
+        systems.length
+      )
+    );
+  };
+
+  const resetTravelEstimate = () => {
+    setTravelEstimate(recalculateTravelEstimateDraft({ ...initializedTravelEstimate, enabled: false }, systems.length));
+  };
+
+  const runTravelEstimate = async () => {
+    const verifiedAddressLabel = String(addressVerification?.result?.verifiedLabel || "").trim();
+    const verifiedDisplayName = String(addressVerification?.result?.displayName || "").trim();
+    const localityCandidate = [verifiedAddressLabel, verifiedDisplayName, objectData.address]
+      .map((value) => String(value || "").trim())
+      .find(Boolean);
+    const payload = {
+      originAddress: travelEstimate.originAddress || "",
+      destinationAddress: travelEstimate.destinationAddress || objectData.address || "",
+      destinationLocality: localityCandidate || "",
+      crewSize: travelEstimate.crewSize || initializedTravelEstimate.crewSize,
+      workDurationDays: travelEstimate.workDurationDays || initializedTravelEstimate.workDurationDays,
+      perDiemPerPersonDay: travelEstimate.perDiemPerPersonDay || initializedTravelEstimate.perDiemPerPersonDay,
+      systemsCount: systems.length,
+    };
+
+    if (!payload.originAddress.trim() || !payload.destinationAddress.trim()) {
+      setTravelEstimate((prev) =>
+        recalculateTravelEstimateDraft(
+          {
+            ...prev,
+            enabled: true,
+            alerts: ["Для интеллектуального расчета заполните начальную и конечную точки маршрута."],
+          },
+          systems.length
+        )
+      );
+      return false;
+    }
+
+    setTravelEstimate((prev) =>
+      recalculateTravelEstimateDraft(
+        {
+          ...prev,
+          enabled: true,
+          calculationMethod: "smart",
+          notes: "Идет интеллектуальный расчет маршрута и командировочных расходов...",
+          alerts: [],
+        },
+        systems.length
+      )
+    );
+
+    try {
+      const response = await fetch("/api/travel-estimate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const raw = await response.json().catch(() => null);
+      if (!response.ok || !raw?.result) {
+        throw new Error(raw?.error || "Не удалось рассчитать командировку.");
+      }
+      setTravelEstimate(recalculateTravelEstimateDraft(raw.result, systems.length));
+      return true;
+    } catch (error) {
+      setTravelEstimate((prev) =>
+        recalculateTravelEstimateDraft(
+          {
+            ...prev,
+            enabled: true,
+            alerts: [error?.message || "Не удалось рассчитать командировку."],
+            notes: "Автоматический расчет не завершен. Вы можете скорректировать параметры вручную.",
+          },
+          systems.length
+        )
+      );
+      return false;
+    }
+  };
+
   const updateZone = (id, key, value) => {
     setZones((prev) => prev.map((zone) => (zone.id === id ? { ...zone, [key]: value } : zone)));
   };
@@ -348,7 +587,13 @@ export default function useEstimate() {
   };
 
   const updateSystem = (id, key, value) => {
-    if (key === "type" && value !== "aps") {
+    setVendorComparisonsBySystem((prev) => removeById(prev, id));
+    if (key === "type") {
+      const task = apsImportTasksRef.current.get(id);
+      if (task?.controller) {
+        task.controller.abort();
+      }
+      apsImportTasksRef.current.delete(id);
       setApsProjectSnapshots((prev) => removeById(prev, id));
       setApsImportStatuses((prev) => removeById(prev, id));
     }
@@ -403,7 +648,13 @@ export default function useEstimate() {
   };
 
   const removeSystem = (id) => {
+    const task = apsImportTasksRef.current.get(id);
+    if (task?.controller) {
+      task.controller.abort();
+    }
+    apsImportTasksRef.current.delete(id);
     setSystems((prev) => (prev.length <= 1 ? prev : prev.filter((system) => system.id !== id)));
+    setVendorComparisonsBySystem((prev) => removeById(prev, id));
     setApsProjectSnapshots((prev) => removeById(prev, id));
     setApsImportStatuses((prev) => removeById(prev, id));
   };
@@ -419,19 +670,142 @@ export default function useEstimate() {
 
   const updateBudget = (key, value) => setBudget((prev) => ({ ...prev, [key]: value }));
 
+  const loadApsProjectPrices = async (requests, options = {}) => {
+    const normalizedOptions = {
+      batchSize: options?.batchSize || (requests.length > 12 ? 4 : requests.length > 6 ? 5 : undefined),
+      ...options,
+    };
+    try {
+      const priceSnapshot = await fetchPricesByRequests(requests, normalizedOptions);
+      return {
+        priceSnapshot,
+        fallbackNotice: "",
+      };
+    } catch (error) {
+      if (normalizedOptions?.signal?.aborted || isAbortLikeError(error)) {
+        throw error;
+      }
+      return {
+        priceSnapshot: buildFallbackPriceSnapshot(),
+        fallbackNotice: error?.message || "Сервис сбора цен временно недоступен, использованы fallback-цены.",
+      };
+    }
+  };
+
+  const resolveApsProjectPricing = async ({
+    parsedProject,
+    fileName,
+    systemType,
+    vendorName,
+    signal,
+    onProgress,
+    buildApsProjectPriceRequests,
+    buildApsProjectSnapshot,
+  }) => {
+    const normalizedSystemType = String(systemType || parsedProject?.systemType || "aps").toLowerCase();
+    const runForVendor = async (currentVendorName, progressPrefix = "") => {
+      const requests = buildApsProjectPriceRequests(parsedProject.items, currentVendorName, normalizedSystemType);
+      const { priceSnapshot, fallbackNotice } = await loadApsProjectPrices(requests, {
+        signal,
+        onProgress: onProgress
+          ? (progress) =>
+              onProgress({
+                ...progress,
+                progressPrefix,
+              })
+          : undefined,
+      });
+      const snapshot = buildApsProjectSnapshot({
+        fileName,
+        parsedProject,
+        requests,
+        priceSnapshot,
+        objectData,
+        vendorName: currentVendorName,
+        systemType: normalizedSystemType,
+      });
+      return { requests, priceSnapshot, fallbackNotice, snapshot };
+    };
+
+    const initialResult = await runForVendor(vendorName);
+    const detectedVendor = initialResult.snapshot?.detectedVendor || initialResult.snapshot?.vendorName || vendorName;
+    if (normalizedSystemType !== "aps" || !detectedVendor || detectedVendor === vendorName) {
+      return initialResult;
+    }
+
+    const refinedResult = await runForVendor(detectedVendor, `Уточнен вендор: ${detectedVendor}. `);
+    return {
+      ...refinedResult,
+      fallbackNotice: refinedResult.fallbackNotice || initialResult.fallbackNotice,
+    };
+  };
+
+  const startApsImportTask = (systemId) => {
+    const token = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const controller = new AbortController();
+    apsImportTasksRef.current.set(systemId, { token, cancelled: false, controller });
+    return token;
+  };
+
+  const isApsImportTaskCancelled = (systemId, token) => {
+    const task = apsImportTasksRef.current.get(systemId);
+    if (!task) return true;
+    return task.cancelled || task.token !== token;
+  };
+
+  const finishApsImportTask = (systemId, token) => {
+    const task = apsImportTasksRef.current.get(systemId);
+    if (task?.token === token) {
+      apsImportTasksRef.current.delete(systemId);
+    }
+  };
+
+  const cancelApsProjectPdfImport = (systemId) => {
+    const task = apsImportTasksRef.current.get(systemId);
+    if (!task) return false;
+    task.cancelled = true;
+    if (task.controller) {
+      task.controller.abort();
+    }
+    apsImportTasksRef.current.set(systemId, task);
+    setApsImportStatuses((prev) => ({
+      ...prev,
+      [systemId]: buildApsImportStatus("warning", "Обработка PDF отменена пользователем.", {
+        stage: prev?.[systemId]?.stage || "parsing",
+        startedAt: prev?.[systemId]?.startedAt || new Date().toISOString(),
+        cancelled: true,
+      }),
+    }));
+    return true;
+  };
+
   const refreshVendorPricing = async (system) => {
     const apsSnapshot = apsProjectSnapshots?.[system?.id];
-    if (system?.type === "aps" && apsSnapshot?.active) {
-      setApsImportStatuses((prev) => ({
-        ...prev,
-        [system.id]: {
-          state: "loading",
-          message: "Идет повторный опрос источников цен по позициям проекта...",
-        },
-      }));
+    const systemIndex = systems.findIndex((item) => item.id === system?.id);
+    const targetedRequests =
+      systemIndex >= 0 ? buildProjectPriceRequests(system, baseSystemResults?.[systemIndex] || systemResults?.[systemIndex]) : [];
+    setVendorComparisonsBySystem((prev) => removeById(prev, system?.id));
+    setVendorPricingProgressBySystem((prev) => ({
+      ...prev,
+      [system.id]: {
+        state: "loading",
+        processed: 0,
+        total: 0,
+        percent: 0,
+        message: "Идет обновление цен по поставщикам и сайту производителя...",
+        startedAt: new Date().toISOString(),
+      },
+    }));
+      if (apsSnapshot?.active) {
+        setApsImportStatuses((prev) => ({
+          ...prev,
+          [system.id]: buildApsImportStatus("loading", "Идет повторный опрос источников цен по позициям проекта...", {
+            stage: "pricing",
+          }),
+        }));
 
       try {
-        const { buildApsProjectPriceRequests, buildApsProjectSnapshot } = await import("../lib/apsProjectEstimate");
+        const { buildApsProjectPriceRequests, buildApsProjectSnapshot, inferApsProjectVendor } = await import("../lib/apsProjectEstimate");
         const originalItems =
           Array.isArray(apsSnapshot.originalItems) && apsSnapshot.originalItems.length ? apsSnapshot.originalItems : apsSnapshot.items || [];
         const parsedProject = {
@@ -444,18 +818,22 @@ export default function useEstimate() {
           unrecognizedRows: apsSnapshot.unrecognizedRows || [],
           parseQuality: apsSnapshot.parseQuality || {},
           aiQuality: apsSnapshot.aiQuality || null,
+          systemType: apsSnapshot.systemType || system.type,
         };
+        const preferredVendor =
+          (parsedProject.systemType || system.type) === "aps"
+            ? inferApsProjectVendor(parsedProject.items, system.vendor) || system.vendor
+            : system.vendor;
 
-        const requests = buildApsProjectPriceRequests(originalItems, system.vendor);
-        const priceSnapshot = await fetchPricesByRequests(requests);
-        let refreshedSnapshot = buildApsProjectSnapshot({
-          fileName: apsSnapshot.fileName || "aps-project.pdf",
+        const { priceSnapshot, fallbackNotice, snapshot: resolvedSnapshot } = await resolveApsProjectPricing({
           parsedProject,
-          requests,
-          priceSnapshot,
-          objectData,
-          vendorName: system.vendor,
+          fileName: apsSnapshot.fileName || "aps-project.pdf",
+          systemType: parsedProject.systemType || system.type,
+          vendorName: preferredVendor,
+          buildApsProjectPriceRequests,
+          buildApsProjectSnapshot,
         });
+        let refreshedSnapshot = resolvedSnapshot;
 
         if (apsSnapshot.itemOverrides && Object.keys(apsSnapshot.itemOverrides).length) {
           refreshedSnapshot = recalculateApsProjectSnapshot(refreshedSnapshot, apsSnapshot.itemOverrides, objectData);
@@ -466,113 +844,295 @@ export default function useEstimate() {
           prev.map((item) =>
             item.id === system.id
               ? {
-                  ...item,
-                  vendor: refreshedSnapshot.detectedVendor || item.vendor,
-                  baseVendor: refreshedSnapshot.detectedVendor || item.baseVendor || item.vendor,
-                }
-              : item
-          )
+                ...item,
+                vendor: refreshedSnapshot.detectedVendor || refreshedSnapshot.vendorName || item.vendor,
+                baseVendor: refreshedSnapshot.detectedVendor || refreshedSnapshot.vendorName || item.baseVendor || item.vendor,
+              }
+            : item
+        )
         );
         setVendorPriceSnapshots((prev) => ({ ...prev, [system.id]: priceSnapshot }));
-        setApsImportStatuses((prev) => ({
+        setVendorPricingProgressBySystem((prev) => ({
           ...prev,
           [system.id]: {
-            state: "success",
-            message: `Обновлено: позиций с ценой поставщика ${refreshedSnapshot.sourceStats.itemsWithSupplierPrice}, без цены ${refreshedSnapshot.sourceStats.itemsWithoutPrice}.`,
+            state: fallbackNotice ? "warning" : "success",
+            processed: priceSnapshot?.entries?.length || 0,
+            total: priceSnapshot?.entries?.length || 0,
+            percent: 100,
+            message: fallbackNotice
+              ? "Цены обновлены в резервном режиме."
+              : "Цены по проектной спецификации обновлены.",
+            finishedAt: new Date().toISOString(),
           },
         }));
-      } catch (error) {
         setApsImportStatuses((prev) => ({
+          ...prev,
+          [system.id]: buildApsImportStatus(
+            fallbackNotice ? "warning" : "success",
+            fallbackNotice
+              ? `PDF обновлен, но сбор цен завершился в fallback-режиме. ${fallbackNotice}`
+              : `Обновлено: позиций с ценой поставщика ${refreshedSnapshot.sourceStats.itemsWithSupplierPrice}, без цены ${refreshedSnapshot.sourceStats.itemsWithoutPrice}.`,
+            {
+              stage: "done",
+            }
+          ),
+        }));
+      } catch (error) {
+        setVendorPricingProgressBySystem((prev) => ({
           ...prev,
           [system.id]: {
             state: "error",
-            message: error?.message || "Не удалось обновить цены по позициям проекта.",
+            processed: 0,
+            total: 0,
+            percent: 100,
+            message: error?.message || "Не удалось обновить цены по проектной спецификации.",
+            finishedAt: new Date().toISOString(),
           },
+        }));
+        setApsImportStatuses((prev) => ({
+          ...prev,
+          [system.id]: buildApsImportStatus("error", error?.message || "Не удалось обновить цены по позициям проекта.", {
+            stage: "pricing",
+          }),
         }));
       }
       return;
     }
 
     try {
-      const snapshot = await fetchVendorPrices(system.type, system.vendor);
+      const snapshot = await fetchVendorPrices(system.type, system.vendor, {
+        requests: targetedRequests,
+        timeoutMs: 180000,
+        onProgress: (progress) => {
+          const processed = Number(progress?.processed || 0);
+          const total = Number(progress?.total || 0);
+          const ratio = total > 0 ? processed / total : 0;
+          setVendorPricingProgressBySystem((prev) => ({
+            ...prev,
+            [system.id]: {
+              state: "loading",
+              processed,
+              total,
+              percent: Math.max(5, Math.min(Math.round(ratio * 100), 95)),
+              message:
+                progress?.message ||
+                (total > 0
+                  ? `Проверено ${processed} из ${total} ключевых позиций.`
+                  : "Подготовка запросов к источникам цен..."),
+              startedAt: prev?.[system.id]?.startedAt || new Date().toISOString(),
+            },
+          }));
+        },
+      });
       setVendorPriceSnapshots((prev) => ({ ...prev, [system.id]: snapshot }));
+      setVendorPricingProgressBySystem((prev) => ({
+        ...prev,
+        [system.id]: {
+          state: snapshot?.warning ? "warning" : "success",
+          processed: snapshot?.entries?.length || prev?.[system.id]?.processed || 0,
+          total: snapshot?.entries?.length || prev?.[system.id]?.total || 0,
+          percent: 100,
+          message: snapshot?.warning
+            ? "Обновление завершено в резервном режиме."
+            : "Цены успешно обновлены.",
+          finishedAt: new Date().toISOString(),
+        },
+      }));
     } catch (error) {
       setVendorPriceSnapshots((prev) => ({
         ...prev,
+        [system.id]: buildVendorPricingFallbackSnapshot(prev?.[system.id], error),
+      }));
+      setVendorPricingProgressBySystem((prev) => ({
+        ...prev,
         [system.id]: {
-          fetchedAt: new Date().toISOString(),
-          entries: [],
-          error: error.message,
+          state: "error",
+          processed: prev?.[system.id]?.processed || 0,
+          total: prev?.[system.id]?.total || 0,
+          percent: 100,
+          message: error?.message || "Не удалось обновить цены.",
+          finishedAt: new Date().toISOString(),
         },
       }));
     }
   };
 
+  const refreshAllVendorPricing = async () => {
+    const systemsSnapshot = [...systems];
+    await Promise.allSettled(systemsSnapshot.map((system) => refreshVendorPricing(system)));
+    return true;
+  };
+
   const importApsProjectPdf = async (systemId, file) => {
     const system = systems.find((item) => item.id === systemId);
-    if (!system || system.type !== "aps") {
-      throw new Error("Импорт PDF доступен только для системы АПС.");
+    if (!system) {
+      throw new Error("Система для импорта PDF не найдена.");
     }
     if (!file) return;
+    const taskToken = startApsImportTask(systemId);
+    const activeTask = apsImportTasksRef.current.get(systemId);
+    const taskSignal = activeTask?.controller?.signal;
 
     setApsImportStatuses((prev) => ({
       ...prev,
-      [systemId]: {
-        state: "loading",
-        message: "Идет анализ PDF и сбор цен...",
-      },
+      [systemId]: buildApsImportStatus("loading", "Идет анализ PDF...", {
+        stage: "parsing",
+      }),
     }));
 
     try {
-      const [{ parseApsProjectPdf }, { buildApsProjectPriceRequests, buildApsProjectSnapshot }] = await Promise.all([
+      const [{ parseProjectSpecificationPdf }, { buildApsProjectPriceRequests, buildApsProjectSnapshot, inferApsProjectVendor }] =
+        await Promise.all([
         import("../lib/apsProjectParser"),
         import("../lib/apsProjectEstimate"),
       ]);
 
-      const parsedProject = await parseApsProjectPdf(file);
-      const requests = buildApsProjectPriceRequests(parsedProject.items, system.vendor);
-      const priceSnapshot = await fetchPricesByRequests(requests);
-      const snapshot = buildApsProjectSnapshot({
+      const parsedProject = await parseProjectSpecificationPdf(file, {
+        systemType: system.type,
+        applyAiRefinement: system.type === "aps",
+      });
+      if (isApsImportTaskCancelled(systemId, taskToken)) return;
+      setApsImportStatuses((prev) => ({
+        ...prev,
+        [systemId]: buildApsImportStatus("loading", "PDF распознан. Идет сбор цен по позициям...", {
+          stage: "pricing",
+          parsedItems: parsedProject.items?.length || 0,
+          startedAt: prev?.[systemId]?.startedAt || new Date().toISOString(),
+        }),
+      }));
+      const preferredVendor =
+        parsedProject.systemType === "aps" ? inferApsProjectVendor(parsedProject.items, system.vendor) || system.vendor : system.vendor;
+      const initialRequests = buildApsProjectPriceRequests(
+        parsedProject.items,
+        preferredVendor,
+        parsedProject.systemType || system.type
+      );
+      const { priceSnapshot, fallbackNotice } = await loadApsProjectPrices(initialRequests, {
+        signal: taskSignal,
+        onProgress: (progress) => {
+          if (isApsImportTaskCancelled(systemId, taskToken)) return;
+          setApsImportStatuses((prev) => ({
+            ...prev,
+            [systemId]: buildApsImportStatus(
+              "loading",
+              `PDF \u0440\u0430\u0441\u043f\u043e\u0437\u043d\u0430\u043d. \u0418\u0434\u0435\u0442 \u0441\u0431\u043e\u0440 \u0446\u0435\u043d \u043f\u043e \u043f\u043e\u0437\u0438\u0446\u0438\u044f\u043c... \u0411\u0430\u0442\u0447 ${progress.completedBatches}/${progress.totalBatches}, \u043f\u043e\u0437\u0438\u0446\u0438\u0439 ${progress.completedRequests}/${progress.totalRequests}.`,
+              {
+                stage: "pricing",
+                parsedItems: parsedProject.items?.length || 0,
+                completedBatches: progress.completedBatches,
+                totalBatches: progress.totalBatches,
+                completedRequests: progress.completedRequests,
+                totalRequests: progress.totalRequests,
+                startedAt: prev?.[systemId]?.startedAt || new Date().toISOString(),
+              }
+            ),
+          }));
+        },
+      });
+      if (isApsImportTaskCancelled(systemId, taskToken)) return;
+      const initialSnapshot = buildApsProjectSnapshot({
         fileName: file.name,
         parsedProject,
-        requests,
+        requests: initialRequests,
         priceSnapshot,
         objectData,
-        vendorName: system.vendor,
+        vendorName: preferredVendor,
+        systemType: parsedProject.systemType || system.type,
       });
 
-      setApsProjectSnapshots((prev) => ({ ...prev, [systemId]: snapshot }));
+      let resolvedSnapshot = initialSnapshot;
+      let resolvedFallbackNotice = fallbackNotice;
+      const resolvedVendor = initialSnapshot.detectedVendor || initialSnapshot.vendorName || preferredVendor;
+
+      if ((parsedProject.systemType || system.type) === "aps" && resolvedVendor && resolvedVendor !== preferredVendor) {
+        const vendorRequests = buildApsProjectPriceRequests(
+          parsedProject.items,
+          resolvedVendor,
+          parsedProject.systemType || system.type
+        );
+        const vendorPricing = await loadApsProjectPrices(vendorRequests, {
+          signal: taskSignal,
+          onProgress: (progress) => {
+            if (isApsImportTaskCancelled(systemId, taskToken)) return;
+            setApsImportStatuses((prev) => ({
+              ...prev,
+              [systemId]: buildApsImportStatus(
+                "loading",
+                `\u0423\u0442\u043e\u0447\u043d\u0435\u043d \u0432\u0435\u043d\u0434\u043e\u0440: ${resolvedVendor}. \u0418\u0434\u0435\u0442 \u0441\u0431\u043e\u0440 \u0446\u0435\u043d \u043f\u043e \u043f\u043e\u0437\u0438\u0446\u0438\u044f\u043c... \u0411\u0430\u0442\u0447 ${progress.completedBatches}/${progress.totalBatches}, \u043f\u043e\u0437\u0438\u0446\u0438\u0439 ${progress.completedRequests}/${progress.totalRequests}.`,
+                {
+                  stage: "pricing",
+                  parsedItems: parsedProject.items?.length || 0,
+                  completedBatches: progress.completedBatches,
+                  totalBatches: progress.totalBatches,
+                  completedRequests: progress.completedRequests,
+                  totalRequests: progress.totalRequests,
+                  startedAt: prev?.[systemId]?.startedAt || new Date().toISOString(),
+                }
+              ),
+            }));
+          },
+        });
+        if (isApsImportTaskCancelled(systemId, taskToken)) return;
+        resolvedFallbackNotice = vendorPricing.fallbackNotice || fallbackNotice;
+        resolvedSnapshot = buildApsProjectSnapshot({
+          fileName: file.name,
+          parsedProject,
+          requests: vendorRequests,
+          priceSnapshot: vendorPricing.priceSnapshot,
+          objectData,
+          vendorName: resolvedVendor,
+          systemType: parsedProject.systemType || system.type,
+        });
+      }
+
+      setApsProjectSnapshots((prev) => ({ ...prev, [systemId]: resolvedSnapshot }));
       setSystems((prev) =>
         prev.map((item) =>
           item.id === systemId
             ? {
                 ...item,
-                vendor: snapshot.detectedVendor || item.vendor,
-                baseVendor: snapshot.detectedVendor || item.baseVendor || item.vendor,
+                vendor: resolvedSnapshot.detectedVendor || resolvedSnapshot.vendorName || item.vendor,
+                baseVendor: resolvedSnapshot.detectedVendor || resolvedSnapshot.vendorName || item.baseVendor || item.vendor,
               }
             : item
         )
       );
+      if (isApsImportTaskCancelled(systemId, taskToken)) return;
       setApsImportStatuses((prev) => ({
         ...prev,
-        [systemId]: {
-          state: "success",
-          message: `Позиции в спецификации: ${snapshot.items.length}. С ценой от поставщиков: ${snapshot.sourceStats.itemsWithSupplierPrice}. Без цены: ${snapshot.sourceStats.itemsWithoutPrice}.`,
-        },
-      }));
-    } catch (error) {
-      setApsImportStatuses((prev) => ({
-        ...prev,
-        [systemId]: {
-          state: "error",
-          message: error?.message || "Не удалось обработать PDF-проект.",
-        },
-      }));
-      throw error;
-    }
-  };
+        [systemId]: buildApsImportStatus(
+          resolvedFallbackNotice ? "warning" : "success",
+          resolvedFallbackNotice
+            ? `PDF \u0440\u0430\u0441\u043f\u043e\u0437\u043d\u0430\u043d, \u043d\u043e \u0441\u0431\u043e\u0440 \u0446\u0435\u043d \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u043b\u0441\u044f \u0432 fallback-\u0440\u0435\u0436\u0438\u043c\u0435. ${resolvedFallbackNotice}`
+            : `\u041f\u043e\u0437\u0438\u0446\u0438\u0439 \u0432 \u0441\u043f\u0435\u0446\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u0438: ${resolvedSnapshot.items.length}. \u0421 \u0446\u0435\u043d\u043e\u0439 \u043e\u0442 \u043f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a\u043e\u0432: ${resolvedSnapshot.sourceStats.itemsWithSupplierPrice}. \u0411\u0435\u0437 \u0446\u0435\u043d\u044b: ${resolvedSnapshot.sourceStats.itemsWithoutPrice}.`,
+          {
+            stage: "done",
+            parsedItems: resolvedSnapshot.items.length,
+          }
+        ),
+        }));
+      } catch (error) {
+      if (isApsImportTaskCancelled(systemId, taskToken) || isAbortLikeError(error)) return;
+        setApsImportStatuses((prev) => ({
+          ...prev,
+          [systemId]: buildApsImportStatus("error", error?.message || "Не удалось обработать PDF-проект.", {
+          stage: prev?.[systemId]?.stage || "parsing",
+          startedAt: prev?.[systemId]?.startedAt || new Date().toISOString(),
+        }),
+        }));
+        throw error;
+      } finally {
+        finishApsImportTask(systemId, taskToken);
+      }
+    };
 
   const clearApsProjectPdf = (systemId) => {
+    const task = apsImportTasksRef.current.get(systemId);
+    if (task?.controller) {
+      task.controller.abort();
+    }
+    apsImportTasksRef.current.delete(systemId);
+    setVendorComparisonsBySystem((prev) => removeById(prev, systemId));
     setApsProjectSnapshots((prev) => removeById(prev, systemId));
     setApsImportStatuses((prev) => removeById(prev, systemId));
   };
@@ -653,6 +1213,7 @@ export default function useEstimate() {
 
   useEffect(() => {
     const systemIds = new Set(systems.map((item) => String(item.id)));
+    setVendorComparisonsBySystem((prev) => Object.fromEntries(Object.entries(prev).filter(([id]) => systemIds.has(String(id)))));
     setApsProjectSnapshots((prev) => Object.fromEntries(Object.entries(prev).filter(([id]) => systemIds.has(String(id)))));
     setApsImportStatuses((prev) => Object.fromEntries(Object.entries(prev).filter(([id]) => systemIds.has(String(id)))));
   }, [systems]);
@@ -679,6 +1240,9 @@ export default function useEstimate() {
 
     const timeout = setTimeout(async () => {
       const changed = systems.filter((system) => {
+        if (apsProjectSnapshots?.[system.id]?.active) {
+          return false;
+        }
         const signature = [
           system.type,
           system.vendor,
@@ -703,11 +1267,7 @@ export default function useEstimate() {
             if (cancelled) return;
             setVendorPriceSnapshots((prev) => ({
               ...prev,
-              [system.id]: {
-                fetchedAt: new Date().toISOString(),
-                entries: [],
-                error: error.message,
-              },
+              [system.id]: buildVendorPricingFallbackSnapshot(prev?.[system.id], error),
             }));
           }
         })
@@ -718,7 +1278,206 @@ export default function useEstimate() {
       cancelled = true;
       clearTimeout(timeout);
     };
-  }, [systems]);
+  }, [systems, apsProjectSnapshots]);
+
+  const compareVendorPrices = async (systemId) => {
+    const system = systems.find((item) => item.id === systemId);
+    if (!system) {
+      throw new Error("Система для сравнения цен не найдена.");
+    }
+
+    const apsSnapshot = apsProjectSnapshots?.[systemId];
+    const rawCurrentVendor = apsSnapshot?.detectedVendor || apsSnapshot?.vendorName || system.vendor;
+    const vendorPool = (VENDORS[system.type] || []).filter((vendor) => vendor !== "Базовый");
+    const currentVendor = rawCurrentVendor === "Базовый" ? vendorPool[0] || rawCurrentVendor : rawCurrentVendor;
+    const candidateVendors = [currentVendor, ...vendorPool.filter((vendor) => vendor !== currentVendor)].slice(0, 3);
+
+    if (candidateVendors.length < 2) {
+      setVendorComparisonsBySystem((prev) => ({
+        ...prev,
+        [systemId]: {
+          state: "error",
+          message: "Для этой системы пока недостаточно альтернативных вендоров для сравнения.",
+          currentVendor,
+          rows: [],
+        },
+      }));
+      return null;
+    }
+
+    setVendorComparisonsBySystem((prev) => ({
+      ...prev,
+      [systemId]: {
+        ...(prev?.[systemId] || {}),
+        state: "loading",
+        message: "Идет сбор цен и пересчет системы по текущему вендору и двум альтернативам...",
+        currentVendor,
+        rows: [],
+      },
+    }));
+
+    try {
+      const snapshots = await Promise.all(
+        candidateVendors.map(async (vendor) => {
+          if (apsSnapshot?.active) {
+            const originalItems =
+              Array.isArray(apsSnapshot.originalItems) && apsSnapshot.originalItems.length ? apsSnapshot.originalItems : apsSnapshot.items || [];
+            const parsedProject = {
+              parsedAt: apsSnapshot.parsedAt || new Date().toISOString(),
+              gostStandard: apsSnapshot.gostStandard || "ГОСТ 21.110-2013",
+              linesScanned: apsSnapshot.linesScanned || 0,
+              pages: apsSnapshot.pages || 0,
+              items: originalItems,
+              metrics: apsSnapshot.metrics || {},
+              unrecognizedRows: apsSnapshot.unrecognizedRows || [],
+              parseQuality: apsSnapshot.parseQuality || {},
+              aiQuality: apsSnapshot.aiQuality || null,
+              systemType: apsSnapshot.systemType || system.type,
+            };
+            const requests = buildApsProjectPriceRequests(originalItems, vendor, parsedProject.systemType || system.type);
+            const priceSnapshot = await fetchPricesByRequests(requests);
+            let vendorSpecificApsSnapshot = buildApsProjectSnapshot({
+              fileName: apsSnapshot.fileName || "aps-project.pdf",
+              parsedProject,
+              requests,
+              priceSnapshot,
+              objectData,
+              vendorName: vendor,
+              systemType: parsedProject.systemType || system.type,
+            });
+
+            if (apsSnapshot.itemOverrides && Object.keys(apsSnapshot.itemOverrides).length) {
+              vendorSpecificApsSnapshot = recalculateApsProjectSnapshot(vendorSpecificApsSnapshot, apsSnapshot.itemOverrides, objectData);
+            }
+
+            return [
+              vendor,
+              {
+                priceSnapshot,
+                apsSnapshot: vendorSpecificApsSnapshot,
+              },
+            ];
+          }
+
+          const canReuseCurrentSnapshot =
+            vendor === currentVendor &&
+            vendorPriceSnapshots?.[systemId]?.entries?.length &&
+            String(vendorPriceSnapshots?.[systemId]?.vendorName || system.vendor || currentVendor) === String(vendor);
+
+          if (canReuseCurrentSnapshot) {
+            return [
+              vendor,
+              {
+                priceSnapshot: vendorPriceSnapshots[systemId],
+                apsSnapshot: null,
+              },
+            ];
+          }
+
+          const snapshot = await fetchVendorPrices(system.type, vendor);
+          return [
+            vendor,
+            {
+              priceSnapshot: snapshot,
+              apsSnapshot: null,
+            },
+          ];
+        })
+      );
+
+      const snapshotMap = Object.fromEntries(snapshots);
+      if (snapshotMap[currentVendor]?.priceSnapshot) {
+        setVendorPriceSnapshots((prev) => ({
+          ...prev,
+          [systemId]: snapshotMap[currentVendor].priceSnapshot,
+        }));
+      }
+
+      const rows = candidateVendors.map((vendor) => {
+        const systemIndex = systems.findIndex((item) => item.id === systemId);
+        const comparisonSystems = systems.map((item) =>
+          item.id === systemId
+            ? {
+                ...item,
+                vendor,
+                baseVendor: vendor,
+                customVendorIndex: item.customVendorIndex || 1,
+              }
+            : item
+        );
+
+        const comparisonSnapshots = {
+          ...vendorPriceSnapshots,
+          [systemId]: snapshotMap[vendor]?.priceSnapshot || null,
+        };
+        const comparisonProjectSnapshots = {
+          ...apsProjectSnapshots,
+          [systemId]: snapshotMap[vendor]?.apsSnapshot || apsProjectSnapshots?.[systemId] || null,
+        };
+
+        const { systemsDetailed } = calculateEstimateEngine(
+          comparisonSystems,
+          zones,
+          budget,
+          effectiveObjectData,
+          comparisonSnapshots,
+          comparisonProjectSnapshots,
+          technicalSolution.appliedAnswers,
+          technicalSolution.appliedPhotoAnalyses
+        );
+
+        const comparisonResult = systemsDetailed[systemIndex] || {};
+        const snapshot = snapshotMap[vendor]?.priceSnapshot;
+        const marketMetrics = summarizePriceSnapshot(snapshot);
+
+        return {
+          vendor,
+          role: vendor === currentVendor ? "Текущий" : "Альтернатива",
+          isCurrent: vendor === currentVendor,
+          unitPrice: toNumber(comparisonResult?.equipmentData?.unitPrice, 0),
+          equipmentCost: toNumber(comparisonResult?.equipmentCost, 0),
+          materialCost: toNumber(comparisonResult?.materialCost, 0),
+          workTotal: toNumber(comparisonResult?.workTotal, 0),
+          designTotal: toNumber(comparisonResult?.designTotal, 0),
+          total: toNumber(comparisonResult?.total, 0),
+          checkedSourceCount: marketMetrics.checkedSourceCount,
+          pricedSourceCount: marketMetrics.pricedSourceCount,
+        };
+      });
+
+      const nextComparison = {
+        state: "success",
+        generatedAt: new Date().toISOString(),
+        currentVendor,
+        systemId,
+        systemType: system.type,
+        systemName: SYSTEM_TYPES.find((item) => item.code === system.type)?.name || system.type,
+        rows,
+      };
+
+      setVendorComparisonsBySystem((prev) => ({
+        ...prev,
+        [systemId]: nextComparison,
+      }));
+
+      return nextComparison;
+    } catch (error) {
+      setVendorComparisonsBySystem((prev) => ({
+        ...prev,
+        [systemId]: {
+          state: "error",
+          message: error?.message || "Не удалось построить сравнение цен по вендорам.",
+          currentVendor,
+          rows: [],
+        },
+      }));
+      throw error;
+    }
+  };
+
+  const clearVendorComparison = (systemId) => {
+    setVendorComparisonsBySystem((prev) => removeById(prev, systemId));
+  };
 
   const exportEstimate = async () => {
     try {
@@ -731,7 +1490,7 @@ export default function useEstimate() {
             systemId: system.id,
             systemType: system.type,
             systemName: SYSTEM_TYPES.find((item) => item.code === system.type)?.name || system.type,
-            vendor: system.vendor,
+            vendor: snapshot?.detectedVendor || snapshot?.vendorName || system.vendor,
             fileName: snapshot.fileName || "",
             gostStandard: snapshot.gostStandard || "",
             recognitionRate: snapshot.sourceStats?.recognitionRate || 0,
@@ -746,13 +1505,57 @@ export default function useEstimate() {
         recalculatedArea,
         systemResults,
         totals,
+        travelEstimate: normalizedTravelEstimate,
         projectRisks,
         apsProjectExports,
+        vendorComparisons: Object.values(vendorComparisonsBySystem || {}).filter((item) => item?.state === "success" && item?.rows?.length),
       };
       const { exportEstimatePptx } = await import("../lib/pptxExport");
       await exportEstimatePptx(payload);
     } catch (error) {
       window.alert(`Ошибка экспорта PPTX: ${error?.message || "неизвестная ошибка"}`);
+      throw error;
+    }
+  };
+
+  const generateProjectPlan = async (format = "pptx") => {
+    try {
+      const objectTypeLabel = OBJECT_TYPES.find((item) => item.value === objectData.objectType)?.label || objectData.objectType;
+      const apsProjectExports = systems
+        .map((system) => {
+          const snapshot = apsProjectSnapshots?.[system.id];
+          if (!snapshot?.active) return null;
+          return {
+            systemId: system.id,
+            systemType: system.type,
+            systemName: SYSTEM_TYPES.find((item) => item.code === system.type)?.name || system.type,
+            vendor: snapshot?.detectedVendor || snapshot?.vendorName || system.vendor,
+            fileName: snapshot.fileName || "",
+            gostStandard: snapshot.gostStandard || "",
+            recognitionRate: snapshot.sourceStats?.recognitionRate || 0,
+            items: Array.isArray(snapshot.items) ? snapshot.items : [],
+          };
+        })
+        .filter(Boolean);
+
+      const payload = {
+        objectData: { ...effectiveObjectData, objectTypeLabel },
+        budget,
+        zones,
+        recalculatedArea,
+        systemResults,
+        totals,
+        travelEstimate: normalizedTravelEstimate,
+        projectRisks,
+        apsProjectExports,
+        technicalRecommendations,
+        vendorComparisons: Object.values(vendorComparisonsBySystem || {}).filter((item) => item?.state === "success" && item?.rows?.length),
+      };
+
+      const { exportProjectPlan } = await import("../lib/projectPlanExport");
+      await exportProjectPlan(payload, format);
+    } catch (error) {
+      window.alert(`Ошибка генерации плана проекта: ${error?.message || "неизвестная ошибка"}`);
       throw error;
     }
   };
@@ -783,6 +1586,118 @@ export default function useEstimate() {
     return true;
   };
 
+  const exportAllSystemsSpecification = () => {
+    return downloadAllSystemsSpecificationExcel({
+      objectData: effectiveObjectData,
+      systems,
+      systemResults,
+      technicalRecommendations,
+      zones,
+    });
+  };
+
+  const exportProjectPassport = async () => {
+    try {
+      await downloadProjectPassport({
+        objectData,
+        zones,
+        systems,
+        budget,
+        normativeRequirementsApplied,
+        zonePreset,
+        lockedZoneIds,
+        addressVerification,
+        travelEstimate,
+        technicalSolution,
+        apsProjectSnapshots,
+        vendorPriceSnapshots,
+        vendorComparisonsBySystem,
+      });
+      return true;
+    } catch (error) {
+      window.alert(`Ошибка выгрузки паспорта проекта: ${error?.message || "неизвестная ошибка"}`);
+      return false;
+    }
+  };
+
+  const exportAiSurveyChecklist = async () => {
+    try {
+      await exportAiSurveyChecklistDoc({
+        objectData: effectiveObjectData,
+        aiSurveyPlan,
+        systems,
+      });
+      return true;
+    } catch (error) {
+      window.alert(`Ошибка выгрузки чеклиста: ${error?.message || "неизвестная ошибка"}`);
+      return false;
+    }
+  };
+
+  const importProjectPassport = async (file) => {
+    if (!file) return false;
+
+    try {
+      const imported = await readProjectPassport(file);
+      const nextObjectData = {
+        ...createProjectIdentity(),
+        ...(imported?.objectData || {}),
+      };
+      const nextSystems = Array.isArray(imported?.systems) && imported.systems.length ? imported.systems : systems;
+      const nextZones = Array.isArray(imported?.zones) && imported.zones.length ? imported.zones : zones;
+      const nextBudget = imported?.budget && typeof imported.budget === "object" ? imported.budget : budget;
+      const nextTechnicalSolution =
+        imported?.technicalSolution && typeof imported.technicalSolution === "object"
+          ? imported.technicalSolution
+          : {
+              surveyStartedAt: null,
+              answers: {},
+              photoAnalyses: {},
+              appliedAnswers: {},
+              appliedPhotoAnalyses: {},
+              appliedAt: null,
+              specOverrides: {},
+            };
+      const nextAddressVerification =
+        imported?.addressVerification && typeof imported.addressVerification === "object"
+          ? imported.addressVerification
+          : {
+              state: "idle",
+              message: "Адрес загружен из паспорта проекта.",
+              result: null,
+            };
+      const nextTravelEstimate = imported?.travelEstimate
+        ? recalculateTravelEstimateDraft(imported.travelEstimate, nextSystems.length)
+        : buildInitialTravelEstimate([], nextSystems.length);
+
+      setObjectData({
+        ...nextObjectData,
+        regionCoef: getRegionCoef(nextObjectData.regionName || DEFAULT_REGION_NAME),
+      });
+      setZones(nextZones);
+      setSystems(nextSystems);
+      setBudget(nextBudget);
+      setNormativeRequirementsApplied(imported?.normativeRequirementsApplied !== false);
+      setZonePreset(imported?.zonePreset || "business_center");
+      setLockedZoneIds(Array.isArray(imported?.lockedZoneIds) ? imported.lockedZoneIds : []);
+      setAddressVerification(nextAddressVerification);
+      setTravelEstimate(nextTravelEstimate);
+      setTechnicalSolution(nextTechnicalSolution);
+      setVendorPriceSnapshots(imported?.vendorPriceSnapshots && typeof imported.vendorPriceSnapshots === "object" ? imported.vendorPriceSnapshots : {});
+      setVendorComparisonsBySystem(
+        imported?.vendorComparisonsBySystem && typeof imported.vendorComparisonsBySystem === "object" ? imported.vendorComparisonsBySystem : {}
+      );
+      setVendorPricingProgressBySystem({});
+      setApsProjectSnapshots(imported?.apsProjectSnapshots && typeof imported.apsProjectSnapshots === "object" ? imported.apsProjectSnapshots : {});
+      setApsImportStatuses({});
+      setStep(0);
+      return true;
+    } catch (error) {
+      window.alert(`Ошибка загрузки паспорта проекта: ${error?.message || "неизвестная ошибка"}`);
+      return false;
+    }
+  };
+
   const startAiSurvey = () => {
     if (!aiSurveyPlan.readiness.isReady) return false;
     setTechnicalSolution((prev) => ({
@@ -808,6 +1723,15 @@ export default function useEstimate() {
         answers: nextAnswers,
       };
     });
+  };
+
+  const autoCalculateAiSurveyAnswer = (questionId) => {
+    const question = (aiSurveyPlan?.allQuestions || []).find((item) => item.id === questionId);
+    if (!question?.autoCalculate) return null;
+    const nextValue = getAutoCalculatedSurveyAnswer(question);
+    if (nextValue === undefined || nextValue === null) return null;
+    updateAiSurveyAnswer(questionId, nextValue);
+    return nextValue;
   };
 
   const analyzeAiSurveyPhoto = async (prompt, fileInput) => {
@@ -863,6 +1787,7 @@ export default function useEstimate() {
           systems,
           objectData,
         });
+        const recognizedSystems = Array.isArray(aggregatedPlanRecognition?.systems) ? aggregatedPlanRecognition.systems : [];
 
         const acceptedFiles = perFileResults.filter((item) => item?.accepted !== false);
         result = {
@@ -871,14 +1796,14 @@ export default function useEstimate() {
             acceptedFiles.length > 0
               ? Number(
                   (
-                    acceptedFiles.reduce((sum, item) => sum + num(item?.confidence, 0), 0) /
+                    acceptedFiles.reduce((sum, item) => sum + toNumber(item?.confidence, 0), 0) /
                     acceptedFiles.length
                   ).toFixed(2)
                 )
               : Number((perFileResults[0]?.confidence || 0.3).toFixed(2)),
           summary:
             acceptedFiles.length > 0
-              ? `Распознано ${aggregatedPlanRecognition.uploadedPlans} план(ов) из ${aggregatedPlanRecognition.expectedFloorCount}. ${aggregatedPlanRecognition.systems
+              ? `Распознано ${aggregatedPlanRecognition.uploadedPlans} план(ов) из ${aggregatedPlanRecognition.expectedFloorCount}. ${recognizedSystems
                   .map((item) => `${item.systemLabel}: ${item.zoneCount} ${item.zoneTerm}`)
                   .join(", ")}.`
               : perFileResults[0]?.summary || "Не удалось принять ни один план эвакуации.",
@@ -886,7 +1811,7 @@ export default function useEstimate() {
             `Загружено планов: ${files.length}`,
             `Принято планов: ${aggregatedPlanRecognition.uploadedPlans}`,
             `Этажей по объекту/зоне: ${aggregatedPlanRecognition.expectedFloorCount}`,
-            ...aggregatedPlanRecognition.systems.map(
+            ...recognizedSystems.map(
               (item) =>
                 `${item.systemLabel}: ${item.zoneCount} ${item.zoneTerm} (${item.detectedZoneCount || 0} по планам, ${
                   item.forecastZoneCount || 0
@@ -909,6 +1834,13 @@ export default function useEstimate() {
             planRecognition: item?.planRecognition || null,
           })),
         };
+      } else if ((prompt.type === "surface_scan" || prompt.type === "corridor_scan") && files.length > 1) {
+        result =
+          aggregateInspectionPhotoResults({
+            prompt,
+            results: perFileResults,
+            files,
+          }) || perFileResults[0];
       }
 
       setTechnicalSolution((prev) => {
@@ -1023,34 +1955,8 @@ export default function useEstimate() {
     return true;
   };
 
-  const loadDemoScenario = () => {
-    const demo = buildDemoScenario();
-
-    setStep(0);
-    setObjectData(demo.objectData);
-    setZones(demo.zones);
-    setSystems(demo.systems);
-    setBudget(demo.budget);
-    setZonePreset("business_center");
-    setLockedZoneIds([]);
-    setVendorPriceSnapshots({});
-    setApsProjectSnapshots({});
-    setApsImportStatuses({});
-    setTechnicalSolution({
-      surveyStartedAt: null,
-      answers: {},
-      photoAnalyses: {},
-      appliedAnswers: {},
-      appliedPhotoAnalyses: {},
-      appliedAt: null,
-      specOverrides: {},
-    });
-    setAddressVerification({
-      state: "idle",
-      message: "В демо-режиме онлайн-проверка адреса отключена. Используйте готовый сценарий для оценки логики платформы.",
-      result: null,
-    });
-  };
+  const applyNormativeRequirements = () => setNormativeRequirementsApplied(true);
+  const excludeNormativeRequirements = () => setNormativeRequirementsApplied(false);
 
   return {
     step,
@@ -1060,6 +1966,7 @@ export default function useEstimate() {
     appliedSurveyAreaRefinement,
     draftSurveyAreaRefinement,
     addressVerification,
+    travelEstimate: normalizedTravelEstimate,
     zones,
     systems,
     budget,
@@ -1067,6 +1974,10 @@ export default function useEstimate() {
     setZonePreset,
     lockedZoneIds,
     vendorPriceSnapshots,
+    vendorPricingProgressBySystem,
+    vendorComparisonsBySystem,
+    normativeProfile,
+    normativeRequirementsApplied,
     apsProjectSnapshots,
     apsImportStatuses,
     protectedAreaMeta,
@@ -1084,6 +1995,10 @@ export default function useEstimate() {
     VENDOR_EQUIPMENT,
     updateObject,
     verifyObjectAddress,
+    updateTravelField,
+    setTravelEstimateEnabled,
+    runTravelEstimate,
+    resetTravelEstimate,
     updateZone,
     addZone,
     removeZone,
@@ -1097,23 +2012,34 @@ export default function useEstimate() {
     removeSystem,
     updateSystemEquipmentProfile,
     updateBudget,
+    applyNormativeRequirements,
+    excludeNormativeRequirements,
     refreshVendorPricing,
+    refreshAllVendorPricing,
+    compareVendorPrices,
+    clearVendorComparison,
     importApsProjectPdf,
+    cancelApsProjectPdfImport,
     clearApsProjectPdf,
     updateApsProjectItem,
     addApsProjectItem,
     removeApsProjectItemById,
     startAiSurvey,
     updateAiSurveyAnswer,
+    autoCalculateAiSurveyAnswer,
     analyzeAiSurveyPhoto,
     refreshAiSurveyPhoto,
     applyAiSurveyData,
     resetAiSurveySection,
-    loadDemoScenario,
     updateTechnicalSpecOverride,
     exportEstimate,
+    generateProjectPlan,
     exportEstimateCsv,
     exportSystemSpecification,
+    exportAllSystemsSpecification,
+    exportProjectPassport,
+    importProjectPassport,
+    exportAiSurveyChecklist,
     setZones,
     canAddMoreSystems: systems.length < SYSTEM_TYPES.length,
   };

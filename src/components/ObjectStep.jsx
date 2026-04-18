@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, Lock, Unlock, Search, ClipboardList, Camera, CheckCircle2, RefreshCcw, X } from "lucide-react";
+import { Plus, Trash2, Lock, Unlock, Search, ClipboardList, Camera, CheckCircle2, RefreshCcw, X, Download } from "lucide-react";
 import { OBJECT_TYPES, SYSTEM_TYPES } from "../config/estimateConfig";
 import { BUILDING_STATUS_OPTIONS } from "../config/costModelConfig";
 import { searchRegions } from "../config/regionsConfig";
@@ -7,6 +7,13 @@ import { ZONE_PRESET_DETAILS, ZONE_PRESETS, ZONE_TYPES } from "../config/zonesCo
 import { hasProjectForSystem } from "../lib/designSurveyEngine";
 import { getZonePercentSum, normalizeZoneAreas } from "../lib/zoneEngine";
 import { num, toNumber } from "../lib/estimate";
+
+const ASSET_BASE = import.meta.env.BASE_URL || "/";
+
+function assetUrl(path) {
+  const normalizedBase = ASSET_BASE.endsWith("/") ? ASSET_BASE : `${ASSET_BASE}/`;
+  return `${normalizedBase}${String(path).replace(/^\/+/, "")}`;
+}
 
 function makeFallbackImage(topColor, bottomColor, accentColor) {
   const svg = `
@@ -32,12 +39,12 @@ function makeFallbackImage(topColor, bottomColor, accentColor) {
 }
 
 const OBJECT_TYPE_IMAGES = {
-  production: "/assets/object-types/production.jpg",
-  warehouse: "/assets/object-types/warehouse.jpg",
-  public: "/assets/object-types/public.jpg",
-  residential: "/assets/object-types/residential.jpg",
-  transport: "/assets/object-types/transport.jpg",
-  energy: "/assets/object-types/energy.jpg",
+  production: assetUrl("assets/object-types/production.jpg"),
+  warehouse: assetUrl("assets/object-types/warehouse.jpg"),
+  public: assetUrl("assets/object-types/public.jpg"),
+  residential: assetUrl("assets/object-types/residential.jpg"),
+  transport: assetUrl("assets/object-types/transport.jpg"),
+  energy: assetUrl("assets/object-types/energy.jpg"),
 };
 
 const OBJECT_TYPE_IMAGE_FALLBACKS = {
@@ -81,7 +88,7 @@ function renderChecklistInput(question, value, onChange, options = {}) {
             value={value ?? ""}
             placeholder={question.placeholder || "Введите значение"}
             disabled={disabled}
-            onChange={(event) => onChange(toNumber(event.target.value))}
+            onChange={(event) => onChange(event.target.value === "" ? undefined : toNumber(event.target.value))}
           />
         </div>
       );
@@ -94,7 +101,7 @@ function renderChecklistInput(question, value, onChange, options = {}) {
         value={value ?? ""}
         placeholder={question.placeholder || "Введите значение"}
         disabled={disabled}
-        onChange={(event) => onChange(toNumber(event.target.value))}
+        onChange={(event) => onChange(event.target.value === "" ? undefined : toNumber(event.target.value))}
       />
     );
   }
@@ -123,6 +130,296 @@ function renderChecklistInput(question, value, onChange, options = {}) {
 
   return <input value={value ?? ""} disabled={disabled} onChange={(event) => onChange(event.target.value)} />;
 }
+
+function renderFieldLabelWithTooltip(label, title, body) {
+  return (
+    <div className="label-with-tooltip">
+      <label>{label}</label>
+      <span className="label-tooltip-help" tabIndex={0} role="button" title={title} aria-label={title}>
+        ?
+      </span>
+      <div className="label-tooltip-popover" role="tooltip">
+        <p>
+          <strong>{label}:</strong> {body}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function getQuestionHelpByPattern(question, systemLabel) {
+  const systemSuffix = systemLabel ? ` по системе ${systemLabel}` : "";
+  const id = String(question?.id || "");
+
+  if (id === "operational-finish-sensitive") {
+    return {
+      title: "Монтаж без повреждения отделки",
+      description: "Нужно указать, можно ли вести монтаж без вскрытия чистовой отделки и заметных строительных следов.",
+      impact:
+        "Ответ влияет на выбор скрытых способов прокладки, состав крепежа, объем восстановительных работ и коэффициенты трудоемкости.",
+    };
+  }
+
+  if (id === "operational-work-window") {
+    return {
+      title: "Окна производства работ",
+      description: "Выберите реальные интервалы допуска: дневная смена, ночь, выходные или поэтапная работа по зонам.",
+      impact:
+        "Ответ влияет на долю ночных и выходных работ, календарный план, стоимость СМР и длительность выполнения.",
+    };
+  }
+
+  if (id === "object-low-current-rooms") {
+    return {
+      title: "Слаботочные помещения и узлы связи",
+      description: "Укажите число помещений, где реально можно разместить шкафы, кроссы, серверы или точки консолидации.",
+      impact:
+        `Ответ влияет на архитектуру размещения оборудования, длину магистралей, число шкафов/узлов и управленческий контур${systemSuffix}.`,
+    };
+  }
+
+  if (id === "object-riser-access") {
+    return {
+      title: "Доступ к стоякам и вертикальным трассам",
+      description: "Подтвердите, есть ли доступ к шахтам, стоякам и вертикальным переходам между этажами.",
+      impact:
+        "Ответ влияет на вертикальные трассы, расход кабеля, состав проходок, объем бурения и трудоемкость монтажа.",
+    };
+  }
+
+  if (id === "object-cable-reserve") {
+    return {
+      title: "Дополнительный запас кабеля",
+      description: "Укажите фактический резерв, который нужно закладывать сверх расчетной длины трасс.",
+      impact:
+        `Ответ напрямую влияет на количество кабеля, материалов и итоговую стоимость спецификации${systemSuffix}.`,
+    };
+  }
+
+  if (id.endsWith("-wall-material")) {
+    return {
+      title: "Материал стен",
+      description: "Выберите материалы стен в зоне: по ним определяется способ крепления, сверление и допустимые трассы.",
+      impact:
+        "Ответ влияет на крепеж, бурение, расход расходных материалов, трудоемкость монтажа и стоимость работ по зоне.",
+    };
+  }
+
+  if (id.endsWith("-ceiling-type")) {
+    return {
+      title: "Тип потолка",
+      description: "Укажите фактический тип потолка в зоне: открытый, армстронг, ГКЛ, грильято, монолит или смешанный.",
+      impact:
+        "Ответ влияет на способ крепления оборудования, выбор трассировки, состав подвесов и монтажных материалов.",
+    };
+  }
+
+  if (id.endsWith("-ceiling-height")) {
+    return {
+      title: "Высота помещения",
+      description: "Нужна фактическая высота рабочей зоны, а не паспортная высота здания в целом.",
+      impact:
+        "Ответ влияет на длину кабельных спусков, коэффициенты высотных работ, выбор лестниц/тур и трудоемкость монтажа.",
+    };
+  }
+
+  if (id.endsWith("-mount-height-limit-enabled")) {
+    return {
+      title: "Ограничение по высоте сложного монтажа",
+      description: "Отметьте, есть ли в зоне локальные участки, где монтаж выполняется на повышенной высоте или в сложном доступе.",
+      impact:
+        "Ответ включает расчет высотных коэффициентов, подъемных средств и дополнительных трудозатрат по зоне.",
+    };
+  }
+
+  if (id.endsWith("-mount-height-limit")) {
+    return {
+      title: "Максимальная высота сложного монтажа",
+      description: "Укажите именно ту высоту, начиная с которой монтаж становится сложным и требует специальных условий.",
+      impact:
+        "Ответ влияет на коэффициенты высотных работ, применение тур/подмостей и стоимость монтажных операций.",
+    };
+  }
+
+  if (id.endsWith("-finish-limitations")) {
+    return {
+      title: "Ограничения в зоне",
+      description: "Выберите реальные ограничения: чистовая отделка, работа рядом с людьми, ночной режим или ограниченный доступ.",
+      impact:
+        "Ответ влияет на организацию работ, коэффициенты трудоемкости, допустимые технологии монтажа и календарный план.",
+    };
+  }
+
+  if (id.endsWith("-corridor-route-method")) {
+    return {
+      title: "Способ прокладки кабеля",
+      description: "Укажите, каким способом трасса реально будет вестись в зоне: в лотке, трубе, коробе, за потолком или под фальшполом.",
+      impact:
+        `Ответ влияет на состав кабеленесущих систем, метраж материалов, монтажные узлы и стоимость трасс${systemSuffix}.`,
+    };
+  }
+
+  if (id.endsWith("-raised-floor-present")) {
+    return {
+      title: "Фальшпол",
+      description: "Подтвердите наличие фальшпола как доступного маршрута прокладки, а не просто конструктивного элемента.",
+      impact:
+        "Ответ влияет на выбор маршрута кабеля, длину трасс, набор материалов и трудоемкость скрытого монтажа.",
+    };
+  }
+
+  if (id.endsWith("-ceiling-void-present")) {
+    return {
+      title: "Запотолочное пространство",
+      description: "Подтвердите, можно ли реально использовать пространство над потолком для прокладки трасс.",
+      impact:
+        "Ответ влияет на трассировку, количество кабеленесущих элементов, расход кабеля и монтажные коэффициенты.",
+    };
+  }
+
+  if (id.endsWith("-tray-routing-present")) {
+    return {
+      title: "Готовые лотки и кабельные трассы",
+      description: "Укажите, есть ли существующие лотки или подготовленные маршруты, которые можно использовать в проекте.",
+      impact:
+        "Ответ влияет на объем новых материалов, трудоемкость монтажа и стоимость прокладки кабельных линий.",
+    };
+  }
+
+  if (id.endsWith("-evacuation-plan")) {
+    return {
+      title: "План эвакуации или планировка",
+      description: "Нужно отметить, удалось ли получить читаемый план зоны для AI-распознавания этажности и планировочных контуров.",
+      impact:
+        "Ответ влияет на автоматический подсчет зон, ЗКСПС/зон оповещения, перепроверку площадей и точность технического решения.",
+    };
+  }
+
+  if (id.includes("-route-complexity")) {
+    return {
+      title: "Ограничения трасс",
+      description: "Выберите реальные факторы, которые усложняют прокладку трасс по системе: скрытая прокладка, длинные вертикали, сложные узлы и пересечения.",
+      impact:
+        `Ответ влияет на трудоемкость, выбор материалов трассировки, коэффициенты СМР и пояснение логики расчета${systemSuffix}.`,
+    };
+  }
+
+  if (id.includes("-integration-count")) {
+    return {
+      title: "Точки интеграции",
+      description: "Укажите количество внешних систем, контроллеров или интерфейсов, с которыми нужно связать эту систему.",
+      impact:
+        `Ответ влияет на подбор серверного/АРМ-контура, ПНР, интеграционные работы и стоимость${systemSuffix}.`,
+    };
+  }
+
+  if (id.includes("-coordination-zones")) {
+    return {
+      title: "Координация по зонам",
+      description: "Укажите число зон, где требуется отдельная увязка оборудования, трасс и шкафов с архитектурой или смежными системами.",
+      impact:
+        "Ответ влияет на объем проектирования, количество увязочных решений и трудоемкость выпуска документации.",
+    };
+  }
+
+  if (id.includes("-reuse-existing-infra")) {
+    return {
+      title: "Использование существующей инфраструктуры",
+      description: "Подтвердите, есть ли линии, шкафы или узлы, которые нужно сохранить и увязать с новым решением.",
+      impact:
+        `Ответ влияет на состав спецификации, объем демонтажа/доработки, количество новых материалов и стоимость${systemSuffix}.`,
+    };
+  }
+
+  if (id.includes("-voice-zones")) {
+    return {
+      title: question.systemType === "aps" ? "Количество ЗКСПС" : "Количество зон оповещения",
+      description:
+        question.systemType === "aps"
+          ? "Это число самостоятельных зон контроля пожарной сигнализации, по которым делится объект и подбирается структура АПС."
+          : "Это число самостоятельных зон оповещения, по которым подбираются линии, усилители и логика управления СОУЭ.",
+      impact:
+        question.systemType === "aps"
+          ? "Ответ влияет на число приборов, линейных модулей, распределение по зонам, материалы и пояснение в логике расчета АПС."
+          : "Ответ влияет на состав оборудования СОУЭ, зональное деление, материалы и стоимость монтажных и пусконаладочных работ.",
+    };
+  }
+
+  if (id.includes("-coverage-demand")) {
+    return {
+      title: "Сценарии видеоконтроля",
+      description: "Отметьте, какие задачи видеоаналитики и наблюдения реально нужны: обзор, лица, номера, периметр или складские ячейки.",
+      impact:
+        "Ответ влияет на подбор камер, разрешение, архив, серверную нагрузку и итоговую стоимость СOT.",
+    };
+  }
+
+  if (id.includes("-access-points")) {
+    return {
+      title: "Точки прохода",
+      description: "Укажите количество дверей, турникетов или иных точек доступа, которые должны контролироваться системой.",
+      impact:
+        "Ответ влияет на число контроллеров, считывателей, замков, блоков питания, кабеля и стоимость СКУД.",
+    };
+  }
+
+  return null;
+}
+
+function getChecklistQuestionHelp(question, systemLabel) {
+  const specificHelp = getQuestionHelpByPattern(question, systemLabel);
+  if (specificHelp) {
+    return specificHelp;
+  }
+  return {
+    title: question.helpTitle || question.label,
+    description:
+      question.helpDescription ||
+      (question.type === "boolean"
+        ? "Нужно выбрать, подтверждается ли это условие на объекте."
+        : question.type === "multiselect"
+          ? "Нужно отметить все варианты, которые реально встречаются на объекте."
+          : question.type === "number"
+            ? "Нужно указать количественное значение по обследуемому объекту."
+            : "Нужно заполнить значение по результатам обследования."),
+    impact:
+      question.helpImpact ||
+      `Ответ влияет на подбор оборудования, материалы, трудоемкость и итоговую логику расчета${systemLabel ? ` по системе ${systemLabel}` : ""}.`,
+  };
+}
+
+function renderChecklistQuestionLabel(question, systemLabel) {
+  const help = getChecklistQuestionHelp(question, systemLabel);
+  return (
+    <div className="label-with-tooltip ai-checklist-question__label">
+      <label>
+        {question.label}
+        {question.aiAutofill ? <span className="ai-inline-mark">AI</span> : null}
+      </label>
+      <span className="label-tooltip-help" tabIndex={0} role="button" title={help.title} aria-label={help.title}>
+        ?
+      </span>
+      <div className="label-tooltip-popover" role="tooltip">
+        <p>
+          <strong>{help.title}:</strong> {help.description}
+        </p>
+        <p>
+          <strong>Влияние на расчет:</strong> {help.impact}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+const ZONE_FIELD_HINTS = {
+  share:
+    "Доля зоны показывает, какую часть защищаемой площади занимает этот участок. Ползунок сразу перераспределяет площадь между зонами, а значит влияет на объем оборудования, длину трасс, число зон/узлов и общий бюджет.",
+  name: "Название зоны нужно для идентификации участка объекта в расчете, в AI-обследовании и в итоговой спецификации.",
+  type: "Тип зоны меняет нормативную плотность оборудования, длину трасс, трудоемкость монтажа и состав ключевого оборудования.",
+  area: "Площадь зоны определяет долю системы в этой части объекта и напрямую влияет на количество устройств, кабеля, материалов и работ.",
+  floors:
+    "Этажность зоны показывает, на сколько этажных уровней распространяется эта зона. Чем больше этажей, тем выше зональность, объем вертикальных трасс, число узлов, шкафов, ЗКСПС/зон и общий объем работ.",
+};
 
 export default function ObjectStep({
   objectData,
@@ -156,11 +453,12 @@ export default function ObjectStep({
   appliedSurveyAreaRefinement,
   startAiSurvey,
   updateAiSurveyAnswer,
+  autoCalculateAiSurveyAnswer,
   analyzeAiSurveyPhoto,
   refreshAiSurveyPhoto,
   applyAiSurveyData,
   resetAiSurveySection,
-  demoMode = false,
+  exportAiSurveyChecklist,
 }) {
   const [regionQuery, setRegionQuery] = useState(objectData.regionName || "");
   const [surveyModalOpen, setSurveyModalOpen] = useState(false);
@@ -208,7 +506,6 @@ export default function ObjectStep({
   }, [surveyModalOpen]);
 
   const handleOpenSurvey = () => {
-    if (demoMode) return;
     const started = technicalSolution?.surveyStartedAt ? true : startAiSurvey();
     if (started) setSurveyModalOpen(true);
   };
@@ -220,6 +517,18 @@ export default function ObjectStep({
 
   const handleSurveyModalClose = () => {
     setSurveyModalOpen(false);
+  };
+
+  const handleShowOnMap = () => {
+    const addressText = String(addressVerification?.result?.verifiedLabel || objectData.address || "").trim();
+    if (!addressText || typeof window === "undefined") return;
+    const lat = addressVerification?.result?.lat;
+    const lon = addressVerification?.result?.lon;
+    const mapUrl =
+      lat && lon
+        ? `https://yandex.ru/maps/?ll=${lon}%2C${lat}&mode=search&pt=${lon},${lat},pm2rdm&text=${encodeURIComponent(addressText)}&z=17`
+        : `https://yandex.ru/maps/?text=${encodeURIComponent(addressText)}`;
+    window.open(mapUrl, "_blank", "noopener,noreferrer,width=1280,height=860");
   };
 
   const handleResetSurveySection = (section) => {
@@ -260,13 +569,20 @@ export default function ObjectStep({
             />
           </div>
           <div className="address-actions">
-            <button className="primary-btn" type="button" onClick={verifyObjectAddress} disabled={demoMode || addressVerification?.state === "loading"}>
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <button className="ghost-btn" style={{ padding: "8px 14px", minHeight: 36 }} type="button" onClick={verifyObjectAddress} disabled={addressVerification?.state === "loading"}>
+                {addressVerification?.state === "loading" ? "Уточнение..." : "Уточнить адрес"}
+              </button>
+              <button className="ghost-btn" style={{ padding: "8px 14px", minHeight: 36 }} type="button" onClick={handleShowOnMap} disabled={!String(objectData.address || "").trim()}>
+                Показать на карте
+              </button>
+            </div>
+            <button className="primary-btn" type="button" onClick={verifyObjectAddress} disabled={addressVerification?.state === "loading"}>
               {addressVerification?.state === "loading" ? "Проверка адреса..." : "Проверить адрес"}
             </button>
             <small className="hint-inline">
               Можно вводить адрес в свободной форме. Алгоритм найдёт его онлайн и приведёт к корректной записи.
             </small>
-            {demoMode ? <small className="hint-inline demo-inline-note">В демо онлайн-проверка адреса отключена.</small> : null}
           </div>
           <div
             className={`address-status ${
@@ -509,7 +825,10 @@ export default function ObjectStep({
                       {isLocked ? "Зафиксирована" : "Свободна"}
                     </button>
                   </div>
-                  <span>{num(zonePercent, 1)}%</span>
+                  <div className="slider-share-meta">
+                    {renderFieldLabelWithTooltip("Доля зоны, %", "Как доля зоны влияет на расчет", ZONE_FIELD_HINTS.share)}
+                    <span>{num(zonePercent, 1)}%</span>
+                  </div>
                 </div>
                 <input
                   type="range"
@@ -523,11 +842,11 @@ export default function ObjectStep({
                 />
                 <div className="zone-grid compact-zone-grid">
                   <div className="input-card">
-                    <label>Название зоны</label>
+                    {renderFieldLabelWithTooltip("Название зоны", "Зачем указывать название зоны", ZONE_FIELD_HINTS.name)}
                     <input value={zone.name} onChange={(event) => updateZone(zone.id, "name", event.target.value)} />
                   </div>
                   <div className="input-card">
-                    <label>Тип зоны</label>
+                    {renderFieldLabelWithTooltip("Тип зоны", "Как тип зоны влияет на расчет", ZONE_FIELD_HINTS.type)}
                     <select value={zone.type} onChange={(event) => updateZone(zone.id, "type", event.target.value)}>
                       {ZONE_TYPES.map((item) => (
                         <option key={item.value} value={item.value}>
@@ -537,11 +856,11 @@ export default function ObjectStep({
                     </select>
                   </div>
                   <div className="input-card">
-                    <label>Площадь, м²</label>
+                    {renderFieldLabelWithTooltip("Площадь, м²", "Как площадь зоны влияет на расчет", ZONE_FIELD_HINTS.area)}
                     <input type="number" value={zone.area} onChange={(event) => updateZone(zone.id, "area", toNumber(event.target.value))} />
                   </div>
                   <div className="input-card">
-                    <label>Этажей</label>
+                    {renderFieldLabelWithTooltip("Этажей", "Как этажность зоны влияет на расчет", ZONE_FIELD_HINTS.floors)}
                     <input type="number" value={zone.floors} onChange={(event) => updateZone(zone.id, "floors", toNumber(event.target.value))} />
                   </div>
                   <div className="action-cell">
@@ -576,14 +895,13 @@ export default function ObjectStep({
         <div className="subpanel-header">
           <div>
             <h3>AI-Техническое решение: обследование объекта</h3>
-            <p>Модуль запускается как отдельное внутреннее окно после заполнения обязательных данных по объекту. Собранная внутри него информация используется и для AI-технического решения, и для более точного расчета стоимости проектирования по системам без проекта.</p>
+            <p>Модуль запускается как отдельное внутреннее окно после заполнения обязательных данных по объекту. Собранная внутри него информация используется и для AI-технического решения, и для более точного расчета стоимости проектирования по системам без проекта. Отдельно он собирает фотографии коридоров и ответы о лотках, фальш-полах и запотолочном пространстве, чтобы учитывать способы прокладки кабеля в техрешении, спецификации и стоимости.</p>
           </div>
-          <button className="primary-btn" type="button" onClick={handleOpenSurvey} disabled={demoMode || !aiSurveyPlan?.readiness?.isReady}>
+          <button className="primary-btn" type="button" onClick={handleOpenSurvey} disabled={!aiSurveyPlan?.readiness?.isReady}>
             <ClipboardList size={16} />
             Начать AI-обследование
           </button>
         </div>
-        {demoMode ? <small className="hint-inline demo-inline-note">В демо AI-обследование отключено, но доступны изменение объекта, зон и бюджета.</small> : null}
 
         <div className="ai-survey-summary-grid">
           <div className="metric-card">
@@ -669,7 +987,13 @@ export default function ObjectStep({
 
         {technicalSolution?.surveyStartedAt ? (
           <div className="calc-explain ai-checklist-footer">
-            <h4>Статус этапа</h4>
+            <div className="ai-checklist-footer__head">
+              <h4>{"\u0421\u0442\u0430\u0442\u0443\u0441 \u044d\u0442\u0430\u043f\u0430"}</h4>
+              <button className="ghost-btn ai-checklist-export-btn" type="button" onClick={exportAiSurveyChecklist}>
+                <Download size={14} />
+                {"\u0412\u044b\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u0447\u0435\u043a\u043b\u0438\u0441\u0442"}
+              </button>
+            </div>
             <div className="ai-summary-list">
               <div>
                 <CheckCircle2 size={16} />
@@ -721,7 +1045,7 @@ export default function ObjectStep({
               <div>
                 <h3>AI-Обследование объекта</h3>
                 <p>
-                  Отдельное внутреннее окно обследования. Данные внутри него сохраняются в течение текущей сессии платформы, даже если вы закроете окно и откроете его снова, а после загрузки влияют и на техническое решение, и на стоимость проектирования.
+                  Отдельное внутреннее окно обследования. Данные внутри него сохраняются в течение текущей сессии платформы, даже если вы закроете окно и откроете его снова, а после загрузки влияют и на техническое решение, и на стоимость проектирования. По фотографиям коридоров AI дополнительно определяет способ прокладки кабеля и учитывает лотки, фальш-полы и запотолочное пространство в последующем расчете.
                 </p>
               </div>
               <button className="ghost-btn ai-survey-modal__close" type="button" onClick={handleSurveyModalClose}>
@@ -752,10 +1076,10 @@ export default function ObjectStep({
                         const toggleQuestionId = question.enabledByQuestionId;
                         return (
                           <div className={`input-card ai-checklist-question ${enabled ? "" : "disabled"}`} key={question.id}>
-                            <label>
-                              {question.label}
-                              {question.aiAutofill ? <span className="ai-inline-mark">AI</span> : null}
-                            </label>
+                            {renderChecklistQuestionLabel(
+                              question,
+                              question.systemType ? systemNames[question.systemType] || question.systemType.toUpperCase() : ""
+                            )}
                             {renderChecklistInput(
                               question,
                               technicalSolution?.answers?.[question.id],
@@ -766,6 +1090,18 @@ export default function ObjectStep({
                                 onToggle: toggleQuestionId ? (value) => updateAiSurveyAnswer(toggleQuestionId, value) : undefined,
                               }
                             )}
+                            {question.autoCalculate ? (
+                              <div className="ai-checklist-question__actions">
+                                <button
+                                  className="ghost-btn ai-checklist-autofill-btn"
+                                  type="button"
+                                  disabled={!enabled}
+                                  onClick={() => autoCalculateAiSurveyAnswer?.(question.id)}
+                                >
+                                  Рассчитать автоматически
+                                </button>
+                              </div>
+                            ) : null}
                           </div>
                         );
                       })}
@@ -783,6 +1119,10 @@ export default function ObjectStep({
                   <div className="ai-photo-prompt-grid">
                     {aiSurveyPlan.photoPrompts.map((prompt) => {
                       const analysis = technicalSolution?.photoAnalyses?.[prompt.id];
+                      const analysisDetections = Array.isArray(analysis?.detections) ? analysis.detections : [];
+                      const planWarnings = Array.isArray(analysis?.planRecognition?.warnings) ? analysis.planRecognition.warnings : [];
+                      const planSystems = Array.isArray(analysis?.planRecognition?.systems) ? analysis.planRecognition.systems : [];
+                      const fileResults = Array.isArray(analysis?.fileResults) ? analysis.fileResults : [];
                       return (
                         <div className="ai-photo-card" key={prompt.id}>
                           <div className="ai-photo-card__head">
@@ -815,7 +1155,7 @@ export default function ObjectStep({
                               className="file-upload-input"
                               type="file"
                               accept="image/*"
-                              multiple={prompt.type === "evacuation_plan"}
+                              multiple
                               onChange={async (event) => {
                                 const files = Array.from(event.target.files || []);
                                 if (!files.length) return;
@@ -842,9 +1182,9 @@ export default function ObjectStep({
                             </div>
                           ) : null}
 
-                          {analysis?.detections?.length ? (
+                          {analysisDetections.length ? (
                             <div className="ai-detection-list">
-                              {analysis.detections.map((item) => (
+                              {analysisDetections.map((item) => (
                                 <span className={`pricing-source-chip ${analysis?.accepted === false ? "warn" : "ok"}`} key={`${prompt.id}-${item}`}>
                                   {item}
                                 </span>
@@ -852,9 +1192,9 @@ export default function ObjectStep({
                             </div>
                           ) : null}
 
-                          {analysis?.planRecognition?.warnings?.length ? (
+                          {planWarnings.length ? (
                             <div className="ai-summary-list" style={{ marginTop: 10 }}>
-                              {analysis.planRecognition.warnings.map((warning) => (
+                              {planWarnings.map((warning) => (
                                 <div key={`${prompt.id}-${warning.message}`}>
                                   <X size={16} />
                                   <span>{warning.message}</span>
@@ -906,7 +1246,7 @@ export default function ObjectStep({
                             </div>
                           ) : null}
 
-                          {analysis?.planRecognition?.systems?.length ? (
+                          {planSystems.length ? (
                             <div className="ai-summary-list" style={{ marginTop: 10 }}>
                               <div>
                                 <CheckCircle2 size={16} />
@@ -916,7 +1256,7 @@ export default function ObjectStep({
                                   {analysis.planRecognition.forecastedFloors || 0}.
                                 </span>
                               </div>
-                              {analysis.planRecognition.systems.flatMap((systemPlan) => {
+                              {planSystems.flatMap((systemPlan) => {
                                 const headline = (
                                   <div key={`${prompt.id}-${systemPlan.systemType}-headline`}>
                                     <CheckCircle2 size={16} />
@@ -939,9 +1279,9 @@ export default function ObjectStep({
                             </div>
                           ) : null}
 
-                          {analysis?.fileResults?.length ? (
+                          {fileResults.length ? (
                             <div className="ai-summary-list" style={{ marginTop: 10 }}>
-                              {analysis.fileResults.map((fileResult) => (
+                              {fileResults.map((fileResult) => (
                                 <div key={`${prompt.id}-${fileResult.floorIndex}-${fileResult.fileName}`}>
                                   <CheckCircle2 size={16} />
                                   <span>
@@ -962,17 +1302,26 @@ export default function ObjectStep({
 
             <div className="ai-survey-modal__footer">
               <div className="hint-inline">
-                Дальнейшие алгоритмы платформы используют только загруженные данные обследования. После загрузки они участвуют в AI-техническом решении и в расчете проектирования, а пока кнопка не нажата, информация остается черновиком внутри окна.
+                {"\u041f\u043e\u0441\u043b\u0435 \u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0438 \u0434\u0430\u043d\u043d\u044b\u0435 \u043e\u0431\u0441\u043b\u0435\u0434\u043e\u0432\u0430\u043d\u0438\u044f \u0443\u0447\u0430\u0441\u0442\u0432\u0443\u044e\u0442 \u0432 AI-\u0442\u0435\u0445\u043d\u0438\u0447\u0435\u0441\u043a\u043e\u043c \u0440\u0435\u0448\u0435\u043d\u0438\u0438, \u0440\u0430\u0441\u0447\u0435\u0442\u0435 \u043c\u0430\u0442\u0435\u0440\u0438\u0430\u043b\u043e\u0432, \u0421\u041c\u0420 \u0438 \u043f\u0440\u043e\u0435\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0438. \u0424\u043e\u0442\u043e \u043c\u043e\u0436\u043d\u043e \u0434\u043e\u0433\u0440\u0443\u0436\u0430\u0442\u044c \u043f\u043e\u0437\u0436\u0435: \u0447\u0435\u043a-\u043b\u0438\u0441\u0442 \u0438 \u043e\u0442\u0432\u0435\u0442\u044b \u0443\u0436\u0435 \u043c\u043e\u0436\u043d\u043e \u043f\u0440\u0438\u043c\u0435\u043d\u044f\u0442\u044c \u0431\u0435\u0437 \u0444\u043e\u0442\u043e, \u0430 \u0441\u043d\u0438\u043c\u043a\u0438 \u043d\u0443\u0436\u043d\u044b \u0434\u043b\u044f \u0434\u043e\u043f\u043e\u043b\u043d\u0438\u0442\u0435\u043b\u044c\u043d\u043e\u0433\u043e \u0443\u0442\u043e\u0447\u043d\u0435\u043d\u0438\u044f \u0442\u0440\u0430\u0441\u0441\u0438\u0440\u043e\u0432\u043a\u0438 \u0438 \u043f\u043b\u0430\u043d\u0438\u0440\u043e\u0432\u043e\u043a."}
               </div>
-              <button
-                className="primary-btn"
-                type="button"
-                onClick={handleApplySurvey}
-                disabled={(aiSurveyCompletion?.percent || 0) < 100}
-              >
-                <CheckCircle2 size={16} />
-                Загрузить данные
+              <div className="ai-survey-modal__footer-actions">
+                <button className="ghost-btn ai-checklist-export-btn" type="button" onClick={exportAiSurveyChecklist}>
+                  <Download size={14} />
+                {"\u0412\u044b\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u0447\u0435\u043a\u043b\u0438\u0441\u0442"}
               </button>
+                <span className={`pricing-source-chip ${(aiSurveyCompletion?.percent || 0) >= 100 ? "ok" : "muted"}`}>
+                  <strong>Чек-лист:</strong> {aiSurveyCompletion?.percent || 0}%
+                </span>
+                <button
+                  className="primary-btn"
+                  type="button"
+                  onClick={handleApplySurvey}
+                  disabled={(aiSurveyCompletion?.percent || 0) < 100}
+                >
+                  <CheckCircle2 size={16} />
+                  {"\u0417\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u0434\u0430\u043d\u043d\u044b\u0435"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
