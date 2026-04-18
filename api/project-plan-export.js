@@ -72,15 +72,21 @@ try {
 if (-not (Test-Path -LiteralPath $mppPath)) { throw 'MPP file was not created.' }
 `;
 
-  await execFileAsync(
-    "powershell.exe",
-    ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
-    {
-      windowsHide: true,
-      timeout: 120000,
-      maxBuffer: 1024 * 1024,
-    }
-  );
+  const scriptPath = path.join(os.tmpdir(), `project-core-mpp-${Date.now()}.ps1`);
+  try {
+    await fs.writeFile(scriptPath, script, "utf8");
+    await execFileAsync(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", scriptPath],
+      {
+        windowsHide: true,
+        timeout: 120000,
+        maxBuffer: 1024 * 1024,
+      }
+    );
+  } finally {
+    await fs.rm(scriptPath, { force: true });
+  }
 }
 
 export async function buildProjectPlanArtifact({ format, payload }) {

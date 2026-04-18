@@ -14,7 +14,7 @@ namespace ProjectCoreLocalBridgeAgent
 {
     internal static class Program
     {
-        private const string AgentVersion = "1.2.1";
+        private const string AgentVersion = "1.2.2";
         private const int DefaultPort = 32123;
         private const string InstalledExeName = "ProjectCoreLocalBridgeAgent.exe";
         private const string ShortcutName = "ProjectCore Local Bridge.lnk";
@@ -403,31 +403,50 @@ namespace ProjectCoreLocalBridgeAgent
                          "}\n" +
                          "if (-not (Test-Path -LiteralPath $mppPath)) { throw 'MPP file was not created.' }\n";
 
-            var startInfo = new ProcessStartInfo
-            {
-                FileName = "powershell.exe",
-                Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"" + script.Replace("\"", "\\\"") + "\"",
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardError = true,
-                RedirectStandardOutput = true
-            };
+            var scriptPath = Path.Combine(Path.GetTempPath(), "project-core-mpp-" + Guid.NewGuid().ToString("N") + ".ps1");
+            File.WriteAllText(scriptPath, script, new UTF8Encoding(true));
 
-            using (var process = Process.Start(startInfo))
+            try
             {
-                var stdOut = process.StandardOutput.ReadToEnd();
-                var stdErr = process.StandardError.ReadToEnd();
-                process.WaitForExit();
-
-                if (process.ExitCode != 0)
+                var startInfo = new ProcessStartInfo
                 {
-                    var message = string.IsNullOrWhiteSpace(stdErr) ? stdOut : stdErr;
-                    if (string.IsNullOrWhiteSpace(message))
-                    {
-                        message = "PowerShell-конвертация MS Project завершилась с ошибкой.";
-                    }
+                    FileName = "powershell.exe",
+                    Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"" + scriptPath + "\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardError = true,
+                    RedirectStandardOutput = true
+                };
 
-                    throw new InvalidOperationException(message.Trim());
+                using (var process = Process.Start(startInfo))
+                {
+                    var stdOut = process.StandardOutput.ReadToEnd();
+                    var stdErr = process.StandardError.ReadToEnd();
+                    process.WaitForExit();
+
+                    if (process.ExitCode != 0)
+                    {
+                        var message = string.IsNullOrWhiteSpace(stdErr) ? stdOut : stdErr;
+                        if (string.IsNullOrWhiteSpace(message))
+                        {
+                            message = "PowerShell-конвертация MS Project завершилась с ошибкой.";
+                        }
+
+                        throw new InvalidOperationException(message.Trim());
+                    }
+                }
+            }
+            finally
+            {
+                try
+                {
+                    if (File.Exists(scriptPath))
+                    {
+                        File.Delete(scriptPath);
+                    }
+                }
+                catch
+                {
                 }
             }
         }
