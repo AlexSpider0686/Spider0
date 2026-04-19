@@ -38,7 +38,7 @@ export const metrics: MetricSpotlight[] = [
   },
   {
     id: "speed",
-    label: "Среднее время оценки",
+    label: "Кратная экономия трудозатрат специалистов",
     value: "5-10 мин",
     teaser: "Быстрый пресейл без недельной подготовки и Excel-цепочек.",
     modalBadge: "Rapid Presale",
